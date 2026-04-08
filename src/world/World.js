@@ -1,0 +1,1492 @@
+import * as THREE from 'three';
+import { BIOMES, BIOME_BY_ID } from '../data/biomes.js';
+import { MOBS } from '../data/mobs.js';
+import { BlockRegistry } from '../blocks/BlockRegistry.js';
+import { BLOCKS } from '../data/blocks.js';
+import { TOOLS } from '../data/tools.js';
+import { Chunk } from './Chunk.js';
+import { ChunkGenerator } from './ChunkGenerator.js';
+
+export class World {
+    constructor(scene, game) {
+        this.scene = scene;
+        this.game = game;
+        this.registry = new BlockRegistry();
+        this.blockRegistry = this.registry;
+        this.boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+        this.waterGeometry = new THREE.PlaneGeometry(1, 1);
+        this.waterGeometry.rotateX(-Math.PI / 2); // Horizontal surface facing UP
+        this.raycaster = new THREE.Raycaster();
+        this.tmpRayDir = new THREE.Vector3();
+        this.blockMap = new Map();
+        this.blockOwners = new Map();
+        this.objects = [];
+        this.waterMeshes = new Set();
+        this.virusMeshes = new Set();
+        this.virusBlockCount = 0;
+        this.chunks = new Map();
+        this.changedBlocks = new Map();
+
+        this.chunkSize = 12;
+        this.renderDistance = 2;
+        this.minRenderDistance = 2;
+        this.maxRenderDistance = 6;
+        this.minTerrainY = -4;
+        this.maxTerrainY = 7;
+        this.deepMinY = -220;
+        this.seaLevel = 1;
+        this.seed = 0;
+        this.seedString = 'arlocraft';
+        this.setSeed(this.seedString);
+        this.lastPlayerChunkKey = null;
+        this.animationTick = 0;
+        this.blockXpById = new Map(BLOCKS.map((block) => [block.id, block.xp ?? 0]));
+        this.blockHardnessById = new Map(BLOCKS.map((block) => [block.id, block.hardness ?? 1]));
+        this.blockDataById = new Map(BLOCKS.map((block) => [block.id, block]));
+        this.toolById = new Map(TOOLS.map((tool) => [tool.id, tool]));
+        this.miningState = { key: null, progress: 0, required: 0 };
+        this.subsurfaceTick = 0;
+        this.hoverTick = 0;
+        this.gifTick = 0;
+        this.chunkVisibilityTick = 0;
+        this.tmpCameraForward = new THREE.Vector3();
+        this.tmpCameraRight = new THREE.Vector3();
+        this.tmpUp = new THREE.Vector3(0, 1, 0);
+        this.breakParticles = [];
+        this.breakParticleGeometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+        this.pickupEffects = [];
+        this.pickupGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+        this.visibilityDeferDepth = 0;
+        this.visibilityUpdateQueue = new Set();
+        this.visibilityNeighborOffsets = [
+            [0, 0, 0],
+            [1, 0, 0],
+            [-1, 0, 0],
+            [0, 1, 0],
+            [0, -1, 0],
+            [0, 0, 1],
+            [0, 0, -1]
+        ];
+        this.pendingChunkLoads = [];
+        this.pendingChunkSet = new Set();
+        this.chunkGenerator = this.game?.features?.workerChunkGeneration ? new ChunkGenerator(this) : null;
+        this.chunkRefreshTick = 0;
+        this.starterChestClaimed = false;
+        this.starterChestKey = null;
+        this.chunkMeshRebuildCursor = 0;
+        this.forceFullRemeshPending = true;
+        this.priorityDirtyChunkKeys = new Set();
+        this.meshSanityTick = 0;
+        this.auraSampleTick = 0;
+        this.areaInfluenceSample = { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+        this.arloNeighborOffsets = [
+            [1, 0, 0], [-1, 0, 0],
+            [0, 1, 0], [0, -1, 0],
+            [0, 0, 1], [0, 0, -1]
+        ];
+        this.sharedChunkGeometries = {
+            solid: new THREE.BoxGeometry(1, 1, 1),
+            water: (() => {
+                const geo = new THREE.PlaneGeometry(1, 1);
+                geo.rotateX(-Math.PI / 2);
+                return geo;
+            })(),
+            deco: new THREE.BoxGeometry(0.16, 1, 0.16)
+        };
+
+        const hoverGeo = new THREE.BoxGeometry(1.04, 1.04, 1.04);
+        const hoverMat = new THREE.MeshBasicMaterial({
+            color: 0xffef9a,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.9,
+            depthWrite: false
+        });
+        this.hoverOutline = new THREE.Mesh(hoverGeo, hoverMat);
+        this.hoverOutline.visible = false;
+        this.hoverOutline.renderOrder = 5;
+        this.scene.add(this.hoverOutline);
+
+        // Mining Cracks Overlay
+        const crackGeo = new THREE.BoxGeometry(1.02, 1.02, 1.02);
+        this.miningCracks = new THREE.Mesh(
+            crackGeo,
+            new THREE.MeshBasicMaterial({
+                color: 0x000000,
+                transparent: true,
+                opacity: 0,
+                wireframe: true
+            })
+        );
+        this.scene.add(this.miningCracks);
+        this.miningCracks.visible = false;
+    }
+
+    init() {
+        this.ensureChunksAround(0, 0);
+        this.processChunkLoadQueue(0, 0, 16);
+        this.ensureStarterChest();
+    }
+
+    setSeed(seedValue) {
+        this.seedString = String(seedValue ?? 'arlocraft').trim() || 'arlocraft';
+
+        const numeric = Number(this.seedString);
+        if (Number.isFinite(numeric)) {
+            this.seed = Math.floor(Math.abs(numeric)) + 1;
+            return;
+        }
+
+        let hash = 2166136261;
+        for (let i = 0; i < this.seedString.length; i++) {
+            hash ^= this.seedString.charCodeAt(i);
+            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+        }
+        this.seed = Math.abs(hash >>> 0) + 1;
+    }
+
+    clearWorld() {
+        for (const chunk of this.chunks.values()) {
+            chunk.destroy();
+        }
+        this.chunks.clear();
+        this.objects = [];
+        this.waterMeshes.clear();
+        this.virusMeshes.clear();
+        this.virusBlockCount = 0;
+        this.blockMap.clear();
+        this.blockOwners.clear();
+        this.visibilityDeferDepth = 0;
+        this.visibilityUpdateQueue.clear();
+        this.pendingChunkLoads.length = 0;
+        this.pendingChunkSet.clear();
+        this.lastPlayerChunkKey = null;
+        this.resetMiningProgress();
+        for (const particle of this.breakParticles) {
+            this.scene.remove(particle.mesh);
+            particle.mesh.material.dispose();
+        }
+        this.breakParticles = [];
+        for (const pickup of this.pickupEffects) {
+            this.scene.remove(pickup.mesh);
+            pickup.mesh.material.dispose();
+        }
+        this.pickupEffects = [];
+        if (this.hoverOutline) this.hoverOutline.visible = false;
+    }
+
+    serialize() {
+        return {
+            seed: this.seedString,
+            changedBlocks: Array.from(this.changedBlocks.entries()),
+            starterChestClaimed: this.starterChestClaimed,
+            starterChestKey: this.starterChestKey
+        };
+    }
+
+    loadFromData(data) {
+        const seed = data?.seed ?? this.seedString;
+        this.setSeed(seed);
+        this.changedBlocks = new Map(Array.isArray(data?.changedBlocks) ? data.changedBlocks : []);
+        this.starterChestClaimed = Boolean(data?.starterChestClaimed);
+        this.starterChestKey = typeof data?.starterChestKey === 'string' ? data.starterChestKey : null;
+        this.clearWorld();
+        this.init();
+    }
+
+    getKey(x, y, z) {
+        return `${x}|${y}|${z}`;
+    }
+
+    keyToCoords(key) {
+        return key.split('|').map(Number);
+    }
+
+    getChunkCoord(worldValue) {
+        return Math.floor(worldValue / this.chunkSize);
+    }
+
+    getChunkKey(cx, cz) {
+        return `${cx}|${cz}`;
+    }
+
+    pointToBlockCoord(value) {
+        return Math.floor(value + 0.5);
+    }
+
+    raycastBlocks(camera, maxDistance = 6, includeFluids = false) {
+        if (!camera) return null;
+        const origin = camera.position;
+        camera.getWorldDirection(this.tmpRayDir).normalize();
+
+        const step = 0.1;
+        let prevX = this.pointToBlockCoord(origin.x);
+        let prevY = this.pointToBlockCoord(origin.y);
+        let prevZ = this.pointToBlockCoord(origin.z);
+
+        for (let t = 0.1; t <= maxDistance; t += step) {
+            const px = origin.x + (this.tmpRayDir.x * t);
+            const py = origin.y + (this.tmpRayDir.y * t);
+            const pz = origin.z + (this.tmpRayDir.z * t);
+            const bx = this.pointToBlockCoord(px);
+            const by = this.pointToBlockCoord(py);
+            const bz = this.pointToBlockCoord(pz);
+
+            if (bx === prevX && by === prevY && bz === prevZ) continue;
+
+            const id = this.blockMap.get(this.getKey(bx, by, bz));
+            if (id) {
+                if (includeFluids || (id !== 'water' && id !== 'lava')) {
+                    return {
+                        id,
+                        cell: { x: bx, y: by, z: bz },
+                        previous: { x: prevX, y: prevY, z: prevZ }
+                    };
+                }
+            }
+
+            prevX = bx;
+            prevY = by;
+            prevZ = bz;
+        }
+        return null;
+    }
+
+    hash2D(x, z) {
+        const value = Math.sin((x * 127.1) + (z * 311.7) + this.seed) * 43758.5453;
+        return value - Math.floor(value);
+    }
+
+    hash3D(x, y, z) {
+        const value = Math.sin((x * 12.9898) + (y * 78.233) + (z * 37.719) + this.seed) * 43758.5453;
+        return value - Math.floor(value);
+    }
+
+    smoothstep(t) {
+        return t * t * (3 - (2 * t));
+    }
+
+    lerp(a, b, t) {
+        return a + ((b - a) * t);
+    }
+
+    valueNoise2D(x, z, scale) {
+        const sx = x / scale;
+        const sz = z / scale;
+        const x0 = Math.floor(sx);
+        const z0 = Math.floor(sz);
+        const x1 = x0 + 1;
+        const z1 = z0 + 1;
+        const tx = this.smoothstep(sx - x0);
+        const tz = this.smoothstep(sz - z0);
+
+        const n00 = this.hash2D(x0, z0);
+        const n10 = this.hash2D(x1, z0);
+        const n01 = this.hash2D(x0, z1);
+        const n11 = this.hash2D(x1, z1);
+        const nx0 = this.lerp(n00, n10, tx);
+        const nx1 = this.lerp(n01, n11, tx);
+        return this.lerp(nx0, nx1, tz);
+    }
+
+    getBiomeAt(x, z) {
+        const temperature = this.valueNoise2D(x + 911, z - 1441, 220);
+        const moisture = this.valueNoise2D(x - 1283, z + 677, 210);
+        const continental = this.valueNoise2D(x + 2057, z + 111, 320);
+
+        let biomeId = 'plains';
+        if (temperature > 0.68 && moisture < 0.38) biomeId = 'desert';
+        else if (moisture > 0.74 && temperature < 0.56) biomeId = 'swamp';
+        else if (continental > 0.72 && moisture < 0.46) biomeId = 'highlands';
+        else if (moisture > 0.62) biomeId = 'forest';
+
+        return BIOME_BY_ID.get(biomeId) ?? BIOME_BY_ID.get('plains');
+    }
+
+    getTerrainHeight(x, z) {
+        const biome = this.getBiomeAt(x, z);
+        const roughness = biome.terrainRoughness ?? 1;
+        const broad = (this.valueNoise2D(x, z, 72) - 0.5) * 6;
+        const detail = (this.valueNoise2D(x, z, 24) - 0.5) * 3.5 * roughness;
+        const ridges = (this.valueNoise2D(x, z, 12) - 0.5) * 1.5 * roughness;
+        const h = Math.floor(1 + broad + detail + ridges + (biome.terrainBias ?? 0));
+        return Math.max(this.minTerrainY + 2, Math.min(this.maxTerrainY, h));
+    }
+
+    getColumnHeight(x, z) {
+        let h = this.getTerrainHeight(x, z);
+        if (this.shouldForceSpawnZone(x, z)) {
+            h = Math.max(h, this.seaLevel + 2);
+        }
+        return h;
+    }
+
+    shouldPlaceTree(x, z, height, biome = null) {
+        const activeBiome = biome ?? this.getBiomeAt(x, z);
+        if (height <= this.seaLevel + 1) return false;
+        const density = this.hash2D((x * 2) + 11, (z * 2) - 9);
+        const spacing = this.hash2D(x + 301, z - 173);
+        const threshold = 1 - Math.max(0.01, Math.min(0.45, activeBiome.treeDensity ?? 0.08));
+        return density > threshold && spacing > 0.55;
+    }
+
+    shouldPlaceVirus(x, z, height) {
+        if (height < this.seaLevel + 1) return false;
+        // Rarer virus spikes so corruption feels special, not everywhere.
+        return this.hash2D(x - 991, z + 417) > 0.9962;
+    }
+
+    shouldPlaceArlo(x, z, height) {
+        if (height < this.seaLevel + 1) return false;
+        return this.hash2D(x + 613, z - 271) > 0.985;
+    }
+
+    isCorruptedAt(x, z) {
+        return this.hash2D((x * 0.7) - 991, (z * 0.7) + 417) > 0.982;
+    }
+
+    isPathAt(x, z) {
+        const trunk = Math.abs(this.valueNoise2D(x + 1307, z - 811, 48) - 0.5);
+        const branch = Math.abs(this.valueNoise2D(x - 547, z + 199, 24) - 0.5);
+        return trunk < 0.017 || branch < 0.011;
+    }
+
+    shouldPlaceVillageChunk(cx, cz) {
+        if (Math.abs(cx) <= 1 && Math.abs(cz) <= 1) return false;
+        const hash = this.hash2D((cx * 31) + 71, (cz * 31) - 19);
+        if (hash < 0.992) return false;
+        const wx = (cx * this.chunkSize) + Math.floor(this.chunkSize * 0.5);
+        const wz = (cz * this.chunkSize) + Math.floor(this.chunkSize * 0.5);
+        const biome = this.getBiomeAt(wx, wz);
+        return biome.id === 'plains' || biome.id === 'forest';
+    }
+
+    shouldForceSpawnZone(x, z) {
+        return Math.abs(x) <= 4 && Math.abs(z) <= 4;
+    }
+
+    getDeepBlockId(x, y, z) {
+        const r = this.hash3D((x * 17) + 13, y * 7, (z * 19) - 5);
+
+        if (y > -8) {
+            if (r > 0.992) return 'coal';
+            if (r > 0.986) return 'copper';
+            return 'stone';
+        }
+
+        if (y > -20) {
+            if (r > 0.994) return 'tin';
+            if (r > 0.988) return 'silver';
+            if (r > 0.982) return 'iron';
+            return 'stone';
+        }
+
+        if (y > -40) {
+            if (r > 0.996) return 'ruby';
+            if (r > 0.992) return 'sapphire';
+            if (r > 0.986) return 'gold';
+            if (r > 0.978) return 'amethyst';
+            return 'stone';
+        }
+
+        if (y > -70) {
+            if (r > 0.997) return 'platinum';
+            if (r > 0.992) return 'uranium';
+            if (r > 0.986) return 'diamond';
+            if (r > 0.979) return 'obsidian';
+            return 'stone';
+        }
+
+        if (r > 0.996) return 'mythril';
+        if (r > 0.991) return 'diamond';
+        if (r > 0.985) return 'uranium';
+        return 'obsidian';
+    }
+
+    shouldCarveCave(x, y, z, terrainHeight) {
+        if (!this.game?.features?.caves) return false;
+        if (y >= terrainHeight - 2) return false;
+        if (y <= this.deepMinY + 2) return false;
+
+        const nA = this.hash3D(x * 0.8, y * 0.6, z * 0.8);
+        const nB = this.hash3D((x * 0.23) + 17, (y * 0.32) - 9, (z * 0.23) + 4);
+        const caveValue = (nA * 0.68) + (nB * 0.32);
+        return caveValue > 0.83;
+    }
+
+    ensureSubsurfacePocket(x, y, z, radius = 1, depth = 18) {
+        const cx = Math.round(x);
+        const cy = Math.round(y);
+        const cz = Math.round(z);
+
+        for (let dx = -radius; dx <= radius; dx++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                const wx = cx + dx;
+                const wz = cz + dz;
+                const naturalTop = this.getColumnHeight(wx, wz) - 1;
+                const startY = Math.min(cy, naturalTop);
+
+                for (let i = 0; i < depth; i++) {
+                    const wy = startY - i;
+                    if (wy < this.deepMinY) break;
+
+                    const key = this.getKey(wx, wy, wz);
+                    if (this.blockMap.has(key)) continue;
+                    if (this.changedBlocks.get(key) === null) continue;
+
+                    const id = this.getDeepBlockId(wx, wy, wz);
+                    const ownerKey = this.getChunkKey(this.getChunkCoord(wx), this.getChunkCoord(wz));
+                    this.addBlock(wx, wy, wz, id, ownerKey);
+                }
+            }
+        }
+    }
+
+    ensureSubsurfaceBelow(x, y, z) {
+        this.ensureSubsurfacePocket(x, y, z, 1, 24);
+    }
+
+    isBlockSolid(blockId) {
+        if (!blockId) return false;
+        if (blockId === 'water' || blockId === 'lava') return false;
+        if (blockId === 'leaves' || blockId.startsWith('leaves_')) return false;
+        if (blockId === 'cloud_block') return false;
+
+        const blockData = this.getBlockData(blockId);
+        if (blockData?.deco || blockData?.nonSolid) return false;
+        return true;
+    }
+
+    getBlockData(id) {
+        return this.blockDataById.get(id) ?? null;
+    }
+
+
+    isSolidAt(x, y, z) {
+        const id = this.blockMap.get(this.getKey(Math.round(x), Math.round(y), Math.round(z)));
+        if (!id) return false;
+        return this.isBlockSolid(id);
+    }
+
+    isWaterAt(x, y, z) {
+        return this.blockMap.get(this.getKey(Math.round(x), Math.round(y), Math.round(z))) === 'water';
+    }
+
+    isPositionInWater(pos) {
+        if (!pos) return false;
+        // Check both head and feet for better swimming feel
+        return this.isWaterAt(pos.x, pos.y, pos.z) || this.isWaterAt(pos.x, pos.y - 0.8, pos.z);
+    }
+
+    computeMineDuration(blockId, selectedItem, mode) {
+        if (mode === 'CREATIVE') return 0;
+
+        const hardness = Math.max(0.15, Number(this.blockHardnessById.get(blockId) ?? 1));
+        let efficiency = 1;
+        if (selectedItem?.id) {
+            const tool = this.toolById.get(selectedItem.id);
+            if (tool) efficiency += Math.max(0, Number(tool.efficiency) || 0);
+        }
+        return Math.max(0.12, (hardness * 0.9) / efficiency);
+    }
+
+    breakBlockAt(x, y, z) {
+        const key = this.getKey(x, y, z);
+        const id = this.blockMap.get(key);
+        if (!id || id === 'bedrock') return false;
+
+        this.changedBlocks.set(key, null);
+        this.removeBlockByKey(key, { skipChangeTracking: true });
+        this.ensureSubsurfaceBelow(x, y - 1, z);
+        this.spawnBreakParticles(x, y, z, id);
+        this.spawnPickupEffect(x, y, z, id, this.game?.getPlayerPosition?.());
+
+
+        window.dispatchEvent(new CustomEvent('block-mined', { detail: { id, x, y, z } }));
+        return true;
+    }
+
+    resetMiningProgress() {
+        this.miningState.key = null;
+        this.miningState.progress = 0;
+        this.miningState.required = 0;
+        if (this.miningCracks) {
+            this.miningCracks.visible = false;
+        }
+        window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio: 0, id: null, done: true } }));
+    }
+
+    getBlockColor(id) {
+        const palette = {
+            grass: 0x7cc56a,
+            dirt: 0x8a6442,
+            stone: 0x8c969f,
+            sand: 0xd2c48d,
+            wood: 0x926d49,
+            leaves: 0x4e9a57,
+            water: 0x4a76df,
+            iron: 0xbec0c4,
+            gold: 0xf1cc4e,
+            diamond: 0x6de5da,
+            coal: 0x4a4d53,
+            copper: 0xc57a44,
+            tin: 0xbac2cb,
+            silver: 0xdce2e8,
+            ruby: 0xe2446a,
+            sapphire: 0x4c7fff,
+            amethyst: 0x9e72ef,
+            uranium: 0x7dff5d,
+            platinum: 0xd8e8f8,
+            mythril: 0x62f1ff,
+            arlo: 0xffaac9,
+            obsidian: 0x3b3054
+        };
+        return palette[id] ?? 0xb8c0ca;
+    }
+
+    spawnBreakParticles(x, y, z, blockId) {
+        const color = this.getBlockColor(blockId);
+        for (let i = 0; i < 6; i++) {
+            const material = new THREE.MeshBasicMaterial({
+                color,
+                transparent: true,
+                opacity: 0.9
+            });
+            const mesh = new THREE.Mesh(this.breakParticleGeometry, material);
+            mesh.position.set(
+                x + ((Math.random() - 0.5) * 0.4),
+                y + ((Math.random() - 0.5) * 0.35),
+                z + ((Math.random() - 0.5) * 0.4)
+            );
+            this.scene.add(mesh);
+            this.breakParticles.push({
+                mesh,
+                vx: (Math.random() - 0.5) * 2.0,
+                vy: 1.2 + (Math.random() * 1.5),
+                vz: (Math.random() - 0.5) * 2.0,
+                life: 0.42
+            });
+        }
+    }
+
+    updateBreakParticles(delta) {
+        for (let i = this.breakParticles.length - 1; i >= 0; i--) {
+            const p = this.breakParticles[i];
+            p.life -= delta;
+            p.vy -= 10.5 * delta;
+            p.mesh.position.x += p.vx * delta;
+            p.mesh.position.y += p.vy * delta;
+            p.mesh.position.z += p.vz * delta;
+
+            p.mesh.material.opacity = Math.max(0, p.life / 0.42);
+            if (p.life > 0) continue;
+
+            this.scene.remove(p.mesh);
+            p.mesh.material.dispose();
+            this.breakParticles.splice(i, 1);
+        }
+    }
+
+    spawnPickupEffect(x, y, z, blockId, playerPosition) {
+        if (!this.game?.features?.blockBreakPickupMagnet) return;
+        const distanceSq = playerPosition
+            ? ((x - playerPosition.x) ** 2) + ((y - playerPosition.y) ** 2) + ((z - playerPosition.z) ** 2)
+            : Infinity;
+        const attract = distanceSq <= (7 * 7);
+
+        const material = new THREE.MeshBasicMaterial({
+            color: this.getBlockColor(blockId),
+            transparent: true,
+            opacity: 0.95
+        });
+        const mesh = new THREE.Mesh(this.pickupGeometry, material);
+        mesh.position.set(x, y, z);
+        mesh.scale.set(1, 1, 1);
+        this.scene.add(mesh);
+
+        this.pickupEffects.push({
+            mesh,
+            age: 0,
+            life: attract ? 0.55 : 0.24,
+            attract
+        });
+    }
+
+    updatePickupEffects(delta, playerPosition) {
+        for (let i = this.pickupEffects.length - 1; i >= 0; i--) {
+            const fx = this.pickupEffects[i];
+            fx.age += delta;
+            fx.life -= delta;
+
+            if (fx.age < 0.12) {
+                const shrink = 1 - (fx.age / 0.12) * 0.4;
+                fx.mesh.scale.set(shrink, shrink, shrink);
+            }
+
+            if (fx.attract && playerPosition && fx.age >= 0.12) {
+                const tx = playerPosition.x;
+                const ty = playerPosition.y + 0.65;
+                const tz = playerPosition.z;
+                const dx = tx - fx.mesh.position.x;
+                const dy = ty - fx.mesh.position.y;
+                const dz = tz - fx.mesh.position.z;
+                const dist = Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
+                if (dist > 0.0001) {
+                    const speed = 8.5;
+                    const step = Math.min(dist, speed * delta);
+                    fx.mesh.position.x += (dx / dist) * step;
+                    fx.mesh.position.y += (dy / dist) * step;
+                    fx.mesh.position.z += (dz / dist) * step;
+                }
+
+                const pullScale = Math.max(0.25, fx.mesh.scale.x * 0.92);
+                fx.mesh.scale.set(pullScale, pullScale, pullScale);
+
+                if (dist < 0.35) fx.life = 0;
+            }
+
+            fx.mesh.material.opacity = Math.max(0, fx.life / (fx.attract ? 0.55 : 0.24));
+            if (fx.life > 0) continue;
+
+            this.scene.remove(fx.mesh);
+            fx.mesh.material.dispose();
+            this.pickupEffects.splice(i, 1);
+        }
+    }
+
+    addBlock(x, y, z, id, ownerKey = null, replace = false) {
+        const gx = Math.round(x);
+        const gy = Math.round(y);
+        const gz = Math.round(z);
+        const key = this.getKey(gx, gy, gz);
+        const existing = this.blockMap.get(key);
+        if (existing && !replace) return existing;
+        if (existing && replace) this.removeBlockByKey(key, { skipChangeTracking: true });
+
+        const owner = ownerKey ?? this.getChunkKey(this.getChunkCoord(gx), this.getChunkCoord(gz));
+        this.blockMap.set(key, id);
+        this.blockOwners.set(key, owner);
+        
+        if (id === 'virus') this.virusBlockCount++;
+        
+        const ownerChunk = this.chunks.get(owner);
+        if (ownerChunk) {
+            ownerChunk.blockKeys.add(key);
+            ownerChunk.dirty = true;
+            this.priorityDirtyChunkKeys.add(owner);
+        }
+
+        this.updateNeighborsDirty(gx, gy, gz);
+        if (id === 'virus' || id === 'arlo') {
+            this.markChunksWithinBlockRadiusDirty(gx, gz, 6, true);
+        }
+
+        return id;
+    }
+
+    removeBlockByKey(key, options = {}) {
+        const id = this.blockMap.get(key);
+        if (!id) return false;
+
+        if (!options.skipChangeTracking) {
+            this.changedBlocks.set(key, null);
+        }
+
+        const owner = this.blockOwners.get(key);
+        this.blockMap.delete(key);
+        this.blockOwners.delete(key);
+        
+        if (id === 'virus' && this.virusBlockCount > 0) this.virusBlockCount--;
+        
+        const ownerChunk = this.chunks.get(owner);
+        if (ownerChunk) {
+            ownerChunk.blockKeys.delete(key);
+            ownerChunk.dirty = true;
+            this.priorityDirtyChunkKeys.add(owner);
+        }
+
+        const [x, y, z] = this.keyToCoords(key);
+        this.updateNeighborsDirty(x, y, z);
+        if (id === 'virus' || id === 'arlo') {
+            this.markChunksWithinBlockRadiusDirty(x, z, 6, true);
+        }
+        return true;
+    }
+
+    markChunksWithinBlockRadiusDirty(x, z, radius = 6, prioritize = false) {
+        const minCx = this.getChunkCoord(x - radius);
+        const maxCx = this.getChunkCoord(x + radius);
+        const minCz = this.getChunkCoord(z - radius);
+        const maxCz = this.getChunkCoord(z + radius);
+        for (let cx = minCx; cx <= maxCx; cx++) {
+            for (let cz = minCz; cz <= maxCz; cz++) {
+                const chunkKey = this.getChunkKey(cx, cz);
+                const chunk = this.chunks.get(chunkKey);
+                if (!chunk) continue;
+                chunk.dirty = true;
+                if (prioritize) this.priorityDirtyChunkKeys.add(chunkKey);
+            }
+        }
+    }
+
+    updateNeighborsDirty(x, y, z) {
+        const neighbors = [
+            [1, 0, 0], [-1, 0, 0],
+            [0, 1, 0], [0, -1, 0],
+            [0, 0, 1], [0, 0, -1]
+        ];
+        for (const [dx, dy, dz] of neighbors) {
+            const nx = x + dx;
+            const nz = z + dz;
+            const owner = this.getChunkKey(this.getChunkCoord(nx), this.getChunkCoord(nz));
+            const chunk = this.chunks.get(owner);
+            if (!chunk) continue;
+            chunk.dirty = true;
+            this.priorityDirtyChunkKeys.add(owner);
+        }
+    }
+
+    flushPriorityChunkRebuilds(limit = 12) {
+        if (this.priorityDirtyChunkKeys.size === 0) return;
+        let rebuilt = 0;
+        const keys = Array.from(this.priorityDirtyChunkKeys);
+        for (let i = 0; i < keys.length; i++) {
+            if (rebuilt >= limit) break;
+            const key = keys[i];
+            const chunk = this.chunks.get(key);
+            if (!chunk || chunk.destroyed || !chunk.dirty) {
+                this.priorityDirtyChunkKeys.delete(key);
+                continue;
+            }
+            chunk.update();
+            rebuilt += 1;
+            this.priorityDirtyChunkKeys.delete(key);
+        }
+    }
+
+    mineBlock(camera) {
+        const hit = this.raycastBlocks(camera, 6, false);
+        if (!hit) return false;
+        const broken = this.breakBlockAt(hit.cell.x, hit.cell.y, hit.cell.z);
+        this.resetMiningProgress();
+        return broken;
+    }
+
+    mineBlockProgress(camera, delta, selectedItem, mode = 'SURVIVAL') {
+        const hit = this.raycastBlocks(camera, 6, false);
+        if (!hit) {
+            this.resetMiningProgress();
+            return false;
+        }
+
+        const blockId = hit.id;
+        if (blockId === 'bedrock') {
+            this.resetMiningProgress();
+            return false;
+        }
+
+        if (mode === 'CREATIVE') {
+            const broken = this.breakBlockAt(hit.cell.x, hit.cell.y, hit.cell.z);
+            this.resetMiningProgress();
+            return broken;
+        }
+
+        const key = this.getKey(hit.cell.x, hit.cell.y, hit.cell.z);
+        if (this.miningState.key !== key) {
+            this.miningState.key = key;
+            this.miningState.progress = 0;
+            this.miningState.required = this.computeMineDuration(blockId, selectedItem, mode);
+        }
+
+        this.miningState.progress += Math.max(0, delta);
+        const ratio = Math.max(0, Math.min(1, this.miningState.progress / Math.max(0.01, this.miningState.required)));
+        window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio, id: blockId, done: false } }));
+
+        if (this.miningState.progress < this.miningState.required) return false;
+
+        const broken = this.breakBlockAt(hit.cell.x, hit.cell.y, hit.cell.z);
+        this.resetMiningProgress();
+        return broken;
+    }
+
+    digDownFrom(position, mode = 'SURVIVAL') {
+        if (!position) return false;
+        const x = Math.round(position.x);
+        const z = Math.round(position.z);
+        const y = Math.floor(position.y - 0.85);
+
+        const id = this.blockMap.get(this.getKey(x, y, z));
+        if (!id || id === 'bedrock') return false;
+        if (mode !== 'CREATIVE' && id === 'water') return false;
+
+        const broken = this.breakBlockAt(x, y, z);
+        if (broken) this.ensureSubsurfacePocket(x, y - 1, z, 1, 26);
+        return broken;
+    }
+
+    resolveBlockPlacementId(slotItem) {
+        if (!slotItem) return null;
+        if (slotItem.kind === 'block') return slotItem.id;
+        return null;
+    }
+
+    interactBlock(camera) {
+        const hit = this.raycastBlocks(camera, 6, true);
+        if (!hit) return false;
+        const blockId = hit.id;
+
+        if (blockId === 'crafting_table') {
+            window.dispatchEvent(new CustomEvent('interact-crafting-table'));
+            return true;
+        }
+
+        if (blockId === 'starter_chest') {
+            if (!this.starterChestClaimed) {
+                this.starterChestClaimed = true;
+                this.game?.grantStarterChestLoot?.();
+                window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: 'STARTER CHEST LOOT' } }));
+            } else {
+                window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: 'CHEST EMPTY' } }));
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    placeBlock(camera, slotId) {
+        const blockId = this.resolveBlockPlacementId(this.game?.gameState.inventory[slotId]);
+        if (!blockId) return false;
+
+        const hit = this.raycastBlocks(camera, 6, true);
+        if (!hit) return false;
+        const px = hit.previous.x;
+        const py = hit.previous.y;
+        const pz = hit.previous.z;
+        const key = this.getKey(px, py, pz);
+        const existingId = this.blockMap.get(key);
+
+        const playerPos = camera.position;
+        if (new THREE.Vector3(px, py, pz).distanceTo(playerPos) < 1.4) return false;
+        if (existingId && existingId !== 'water' && existingId !== 'lava') return false;
+
+        const ownerKey = this.getChunkKey(this.getChunkCoord(px), this.getChunkCoord(pz));
+        this.changedBlocks.set(key, blockId);
+        this.addBlock(px, py, pz, blockId, ownerKey, Boolean(existingId));
+        window.dispatchEvent(new CustomEvent('block-placed', { detail: { id: blockId } }));
+        return true;
+    }
+
+    getBlockXP(id) {
+        return this.blockXpById.get(id) ?? 1;
+    }
+
+    setRenderDistance(value) {
+        const next = Math.max(this.minRenderDistance, Math.min(this.maxRenderDistance, value));
+        if (next === this.renderDistance) return;
+        this.renderDistance = next;
+        this.lastPlayerChunkKey = null;
+    }
+
+    loadChunk(cx, cz) {
+        const key = this.getChunkKey(cx, cz);
+        if (this.chunks.has(key)) {
+            this.pendingChunkSet.delete(key);
+            return;
+        }
+        const chunk = new Chunk(this, cx, cz);
+        this.chunks.set(key, chunk);
+        chunk.generate();
+        this.pendingChunkSet.delete(key);
+
+        if (this.hash2D(cx + 411, cz - 108) > 0.93 && this.game.entities.entities.length < this.game.entities.maxEntities) {
+            const wx = (cx * this.chunkSize) + Math.floor(this.chunkSize / 2);
+            const wz = (cz * this.chunkSize) + Math.floor(this.chunkSize / 2);
+            const wy = this.getTerrainHeight(wx, wz) + 2;
+            this.game.entities.spawn('virus_grunt', wx + 0.5, wy, wz + 0.5);
+        }
+    }
+
+    queueChunkLoad(cx, cz) {
+        const key = this.getChunkKey(cx, cz);
+        if (this.chunks.has(key) || this.pendingChunkSet.has(key)) return;
+        this.pendingChunkSet.add(key);
+        this.pendingChunkLoads.push({ cx, cz, key });
+    }
+
+    processChunkLoadQueue(centerCx, centerCz, explicitBudget = null) {
+        if (this.pendingChunkLoads.length === 0) return;
+
+        let budget = explicitBudget;
+        if (!Number.isFinite(budget)) {
+            const tier = this.game?.qualityTier ?? 'balanced';
+            if (tier === 'low') budget = 4;
+            else if (tier === 'high') budget = 12;
+            else budget = 7;
+        }
+
+        budget = Math.max(1, Math.floor(budget));
+        while (budget > 0 && this.pendingChunkLoads.length > 0) {
+            let bestIndex = 0;
+            let bestDist = Infinity;
+            for (let i = 0; i < this.pendingChunkLoads.length; i++) {
+                const p = this.pendingChunkLoads[i];
+                const dx = p.cx - centerCx;
+                const dz = p.cz - centerCz;
+                const dist = (dx * dx) + (dz * dz);
+                if (dist >= bestDist) continue;
+                bestDist = dist;
+                bestIndex = i;
+            }
+
+            const next = this.pendingChunkLoads.splice(bestIndex, 1)[0];
+            if (!next) break;
+            this.loadChunk(next.cx, next.cz);
+            budget -= 1;
+        }
+    }
+
+    processDirtyChunkRebuilds() {
+        this.flushPriorityChunkRebuilds(8);
+
+        const chunks = Array.from(this.chunks.values());
+        const total = chunks.length;
+        if (total === 0) return;
+
+        const tier = this.game?.qualityTier ?? 'balanced';
+        const rebuildBudget = tier === 'low' ? 1 : (tier === 'high' ? 4 : 2);
+        let rebuilt = 0;
+        let scanned = 0;
+        let cursor = this.chunkMeshRebuildCursor % total;
+
+        while (scanned < total && rebuilt < rebuildBudget) {
+            const chunk = chunks[cursor];
+            if (chunk?.dirty && !chunk.destroyed) {
+                chunk.update();
+                rebuilt += 1;
+            }
+
+            scanned += 1;
+            cursor = (cursor + 1) % total;
+        }
+
+        this.chunkMeshRebuildCursor = cursor;
+    }
+
+    ensureChunkMeshColorSanity(limit = 10) {
+        this.meshSanityTick = (this.meshSanityTick + 1) % 30;
+        if (this.meshSanityTick !== 0) return;
+
+        let flagged = 0;
+        for (const [key, chunk] of this.chunks.entries()) {
+            if (flagged >= limit) break;
+            if (!chunk || chunk.destroyed || chunk.dirty) continue;
+
+            let needsRebuild = false;
+            for (const mesh of chunk.instancedMeshes.values()) {
+                if (!mesh) continue;
+                const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                let hasVertexColors = false;
+                for (let i = 0; i < materials.length; i++) {
+                    if (materials[i]?.vertexColors) {
+                        hasVertexColors = true;
+                        break;
+                    }
+                }
+                if (hasVertexColors && !mesh.instanceColor) {
+                    needsRebuild = true;
+                    break;
+                }
+            }
+
+            if (!needsRebuild) continue;
+            chunk.dirty = true;
+            this.priorityDirtyChunkKeys.add(key);
+            flagged += 1;
+        }
+    }
+
+    unloadFarChunks(centerCx, centerCz) {
+        const unloadRadius = this.renderDistance + 2;
+        for (const [key, chunk] of this.chunks.entries()) {
+            const dx = Math.abs(chunk.cx - centerCx);
+            const dz = Math.abs(chunk.cz - centerCz);
+            if (dx <= unloadRadius && dz <= unloadRadius) continue;
+            chunk.destroy();
+            this.chunks.delete(key);
+        }
+
+        if (this.pendingChunkLoads.length > 0) {
+            this.pendingChunkLoads = this.pendingChunkLoads.filter((pending) => {
+                const dx = Math.abs(pending.cx - centerCx);
+                const dz = Math.abs(pending.cz - centerCz);
+                const keep = dx <= unloadRadius && dz <= unloadRadius;
+                if (!keep) this.pendingChunkSet.delete(pending.key);
+                return keep;
+            });
+        }
+    }
+
+    ensureChunksAround(centerCx, centerCz) {
+        const preloadRadius = this.renderDistance + 1;
+        for (let dx = -preloadRadius; dx <= preloadRadius; dx++) {
+            for (let dz = -preloadRadius; dz <= preloadRadius; dz++) {
+                this.queueChunkLoad(centerCx + dx, centerCz + dz);
+            }
+        }
+    }
+
+    getSurfaceHeightAt(x, z) {
+        const gx = Math.floor(x + 0.5);
+        const gz = Math.floor(z + 0.5);
+        const chunkKey = this.getChunkKey(this.getChunkCoord(gx), this.getChunkCoord(gz));
+        const chunkLoaded = this.chunks.has(chunkKey);
+
+        for (let y = this.maxTerrainY + 8; y >= this.minTerrainY - 2; y--) {
+            const id = this.blockMap.get(this.getKey(gx, y, gz));
+            if (!id) continue;
+            if (id === 'water') continue;
+            return y + 0.5;
+        }
+
+        if (chunkLoaded) return this.deepMinY;
+        return this.getColumnHeight(gx, gz) + 0.5;
+    }
+
+    getGroundYBelow(x, currentY, z) {
+        const gx = Math.floor(x + 0.5);
+        const gz = Math.floor(z + 0.5);
+        const startY = Math.floor(currentY + 0.5);
+        const minY = this.deepMinY;
+
+        for (let y = startY; y >= minY; y--) {
+            const id = this.blockMap.get(this.getKey(gx, y, gz));
+            if (!id) continue;
+            if (!this.isBlockSolid(id)) continue;
+            return y + 0.5;
+        }
+
+        const chunkKey = this.getChunkKey(this.getChunkCoord(gx), this.getChunkCoord(gz));
+        if (this.chunks.has(chunkKey)) return this.deepMinY - 2;
+        return this.getColumnHeight(gx, gz) + 0.5;
+    }
+
+    getSupportHeightAt(x, z, radius = 0.33) {
+        const samples = [
+            [x, z],
+            [x + radius, z + radius],
+            [x + radius, z - radius],
+            [x - radius, z + radius],
+            [x - radius, z - radius]
+        ];
+
+        let maxHeight = -Infinity;
+        for (const [sx, sz] of samples) {
+            const h = this.getSurfaceHeightAt(sx, sz);
+            if (h > maxHeight) maxHeight = h;
+        }
+        return maxHeight;
+    }
+
+    getTopSolidBlockAt(x, z) {
+        const gx = Math.round(x);
+        const gz = Math.round(z);
+        for (let y = this.maxTerrainY + 10; y >= this.minTerrainY - 2; y--) {
+            const id = this.blockMap.get(this.getKey(gx, y, gz));
+            if (!id) continue;
+            if (!this.isBlockSolid(id) || id === 'leaves' || id.startsWith('leaves_')) continue;
+            return { id, y };
+        }
+        return null;
+    }
+
+    getTopBlockAt(x, z) {
+        const gx = Math.round(x);
+        const gz = Math.round(z);
+        for (let y = this.maxTerrainY + 10; y >= this.minTerrainY - 2; y--) {
+            const id = this.blockMap.get(this.getKey(gx, y, gz));
+            if (id) return id;
+        }
+        return null;
+    }
+
+    getWaterSurfaceYAt(x, z) {
+        const gx = Math.round(x);
+        const gz = Math.round(z);
+        for (let y = this.maxTerrainY + 10; y >= this.minTerrainY - 2; y--) {
+            const id = this.blockMap.get(this.getKey(gx, y, gz));
+            if (id !== 'water') continue;
+            const above = this.blockMap.get(this.getKey(gx, y + 1, gz));
+            if (above === 'water') continue;
+            return y + 0.5;
+        }
+        return null;
+    }
+
+    getTopBlockIdAt(x, z) {
+        const id = this.getTopBlockAt(x, z);
+        if (id) return id;
+
+        const terrain = this.getColumnHeight(Math.round(x), Math.round(z));
+        if (terrain <= this.seaLevel) return 'water';
+        return terrain <= this.seaLevel + 1 ? 'sand' : 'grass';
+    }
+
+    getBiomeIdAt(x, z) {
+        return this.getBiomeAt(x, z)?.id ?? 'plains';
+    }
+
+    getAreaInfluence(position) {
+        if (!position) return this.areaInfluenceSample ?? { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+
+        this.auraSampleTick = (this.auraSampleTick + 1) % 6;
+        if (this.auraSampleTick !== 0 && this.areaInfluenceSample) return this.areaInfluenceSample;
+
+        const px = Math.round(position.x);
+        const py = Math.round(position.y);
+        const pz = Math.round(position.z);
+        const radius = 4;
+        let virusHits = 0;
+        let arloHits = 0;
+        let samples = 0;
+
+        for (let dx = -radius; dx <= radius; dx += 2) {
+            for (let dz = -radius; dz <= radius; dz += 2) {
+                for (let dy = -1; dy <= 2; dy++) {
+                    const id = this.blockMap.get(this.getKey(px + dx, py + dy, pz + dz));
+                    if (!id) continue;
+                    samples += 1;
+                    if (id === 'virus') virusHits += 1;
+                    else if (id === 'arlo') arloHits += 1;
+                }
+            }
+        }
+
+        const densityBase = Math.max(1, samples);
+        this.areaInfluenceSample = {
+            x: px,
+            y: py,
+            z: pz,
+            virus: Math.max(0, Math.min(1, virusHits / Math.max(6, densityBase * 0.4))),
+            arlo: Math.max(0, Math.min(1, arloHits / Math.max(4, densityBase * 0.3)))
+        };
+        return this.areaInfluenceSample;
+    }
+
+    isPositionInWater(x, y, z) {
+        const samples = [y + 0.15, y - 0.2];
+        for (let i = 0; i < samples.length; i++) {
+            const sy = samples[i];
+            const cy = Math.floor(sy + 0.5);
+            if (this.isWaterAt(x, cy, z)) return true;
+        }
+        return false;
+    }
+
+    hasHeadroomAt(x, y, z) {
+        const head1 = this.blockMap.get(this.getKey(x, y + 1, z));
+        const head2 = this.blockMap.get(this.getKey(x, y + 2, z));
+        return !head1 && !head2;
+    }
+
+    getSafeSpawnPoint(originX = 0, originZ = 0, maxRadius = 24) {
+        const ox = Math.round(originX);
+        const oz = Math.round(originZ);
+
+        for (let radius = 0; radius <= maxRadius; radius++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dz = -radius; dz <= radius; dz++) {
+                    if (Math.abs(dx) !== radius && Math.abs(dz) !== radius) continue;
+                    const x = ox + dx;
+                    const z = oz + dz;
+                    const top = this.getTopSolidBlockAt(x, z);
+                    if (!top) continue;
+                    if (top.id === 'water' || top.id === 'leaves') continue;
+                    if (!this.hasHeadroomAt(x, top.y, z)) continue;
+                    return {
+                        x,
+                        y: top.y + 0.8,
+                        z
+                    };
+                }
+            }
+        }
+
+        const fallbackY = Math.max(this.getTerrainHeight(ox, oz), this.seaLevel + 2) + 0.8;
+        return { x: ox, y: fallbackY, z: oz };
+    }
+
+    ensureStarterChest() {
+        if (this.starterChestClaimed) return;
+        if (this.starterChestKey && this.blockMap.get(this.starterChestKey) === 'starter_chest') return;
+
+        const spawn = this.getSafeSpawnPoint(0, 0, 18);
+        const baseX = Math.round(spawn.x);
+        const baseZ = Math.round(spawn.z);
+        const surfaceY = Math.floor(spawn.y - 0.8);
+        const candidates = [
+            [baseX + 1, surfaceY + 1, baseZ],
+            [baseX - 1, surfaceY + 1, baseZ],
+            [baseX, surfaceY + 1, baseZ + 1],
+            [baseX, surfaceY + 1, baseZ - 1],
+            [baseX + 2, surfaceY + 1, baseZ],
+            [baseX, surfaceY + 1, baseZ + 2]
+        ];
+
+        for (const [x, y, z] of candidates) {
+            const key = this.getKey(x, y, z);
+            if (this.blockMap.has(key)) continue;
+            if (this.isWaterAt(x, y, z) || this.isWaterAt(x, y - 1, z)) continue;
+
+            const belowId = this.blockMap.get(this.getKey(x, y - 1, z));
+            if (!belowId || !this.isBlockSolid(belowId)) continue;
+
+            const ownerKey = this.getChunkKey(this.getChunkCoord(x), this.getChunkCoord(z));
+            this.changedBlocks.set(key, 'starter_chest');
+            this.addBlock(x, y, z, 'starter_chest', ownerKey);
+            this.starterChestKey = key;
+            return;
+        }
+    }
+
+    mineBlockProgress(camera, delta, selectedItem, mode = 'SURVIVAL') {
+        const hit = this.raycastBlocks(camera, 6, false);
+        if (!hit) {
+            this.resetMiningProgress();
+            return false;
+        }
+
+        const blockId = hit.id;
+        if (blockId === 'bedrock') {
+            this.resetMiningProgress();
+            return false;
+        }
+
+        if (mode === 'CREATIVE') {
+            const broken = this.breakBlockAt(hit.cell.x, hit.cell.y, hit.cell.z);
+            this.resetMiningProgress();
+            return broken;
+        }
+
+        const key = this.getKey(hit.cell.x, hit.cell.y, hit.cell.z);
+        if (this.miningState.key !== key) {
+            this.miningState.key = key;
+            this.miningState.progress = 0;
+            this.miningState.required = this.computeMineDuration(blockId, selectedItem, mode);
+        }
+
+        this.miningState.progress += Math.max(0, delta);
+        const ratio = Math.max(0, Math.min(1, this.miningState.progress / Math.max(0.01, this.miningState.required)));
+        
+        // Update Crack Overlay
+        this.miningCracks.visible = true;
+        this.miningCracks.position.set(hit.cell.x, hit.cell.y, hit.cell.z);
+        this.miningCracks.material.opacity = 0.15 + (ratio * 0.45);
+        this.miningCracks.scale.set(1, 1, 1).multiplyScalar(1 - (ratio * 0.05)); // Subtle shrinking effect
+
+        window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio, id: blockId, done: false } }));
+
+        if (this.miningState.progress < this.miningState.required) return false;
+
+        const broken = this.breakBlockAt(hit.cell.x, hit.cell.y, hit.cell.z);
+        this.resetMiningProgress();
+        return broken;
+    }
+
+    removeBlockAt(x, y, z) {
+        return this.removeBlockByKey(this.getKey(x, y, z));
+    }
+
+    updateDirectionalChunkVisibility(playerPosition, camera) {
+        if (!this.game?.features?.directionalChunkCulling) return;
+        if (this.renderDistance <= 0) return;
+        if (!camera) return;
+
+        this.chunkVisibilityTick = (this.chunkVisibilityTick + 1) % 8;
+        if (this.chunkVisibilityTick !== 0) return;
+
+        camera.getWorldDirection(this.tmpCameraForward);
+        this.tmpCameraForward.y = 0;
+        if (this.tmpCameraForward.lengthSq() < 0.0001) return;
+        this.tmpCameraForward.normalize();
+        this.tmpCameraRight.crossVectors(this.tmpCameraForward, this.tmpUp).normalize();
+
+        const nearDistSq = (this.chunkSize * 1.35) ** 2;
+        const maxCullDistance = Math.max(this.chunkSize * (this.renderDistance + 0.5), this.chunkSize * 2);
+        for (const chunk of this.chunks.values()) {
+            const centerX = (chunk.cx * this.chunkSize) + (this.chunkSize * 0.5);
+            const centerZ = (chunk.cz * this.chunkSize) + (this.chunkSize * 0.5);
+            const dx = centerX - playerPosition.x;
+            const dz = centerZ - playerPosition.z;
+            const distSq = (dx * dx) + (dz * dz);
+
+            let visible = true;
+            if (distSq > nearDistSq) {
+                const dist = Math.sqrt(distSq);
+                const invDist = dist > 0 ? (1 / dist) : 0;
+                const dirX = dx * invDist;
+                const dirZ = dz * invDist;
+                const forwardDot = (dirX * this.tmpCameraForward.x) + (dirZ * this.tmpCameraForward.z);
+                const sideDot = Math.abs((dirX * this.tmpCameraRight.x) + (dirZ * this.tmpCameraRight.z));
+                const distFactor = Math.min(1, dist / Math.max(1, maxCullDistance));
+
+                const backThreshold = THREE.MathUtils.lerp(-0.25, 0.04, distFactor);
+                const sideThreshold = THREE.MathUtils.lerp(0.98, 0.8, distFactor);
+                if (forwardDot < backThreshold) visible = false;
+                if (visible && sideDot > sideThreshold && forwardDot < 0.55) visible = false;
+            }
+
+            chunk.setVisible(visible);
+        }
+    }
+
+    update(playerPosition, delta = (1 / 60)) {
+        if (this.forceFullRemeshPending) {
+            for (const chunk of this.chunks.values()) chunk.dirty = true;
+            this.forceFullRemeshPending = false;
+        }
+
+        this.ensureChunkMeshColorSanity();
+
+        // 1. Process Chunk Updates (dirty rebuilds) with per-frame budget to reduce frame spikes.
+        this.processDirtyChunkRebuilds();
+
+        // ... existing visual updates ...
+        if (this.game?.features?.animatedVirusBlocks && this.virusBlockCount > 0) {
+            this.gifTick = (this.gifTick + 1) % 4;
+            if (this.gifTick === 0) this.registry.updateAnimatedTextures();
+        }
+        this.registry.updateShaderMaterials(performance.now() * 0.001);
+
+        const dt = Math.max(1 / 120, Math.min(1 / 24, delta));
+        this.updateBreakParticles(dt);
+        this.updatePickupEffects(dt, playerPosition);
+
+        const playerCx = this.getChunkCoord(playerPosition.x);
+        const playerCz = this.getChunkCoord(playerPosition.z);
+        const key = this.getChunkKey(playerCx, playerCz);
+
+        if (this.lastPlayerChunkKey !== key) {
+            this.unloadFarChunks(playerCx, playerCz);
+            this.ensureChunksAround(playerCx, playerCz);
+            this.lastPlayerChunkKey = key;
+        }
+        this.chunkRefreshTick = (this.chunkRefreshTick + 1) % 20;
+        if (this.chunkRefreshTick === 0) {
+            this.ensureChunksAround(playerCx, playerCz);
+        }
+        this.processChunkLoadQueue(playerCx, playerCz);
+
+        const cam = this.game?.camera?.instance;
+        // Directional culling disabled for stability.
+        // Ensure no chunk remains hidden from older visibility states.
+        for (const chunk of this.chunks.values()) {
+            if (!chunk.visible) chunk.setVisible(true);
+        }
+        if (cam) {
+            this.hoverTick = (this.hoverTick + 1) % 6;
+            if (this.hoverTick === 0) {
+                const hit = this.raycastBlocks(cam, 6, true);
+                if (hit) {
+                    this.hoverOutline.visible = true;
+                    this.hoverOutline.position.set(hit.cell.x, hit.cell.y, hit.cell.z);
+                } else {
+                    this.hoverOutline.visible = false;
+                }
+            }
+        }
+
+        this.subsurfaceTick = (this.subsurfaceTick + 1) % 18;
+        if (this.subsurfaceTick === 0 && playerPosition.y < (this.minTerrainY + 3)) {
+            this.ensureSubsurfacePocket(playerPosition.x, playerPosition.y - 1, playerPosition.z, 0, 8);
+        }
+
+        // --- DYNAMIC MOB SPAWNING ---
+        this.spawnTick = (this.spawnTick || 0) + 1;
+        if (this.spawnTick % 60 === 0 && this.game?.entities) {
+            this.trySpawnNaturalMob(playerPosition);
+            if (this.spawnTick % 360 === 0) this.trySpawnBird(playerPosition);
+        }
+    }
+
+    trySpawnBird(playerPos) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 40 + Math.random() * 20;
+        const sx = playerPos.x + Math.cos(angle) * dist;
+        const sz = playerPos.z + Math.sin(angle) * dist;
+        this.game.entities.spawn('sky_bird', sx, 75, sz);
+    }
+
+    trySpawnNaturalMob(playerPos) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 35 + Math.random() * 25;
+        const sx = playerPos.x + Math.cos(angle) * dist;
+        const sz = playerPos.z + Math.sin(angle) * dist;
+        
+        const biome = this.getBiomeAt(sx, sz);
+        const height = this.getTerrainHeight(sx, sz);
+        const inWater = this.isWaterAt(sx, height, sz);
+
+        const possibleMobs = MOBS.filter(m => {
+            const matchBiome = m.biomes?.includes(biome.id) || m.biomes?.includes('any');
+            const matchAquatic = m.aquatic ? inWater : !inWater;
+            return matchBiome && matchAquatic;
+        });
+
+        if (possibleMobs.length === 0) return;
+        const mob = possibleMobs[Math.floor(Math.random() * possibleMobs.length)];
+        if (mob.friendly && Math.random() < 0.75) return;
+        const waterSurface = this.getWaterSurfaceYAt(sx, sz);
+        const halfHeight = 0.6;
+        const spawnY = inWater && waterSurface !== null
+            ? (waterSurface + halfHeight)
+            : (height + halfHeight);
+        this.game.entities.spawn(mob.id, sx, spawnY, sz);
+    }
+    isWaterAt(x, y, z) {
+        const id = this.blockMap.get(this.getKey(Math.round(x), Math.round(y), Math.round(z)));
+        return id === 'water';
+    }
+
+    breakBlockAt(x, y, z) {
+        const id = this.blockMap.get(this.getKey(x, y, z));
+        if (!id || id === 'bedrock') return false;
+
+        this.removeBlockAt(x, y, z);
+        this.flushPriorityChunkRebuilds(20);
+        this.ensureSubsurfaceBelow(x, y - 1, z);
+        this.spawnBreakParticles(x, y, z, id);
+        this.spawnPickupEffect(x, y, z, id, this.game?.getPlayerPosition?.());
+        
+        window.dispatchEvent(new CustomEvent('block-mined', { detail: { id, x, y, z } }));
+        return true;
+    }
+
+    interactBlock(camera) {
+        const hit = this.raycastBlocks(camera, 6, true);
+        if (!hit) return false;
+        if (hit.id === 'crafting_table') {
+            window.dispatchEvent(new CustomEvent('interact-crafting-table'));
+            return true;
+        }
+        if (hit.id === 'starter_chest') {
+            if (!this.starterChestClaimed) {
+                this.starterChestClaimed = true;
+                this.game?.grantStarterChestLoot?.();
+                window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: 'CHEST LOOTED' } }));
+            }
+            return true;
+        }
+        return false;
+    }
+
+    digDownFrom(position, mode = 'SURVIVAL') {
+        if (!position) return false;
+        const x = Math.round(position.x);
+        const z = Math.round(position.z);
+        const y = Math.floor(position.y - 0.85);
+        if (mode !== 'CREATIVE' && this.isWaterAt(x, y, z)) return false;
+        return this.breakBlockAt(x, y, z);
+    }
+}
+    

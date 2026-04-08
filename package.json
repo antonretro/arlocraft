@@ -1,0 +1,53 @@
+{
+  "name": "arlocraft",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:web:portable": "vite build --base ./",
+    "build:exe": "npm run build:web:portable && electron-builder --win portable",
+    "start:desktop": "electron ."
+  },
+  "build": {
+    "appId": "com.arlocraft.game",
+    "productName": "ArloCraft",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "ArloCraft-${version}-Portable.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^41.2.0",
+    "electron-builder": "^26.8.1",
+    "vite": "^8.0.4"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "comlink": "^4.4.2",
+    "lz-string": "^1.5.0",
+    "stats.js": "^0.17.0",
+    "three": "^0.183.2",
+    "three-mesh-bvh": "^0.9.9"
+  }
+}

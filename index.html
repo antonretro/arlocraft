@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ArloCraft</title>
+</head>
+<body>
+    <div id="app"></div>
+
+    <div id="hud">
+        <div id="selected-item-readout">
+            <div id="selected-item-name">STONE x64</div>
+            <div id="selected-item-stats">Block | Hardness 2 | XP 5</div>
+        </div>
+
+        <div id="stats-bars">
+            <div id="hp-bar" class="bar-container"></div>
+            <div id="food-bar" class="bar-container"></div>
+        </div>
+
+        <div id="hotbar"></div>
+
+        <div id="xp-bar-container">
+            <div id="xp-bar"></div>
+        </div>
+    </div>
+
+    <div id="controls-help" aria-live="polite">
+        <div id="controls-help-title">Controls</div>
+        <div id="controls-help-body"></div>
+    </div>
+
+    <div id="command-console" style="display: none;">
+        <div id="command-log"></div>
+        <form id="command-form" autocomplete="off">
+            <span id="command-prefix">></span>
+            <input id="command-input" type="text" placeholder="Type a command. Try /help" />
+        </form>
+    </div>
+
+    <div id="minimap">
+        <canvas id="minimap-canvas" width="180" height="180"></canvas>
+        <div id="minimap-caption">Minimap [M]</div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="underwater-light"></div>
+    <div id="interaction-prompt" class="hidden"></div>
+
+    <div id="arlo-face-widget" aria-hidden="true">
+        <img id="arlo-face-image" src="/faces/arlo_happy.png" alt="Arlo Face" />
+    </div>
+
+    <pre id="coords-display"></pre>
+
+    <div id="inventory-overlay" style="display: none;">
+        <div id="inventory-container">
+            <div id="inventory-header">
+                <h2>Inventory & Crafting</h2>
+                <button id="btn-inventory-close" class="btn">Close [E]</button>
+            </div>
+            <div id="inventory-main">
+                <section id="crafting-section">
+                    <h3>Crafting Grid</h3>
+                    <div id="crafting-grid-3x3" class="grid-3x3"></div>
+                    <div id="crafting-arrow">Craft -></div>
+                    <div id="crafting-result-slot" class="slot large"></div>
+                    <div id="crafting-hint">Click output to craft and send to inventory.</div>
+                </section>
+                <section id="storage-section">
+                    <h3>Backpack</h3>
+                    <div id="main-inventory-grid" class="grid-9x3"></div>
+                    <h3>Hotbar</h3>
+                    <div id="hotbar-inventory-grid" class="grid-9x1"></div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <div id="overlay" class="screen screen-title">
+        <div class="title-bg-orb title-bg-orb-a"></div>
+        <div class="title-bg-orb title-bg-orb-b"></div>
+        <div id="title-card">
+            <div id="title-art">
+                <img src="/icons/items/arlo.png" alt="Arlo" />
+            </div>
+            <div id="title-copy">
+                <h1 id="title-main">ARLOCRAFT</h1>
+                <div id="title-sub">Infinite Chunks. Virus Blocks. Survival Systems.</div>
+            </div>
+
+            <div id="title-seed-row">
+                <label for="seed-input">Seed</label>
+                <input id="seed-input" type="text" value="arlocraft" />
+            </div>
+
+            <div id="gamemode-indicator">SURVIVAL MODE</div>
+            <div id="title-mode-row">
+                <span class="mode-label">Mode</span>
+                <button class="btn btn-mode active" id="btn-mode-survival" type="button">Survival</button>
+                <button class="btn btn-mode" id="btn-mode-creative" type="button">Creative</button>
+            </div>
+
+            <div id="title-buttons">
+                <button class="btn btn-hero" id="btn-start">Start Game</button>
+                <button class="btn" id="btn-title-load">Load World</button>
+                <button class="btn" id="btn-title-random-seed">Random Seed</button>
+                <button class="btn" id="btn-options">Settings / Save</button>
+            </div>
+
+            <div id="title-controls">
+                WASD move | Mouse look | Left Click mine/attack | Right Click place/interact | E inventory | F offhand | Q dig down | F3 debug | F5 camera | ESC pause
+            </div>
+        </div>
+    </div>
+
+    <div id="pause-overlay" class="screen screen-pause" style="display: none;">
+        <div id="pause-panel">
+            <h2>Paused</h2>
+            <div class="pause-sub">Take a breath. You are safe here.</div>
+            <div class="pause-actions">
+                <button id="btn-resume" class="btn btn-hero">Resume</button>
+                <button id="btn-pause-settings" class="btn">Settings</button>
+                <button id="btn-pause-save" class="btn">Save</button>
+                <button id="btn-pause-load" class="btn">Load</button>
+                <button id="btn-back-title" class="btn">Back To Title</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-panel" style="display: none;">
+        <h2>Settings & World</h2>
+
+        <div class="setting-row">
+            <label for="setting-sensitivity">Mouse Sensitivity</label>
+            <input id="setting-sensitivity" type="range" min="0.0007" max="0.0030" step="0.0001" value="0.00145" />
+            <span id="setting-sensitivity-value">0.0015</span>
+        </div>
+
+        <div class="setting-row">
+            <label for="setting-invert-y">Invert Y</label>
+            <input id="setting-invert-y" type="checkbox" />
+        </div>
+
+        <div class="setting-actions">
+            <button class="btn" id="btn-save-world">Save</button>
+            <button class="btn" id="btn-load-world">Load</button>
+            <button class="btn" id="btn-export-world">Export</button>
+            <button class="btn" id="btn-import-world">Import</button>
+            <button class="btn" id="btn-settings-close">Close</button>
+        </div>
+
+        <input id="import-world-input" type="file" accept=".json,application/json" style="display: none;" />
+        <div id="settings-status"></div>
+    </div>
+
+    <pre id="debug-overlay"></pre>
+
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
