@@ -6,6 +6,8 @@ import { BLOCKS } from '../data/blocks.js';
 import { TOOLS } from '../data/tools.js';
 import { Chunk } from './Chunk.js';
 import { ChunkGenerator } from './ChunkGenerator.js';
+import { generateSettlementName, SETTLEMENT_LIBRARY_SIZE } from './naming/SettlementNameGenerator.js';
+import { getRestorationSiteByLandmarkName } from './restoration/RestorationRegistry.js';
 
 export class World {
     constructor(scene, game) {
@@ -31,13 +33,14 @@ export class World {
         this.renderDistance = 2;
         this.minRenderDistance = 2;
         this.maxRenderDistance = 6;
-        this.minTerrainY = -4;
-        this.maxTerrainY = 7;
+        this.minTerrainY = -12;
+        this.maxTerrainY = 126;
         this.deepMinY = -220;
         this.seaLevel = 1;
         this.seed = 0;
         this.seedString = 'arlocraft';
         this.setSeed(this.seedString);
+        this.corruptionEnabled = false;
         this.lastPlayerChunkKey = null;
         this.animationTick = 0;
         this.blockXpById = new Map(BLOCKS.map((block) => [block.id, block.xp ?? 0]));
@@ -77,8 +80,14 @@ export class World {
         this.forceFullRemeshPending = true;
         this.priorityDirtyChunkKeys = new Set();
         this.meshSanityTick = 0;
+        this.criticalChunkTick = 0;
         this.auraSampleTick = 0;
         this.areaInfluenceSample = { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+        this.restoredLandmarks = new Set();
+        this.structureVirusInfluenceEnabled = true;
+        this.settlementNameLibrarySize = SETTLEMENT_LIBRARY_SIZE;
+        this.landmarks = new Map(); // key → { x, z, name }
+        this.virusInfluenceRadiusBlocks = 3;
         this.arloNeighborOffsets = [
             [1, 0, 0], [-1, 0, 0],
             [0, 1, 0], [0, -1, 0],
@@ -156,6 +165,7 @@ export class World {
         this.virusBlockCount = 0;
         this.blockMap.clear();
         this.blockOwners.clear();
+        this.landmarks.clear();
         this.visibilityDeferDepth = 0;
         this.visibilityUpdateQueue.clear();
         this.pendingChunkLoads.length = 0;
@@ -180,16 +190,30 @@ export class World {
             seed: this.seedString,
             changedBlocks: Array.from(this.changedBlocks.entries()),
             starterChestClaimed: this.starterChestClaimed,
-            starterChestKey: this.starterChestKey
+            starterChestKey: this.starterChestKey,
+            restoredLandmarks: Array.from(this.restoredLandmarks.values())
         };
     }
 
     loadFromData(data) {
         const seed = data?.seed ?? this.seedString;
         this.setSeed(seed);
-        this.changedBlocks = new Map(Array.isArray(data?.changedBlocks) ? data.changedBlocks : []);
+        const entries = Array.isArray(data?.changedBlocks) ? data.changedBlocks : [];
+        if (this.corruptionEnabled) {
+            this.changedBlocks = new Map(entries);
+        } else {
+            this.changedBlocks = new Map(
+                entries.filter((entry) => {
+                    if (!Array.isArray(entry) || entry.length < 2) return false;
+                    const id = entry[1];
+                    return id !== 'virus' && id !== 'arlo';
+                })
+            );
+        }
         this.starterChestClaimed = Boolean(data?.starterChestClaimed);
         this.starterChestKey = typeof data?.starterChestKey === 'string' ? data.starterChestKey : null;
+        const restored = Array.isArray(data?.restoredLandmarks) ? data.restoredLandmarks : [];
+        this.restoredLandmarks = new Set(restored.filter((value) => typeof value === 'string'));
         this.clearWorld();
         this.init();
     }
@@ -249,7 +273,7 @@ export class World {
             prevY = by;
             prevZ = bz;
         }
-        return null;
+        return false;
     }
 
     hash2D(x, z) {
@@ -293,11 +317,19 @@ export class World {
         const temperature = this.valueNoise2D(x + 911, z - 1441, 220);
         const moisture = this.valueNoise2D(x - 1283, z + 677, 210);
         const continental = this.valueNoise2D(x + 2057, z + 111, 320);
+        const rugged = this.valueNoise2D(x - 811, z + 1507, 180);
+        const openness = this.valueNoise2D(x + 339, z - 921, 250);
+        const dryness = (1 - moisture) * 0.68 + (temperature * 0.32);
 
         let biomeId = 'plains';
-        if (temperature > 0.68 && moisture < 0.38) biomeId = 'desert';
+        if (continental > 0.84 && rugged > 0.58) biomeId = 'alpine';
+        else if (dryness > 0.76 && rugged > 0.6) biomeId = 'canyon';
+        else if (dryness > 0.78 && moisture < 0.35) biomeId = 'badlands';
+        else if (temperature < 0.3 && moisture < 0.58) biomeId = 'tundra';
+        else if (temperature > 0.68 && moisture < 0.38) biomeId = 'desert';
         else if (moisture > 0.74 && temperature < 0.56) biomeId = 'swamp';
-        else if (continental > 0.72 && moisture < 0.46) biomeId = 'highlands';
+        else if (continental > 0.72 && moisture < 0.5) biomeId = 'highlands';
+        else if (openness > 0.67 && moisture > 0.34 && moisture < 0.72) biomeId = 'meadow';
         else if (moisture > 0.62) biomeId = 'forest';
 
         return BIOME_BY_ID.get(biomeId) ?? BIOME_BY_ID.get('plains');
@@ -306,42 +338,69 @@ export class World {
     getTerrainHeight(x, z) {
         const biome = this.getBiomeAt(x, z);
         const roughness = biome.terrainRoughness ?? 1;
-        const broad = (this.valueNoise2D(x, z, 72) - 0.5) * 6;
-        const detail = (this.valueNoise2D(x, z, 24) - 0.5) * 3.5 * roughness;
-        const ridges = (this.valueNoise2D(x, z, 12) - 0.5) * 1.5 * roughness;
-        const h = Math.floor(1 + broad + detail + ridges + (biome.terrainBias ?? 0));
+
+        const continental = (this.valueNoise2D(x + 500, z + 300, 280) - 0.5) * 28;
+        const regional = (this.valueNoise2D(x - 93, z + 171, 96) - 0.5) * 18 * roughness;
+        const detail = (this.valueNoise2D(x + 41, z - 19, 30) - 0.5) * 10 * roughness;
+        const fine = (this.valueNoise2D(x * 2.1 + 91, z * 2.1 - 37, 12) - 0.5) * 4.5 * roughness;
+
+        const mountainMask = this.valueNoise2D(x - 701, z + 447, 210);
+        const mountainStrength = Math.max(0, (mountainMask - 0.58) / 0.42);
+        const mountainLift = (mountainStrength ** 1.9) * 72;
+
+        const cliffBand = Math.abs(this.valueNoise2D(x + 163, z - 511, 44) - 0.5);
+        const cliffLift = cliffBand < 0.07 ? ((0.07 - cliffBand) / 0.07) * 26 : 0;
+        const canyonCut = Math.max(0, (0.2 - Math.abs(this.valueNoise2D(x - 188, z + 640, 54) - 0.5)) / 0.2) * 14;
+
+        const h = Math.floor(5 + continental + regional + detail + fine + mountainLift + cliffLift - canyonCut + (biome.terrainBias ?? 0));
         return Math.max(this.minTerrainY + 2, Math.min(this.maxTerrainY, h));
     }
 
     getColumnHeight(x, z) {
         let h = this.getTerrainHeight(x, z);
-        if (this.shouldForceSpawnZone(x, z)) {
+        // Flatten a safe spawn area around origin so the player isn't in a pit
+        const dist = Math.max(Math.abs(x), Math.abs(z));
+        if (dist <= 20) {
+            const flatHeight = this.seaLevel + 4;
+            const blend = Math.min(1, dist / 20);
+            h = Math.round(flatHeight + (h - flatHeight) * blend);
             h = Math.max(h, this.seaLevel + 2);
         }
         return h;
     }
 
+    shouldForceSpawnZone(x, z) {
+        return Math.abs(x) <= 6 && Math.abs(z) <= 6;
+    }
+
     shouldPlaceTree(x, z, height, biome = null) {
         const activeBiome = biome ?? this.getBiomeAt(x, z);
         if (height <= this.seaLevel + 1) return false;
+        if ((activeBiome.treeDensity ?? 0) <= 0) return false;
+        const openZone = this.valueNoise2D(x + 1433, z - 977, 190) > 0.67
+            && this.valueNoise2D(x - 621, z + 299, 72) > 0.55;
+        if (openZone) return false;
         const density = this.hash2D((x * 2) + 11, (z * 2) - 9);
         const spacing = this.hash2D(x + 301, z - 173);
-        const threshold = 1 - Math.max(0.01, Math.min(0.45, activeBiome.treeDensity ?? 0.08));
+        const threshold = 1 - Math.max(0, Math.min(0.5, activeBiome.treeDensity ?? 0.08));
         return density > threshold && spacing > 0.55;
     }
 
     shouldPlaceVirus(x, z, height) {
+        if (!this.corruptionEnabled) return false;
         if (height < this.seaLevel + 1) return false;
         // Rarer virus spikes so corruption feels special, not everywhere.
-        return this.hash2D(x - 991, z + 417) > 0.9962;
+        return this.hash2D(x - 991, z + 417) > 0.9992;
     }
 
     shouldPlaceArlo(x, z, height) {
+        if (!this.corruptionEnabled) return false;
         if (height < this.seaLevel + 1) return false;
         return this.hash2D(x + 613, z - 271) > 0.985;
     }
 
     isCorruptedAt(x, z) {
+        if (!this.corruptionEnabled) return false;
         return this.hash2D((x * 0.7) - 991, (z * 0.7) + 417) > 0.982;
     }
 
@@ -351,6 +410,268 @@ export class World {
         return trunk < 0.017 || branch < 0.011;
     }
 
+    isHighwayAt(x, z) {
+        const corridorA = Math.abs(this.valueNoise2D(x + 2143, z - 937, 120) - 0.5);
+        const corridorB = Math.abs(this.valueNoise2D(x - 1841, z + 221, 130) - 0.5);
+        return corridorA < 0.008 || corridorB < 0.009;
+    }
+
+    getLandmarkStorageKey(x, z) {
+        return `${Math.round(x)},${Math.round(z)}`;
+    }
+
+    getSettlementNameAt(x, z) {
+        return generateSettlementName(this.seed, Math.round(x), Math.round(z));
+    }
+
+    composeLandmarkDisplayName(baseName, x, z, category = 'landmark') {
+        const cleanBase = String(baseName ?? '').trim();
+        if (!cleanBase) return '';
+        if (category === 'settlement') return cleanBase;
+
+        const roll = this.hash2D((x * 0.77) + 113, (z * 0.77) - 257);
+        if (roll < 0.58) return cleanBase;
+        return `${this.getSettlementNameAt(x, z)} ${cleanBase}`;
+    }
+
+    registerLandmark(x, z, name, options = {}) {
+        if (!name) return;
+        const rx = Math.round(x);
+        const rz = Math.round(z);
+        const key = this.getLandmarkStorageKey(rx, rz);
+        const baseName = String(options.baseName ?? name).trim();
+        if (!baseName) return;
+
+        const site = options.siteId
+            ? { id: options.siteId, category: options.category ?? 'landmark' }
+            : getRestorationSiteByLandmarkName(baseName);
+        const category = options.category ?? site?.category ?? 'landmark';
+        const displayName = options.displayName ?? this.composeLandmarkDisplayName(baseName, rx, rz, category);
+        const restored = this.restoredLandmarks.has(key);
+        const next = {
+            key,
+            x: rx,
+            z: rz,
+            name: displayName,
+            baseName,
+            siteId: site?.id ?? null,
+            category,
+            restored
+        };
+
+        const existing = this.landmarks.get(key);
+        if (existing) {
+            this.landmarks.set(key, { ...existing, ...next, restored: existing.restored || restored });
+            return;
+        }
+        this.landmarks.set(key, next);
+    }
+
+    getLandmarksNear(px, pz, radius) {
+        const results = [];
+        for (const lm of this.landmarks.values()) {
+            const dx = lm.x - px;
+            const dz = lm.z - pz;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist <= radius) results.push({ ...lm, distance: dist });
+        }
+        results.sort((a, b) => a.distance - b.distance);
+        return results;
+    }
+
+    getRestorationStats() {
+        let total = 0;
+        let restored = 0;
+        for (const landmark of this.landmarks.values()) {
+            if (!landmark.siteId) continue;
+            total += 1;
+            if (landmark.restored || this.restoredLandmarks.has(landmark.key)) restored += 1;
+        }
+        return {
+            restored,
+            total,
+            pending: Math.max(0, total - restored)
+        };
+    }
+
+    formatRequirementList(requirements = []) {
+        const parts = [];
+        for (const req of requirements) {
+            if (!req?.id || !Number.isFinite(req.count)) continue;
+            parts.push(`${req.count} ${req.id}`);
+        }
+        return parts.join(', ');
+    }
+
+    countInventoryItem(itemId) {
+        const inventory = this.game?.gameState?.inventory;
+        if (!Array.isArray(inventory)) return 0;
+        let total = 0;
+        for (const slot of inventory) {
+            if (!slot || slot.id !== itemId) continue;
+            total += Math.max(0, Number(slot.count) || 0);
+        }
+        return total;
+    }
+
+    canAffordRequirements(requirements = []) {
+        for (const req of requirements) {
+            if (!req?.id || !Number.isFinite(req.count)) continue;
+            if (this.countInventoryItem(req.id) < req.count) return false;
+        }
+        return true;
+    }
+
+    consumeRequirements(requirements = []) {
+        const inventory = this.game?.gameState?.inventory;
+        if (!Array.isArray(inventory)) return false;
+        if (!this.canAffordRequirements(requirements)) return false;
+
+        for (const req of requirements) {
+            if (!req?.id || !Number.isFinite(req.count)) continue;
+            let remaining = req.count;
+            for (let i = 0; i < inventory.length; i++) {
+                const slot = inventory[i];
+                if (!slot || slot.id !== req.id) continue;
+                const slotCount = Math.max(0, Number(slot.count) || 0);
+                if (slotCount <= 0) continue;
+                const take = Math.min(slotCount, remaining);
+                slot.count = slotCount - take;
+                if (slot.count <= 0) inventory[i] = null;
+                remaining -= take;
+                if (remaining <= 0) break;
+            }
+        }
+
+        window.dispatchEvent(new CustomEvent('inventory-changed'));
+        return true;
+    }
+
+    setChangedBlock(x, y, z, id) {
+        const key = this.getKey(x, y, z);
+        this.changedBlocks.set(key, id);
+        const ownerKey = this.getChunkKey(this.getChunkCoord(x), this.getChunkCoord(z));
+        this.addBlock(x, y, z, id, ownerKey, true);
+    }
+
+    applyRestorationPatch(landmark, site) {
+        const centerX = Math.round(landmark.x);
+        const centerZ = Math.round(landmark.z);
+        const patch = site?.patch ?? 'utility';
+
+        if (patch === 'highway') {
+            const baseY = this.getColumnHeight(centerX, centerZ) + 1;
+            for (let dx = -8; dx <= 8; dx++) {
+                const wx = centerX + dx;
+                this.setChangedBlock(wx, baseY - 1, centerZ, 'cobblestone');
+                this.setChangedBlock(wx, baseY, centerZ, 'path_block');
+                if (Math.abs(dx) % 4 === 0) {
+                    this.setChangedBlock(wx, baseY + 1, centerZ - 1, 'lantern');
+                    this.setChangedBlock(wx, baseY + 1, centerZ + 1, 'lantern');
+                }
+            }
+            return;
+        }
+
+        if (patch === 'market') {
+            const baseY = this.getColumnHeight(centerX, centerZ);
+            for (let dx = -4; dx <= 4; dx++) {
+                for (let dz = -4; dz <= 4; dz++) {
+                    const wx = centerX + dx;
+                    const wz = centerZ + dz;
+                    const block = (Math.abs(dx) === 4 || Math.abs(dz) === 4) ? 'cobblestone' : 'path_block';
+                    this.setChangedBlock(wx, baseY, wz, block);
+                }
+            }
+            this.setChangedBlock(centerX, baseY + 1, centerZ, 'crafting_table');
+            return;
+        }
+
+        if (patch === 'housing') {
+            const baseY = this.getColumnHeight(centerX, centerZ);
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dz = -2; dz <= 2; dz++) {
+                    this.setChangedBlock(centerX + dx, baseY, centerZ + dz, 'wood_planks');
+                }
+            }
+            for (let dy = 1; dy <= 3; dy++) {
+                this.setChangedBlock(centerX - 2, baseY + dy, centerZ - 2, 'wood');
+                this.setChangedBlock(centerX + 2, baseY + dy, centerZ - 2, 'wood');
+                this.setChangedBlock(centerX - 2, baseY + dy, centerZ + 2, 'wood');
+                this.setChangedBlock(centerX + 2, baseY + dy, centerZ + 2, 'wood');
+            }
+            this.setChangedBlock(centerX, baseY + 1, centerZ - 2, 'glass');
+            this.setChangedBlock(centerX, baseY + 1, centerZ + 2, 'glass');
+            this.setChangedBlock(centerX, baseY + 4, centerZ, 'lantern');
+            return;
+        }
+
+        if (patch === 'park') {
+            const baseY = this.getColumnHeight(centerX, centerZ);
+            for (let dx = -4; dx <= 4; dx++) {
+                for (let dz = -4; dz <= 4; dz++) {
+                    const dist = Math.sqrt((dx * dx) + (dz * dz));
+                    if (dist > 4.2) continue;
+                    const wx = centerX + dx;
+                    const wz = centerZ + dz;
+                    this.setChangedBlock(wx, baseY, wz, 'grass');
+                    const flowerRoll = this.hash2D(wx + 319, wz - 211);
+                    if (flowerRoll > 0.84) {
+                        this.setChangedBlock(wx, baseY + 1, wz, flowerRoll > 0.92 ? 'flower_rose' : 'flower_dandelion');
+                    }
+                }
+            }
+            return;
+        }
+
+        const baseY = this.getColumnHeight(centerX, centerZ);
+        for (let dx = -3; dx <= 3; dx++) {
+            for (let dz = -3; dz <= 3; dz++) {
+                const ring = Math.abs(dx) === 3 || Math.abs(dz) === 3;
+                this.setChangedBlock(centerX + dx, baseY, centerZ + dz, ring ? 'cobblestone' : 'path_block');
+            }
+        }
+        this.setChangedBlock(centerX, baseY + 1, centerZ, 'lantern');
+    }
+
+    tryRestoreNearbyLandmark(position) {
+        if (!position) return false;
+        const nearby = this
+            .getLandmarksNear(position.x, position.z, 8)
+            .filter((landmark) => landmark.siteId && !landmark.restored);
+        if (nearby.length === 0) return false;
+
+        const target = nearby[0];
+        const site = getRestorationSiteByLandmarkName(target.baseName);
+        if (!site) return false;
+
+        const mode = this.game?.gameState?.mode ?? 'SURVIVAL';
+        const requirements = Array.isArray(site.requirements) ? site.requirements : [];
+        if (mode !== 'CREATIVE' && !this.canAffordRequirements(requirements)) {
+            const reqText = this.formatRequirementList(requirements);
+            if (reqText) {
+                window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: `NEED: ${reqText.toUpperCase()}` } }));
+                return true;
+            }
+            return false;
+        }
+        if (mode !== 'CREATIVE' && requirements.length > 0) this.consumeRequirements(requirements);
+
+        this.applyRestorationPatch(target, site);
+        this.restoredLandmarks.add(target.key);
+        target.restored = true;
+        this.landmarks.set(target.key, target);
+
+        if (Number.isFinite(site.xpReward) && site.xpReward > 0) {
+            this.game?.stats?.addXP?.(site.xpReward);
+        }
+
+        const stats = this.getRestorationStats();
+        window.dispatchEvent(new CustomEvent('restoration-progress', { detail: stats }));
+        window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: `RESTORED ${target.name.toUpperCase()} (${stats.restored}/${stats.total})` } }));
+        return true;
+    }
+
     shouldPlaceVillageChunk(cx, cz) {
         if (Math.abs(cx) <= 1 && Math.abs(cz) <= 1) return false;
         const hash = this.hash2D((cx * 31) + 71, (cz * 31) - 19);
@@ -358,12 +679,33 @@ export class World {
         const wx = (cx * this.chunkSize) + Math.floor(this.chunkSize * 0.5);
         const wz = (cz * this.chunkSize) + Math.floor(this.chunkSize * 0.5);
         const biome = this.getBiomeAt(wx, wz);
-        return biome.id === 'plains' || biome.id === 'forest';
+        return biome.id === 'plains' || biome.id === 'forest' || biome.id === 'meadow';
     }
 
-    shouldForceSpawnZone(x, z) {
-        return Math.abs(x) <= 4 && Math.abs(z) <= 4;
+    getStructureChunkScore(cx, cz) {
+        return this.hash2D((cx * 47) + 113, (cz * 47) - 271);
     }
+
+    isStructureChunkAnchor(cx, cz, radius = 2) {
+        const score = this.getStructureChunkScore(cx, cz);
+        for (let dx = -radius; dx <= radius; dx++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                if (dx === 0 && dz === 0) continue;
+                const other = this.getStructureChunkScore(cx + dx, cz + dz);
+                if (other >= score) return false;
+            }
+        }
+        return true;
+    }
+
+    shouldPlaceStructureChunk(cx, cz) {
+        if (Math.abs(cx) <= 2 && Math.abs(cz) <= 2) return false;
+        if (this.shouldPlaceVillageChunk(cx, cz)) return false;
+        const score = this.getStructureChunkScore(cx, cz);
+        if (score < 0.82) return false;
+        return this.isStructureChunkAnchor(cx, cz, 2);
+    }
+
 
     getDeepBlockId(x, y, z) {
         const r = this.hash3D((x * 17) + 13, y * 7, (z * 19) - 5);
@@ -410,8 +752,16 @@ export class World {
 
         const nA = this.hash3D(x * 0.8, y * 0.6, z * 0.8);
         const nB = this.hash3D((x * 0.23) + 17, (y * 0.32) - 9, (z * 0.23) + 4);
-        const caveValue = (nA * 0.68) + (nB * 0.32);
-        return caveValue > 0.83;
+        const nC = this.hash3D((x * 0.11) - 41, (y * 0.9) + 12, (z * 0.11) + 63);
+        const caveValue = (nA * 0.5) + (nB * 0.35) + (nC * 0.15);
+        const depthRatio = Math.max(0, Math.min(1, (terrainHeight - y) / 96));
+
+        const chamber = caveValue > (0.865 - (depthRatio * 0.08));
+        const tunnelBand = Math.abs(nC - 0.5) < 0.04 && nA > 0.44;
+        const fissureNoise = this.hash3D((x * 0.05) + 9, (y * 0.45) - 31, (z * 0.05) - 21);
+        const fissure = Math.abs(fissureNoise - 0.5) < 0.03 && y < terrainHeight - 8;
+
+        return chamber || tunnelBand || fissure;
     }
 
     ensureSubsurfacePocket(x, y, z, radius = 1, depth = 18) {
@@ -472,10 +822,20 @@ export class World {
         return this.blockMap.get(this.getKey(Math.round(x), Math.round(y), Math.round(z))) === 'water';
     }
 
-    isPositionInWater(pos) {
-        if (!pos) return false;
-        // Check both head and feet for better swimming feel
-        return this.isWaterAt(pos.x, pos.y, pos.z) || this.isWaterAt(pos.x, pos.y - 0.8, pos.z);
+    isPositionInWater(positionOrX, y, z) {
+        const fromObject = positionOrX && typeof positionOrX === 'object';
+        const px = fromObject ? Number(positionOrX.x) : Number(positionOrX);
+        const py = fromObject ? Number(positionOrX.y) : Number(y);
+        const pz = fromObject ? Number(positionOrX.z) : Number(z);
+        if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) return false;
+
+        // Check both head and feet for better swimming feel.
+        const samples = [py + 0.15, py - 0.2, py - 0.8];
+        for (let i = 0; i < samples.length; i++) {
+            const cy = Math.floor(samples[i] + 0.5);
+            if (this.isWaterAt(px, cy, pz)) return true;
+        }
+        return false;
     }
 
     computeMineDuration(blockId, selectedItem, mode) {
@@ -497,6 +857,7 @@ export class World {
 
         this.changedBlocks.set(key, null);
         this.removeBlockByKey(key, { skipChangeTracking: true });
+        this.flushPriorityChunkRebuilds(20);
         this.ensureSubsurfaceBelow(x, y - 1, z);
         this.spawnBreakParticles(x, y, z, id);
         this.spawnPickupEffect(x, y, z, id, this.game?.getPlayerPosition?.());
@@ -654,10 +1015,12 @@ export class World {
         }
     }
 
-    addBlock(x, y, z, id, ownerKey = null, replace = false) {
+    addBlock(x, y, z, id, ownerKey = null, replace = false, options = {}) {
         const gx = Math.round(x);
         const gy = Math.round(y);
         const gz = Math.round(z);
+        const allowCorruption = Boolean(options?.allowCorruption);
+        if (!allowCorruption && !this.corruptionEnabled && (id === 'virus' || id === 'arlo')) return null;
         const key = this.getKey(gx, gy, gz);
         const existing = this.blockMap.get(key);
         if (existing && !replace) return existing;
@@ -678,7 +1041,7 @@ export class World {
 
         this.updateNeighborsDirty(gx, gy, gz);
         if (id === 'virus' || id === 'arlo') {
-            this.markChunksWithinBlockRadiusDirty(gx, gz, 6, true);
+            this.markChunksWithinBlockRadiusDirty(gx, gz, this.virusInfluenceRadiusBlocks, true);
         }
 
         return id;
@@ -708,12 +1071,12 @@ export class World {
         const [x, y, z] = this.keyToCoords(key);
         this.updateNeighborsDirty(x, y, z);
         if (id === 'virus' || id === 'arlo') {
-            this.markChunksWithinBlockRadiusDirty(x, z, 6, true);
+            this.markChunksWithinBlockRadiusDirty(x, z, this.virusInfluenceRadiusBlocks, true);
         }
         return true;
     }
 
-    markChunksWithinBlockRadiusDirty(x, z, radius = 6, prioritize = false) {
+    markChunksWithinBlockRadiusDirty(x, z, radius = this.virusInfluenceRadiusBlocks, prioritize = false) {
         const minCx = this.getChunkCoord(x - radius);
         const maxCx = this.getChunkCoord(x + radius);
         const minCz = this.getChunkCoord(z - radius);
@@ -800,6 +1163,10 @@ export class World {
 
         this.miningState.progress += Math.max(0, delta);
         const ratio = Math.max(0, Math.min(1, this.miningState.progress / Math.max(0.01, this.miningState.required)));
+        this.miningCracks.visible = true;
+        this.miningCracks.position.set(hit.cell.x, hit.cell.y, hit.cell.z);
+        this.miningCracks.material.opacity = 0.15 + (ratio * 0.45);
+        this.miningCracks.scale.set(1, 1, 1).multiplyScalar(1 - (ratio * 0.05));
         window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio, id: blockId, done: false } }));
 
         if (this.miningState.progress < this.miningState.required) return false;
@@ -825,9 +1192,33 @@ export class World {
     }
 
     resolveBlockPlacementId(slotItem) {
-        if (!slotItem) return null;
-        if (slotItem.kind === 'block') return slotItem.id;
-        return null;
+        if (!slotItem || !slotItem.id) return null;
+        if (slotItem.kind === 'tool') return null;
+
+        // Backward compatible with older saves that did not store `kind`.
+        const blockData = this.blockDataById.get(slotItem.id);
+        if (!blockData) return null;
+        if (!this.corruptionEnabled && (slotItem.id === 'virus' || slotItem.id === 'arlo')) return null;
+        return slotItem.id;
+    }
+
+    isReplaceableForPlacement(id) {
+        if (!id) return true;
+        if (id === 'water' || id === 'lava') return true;
+        const block = this.getBlockData(id);
+        if (block?.deco || block?.nonSolid) return true;
+        return !this.isBlockSolid(id);
+    }
+
+    getSelectedInventoryItem() {
+        const slot = this.game?.gameState?.selectedSlot ?? 0;
+        return this.game?.gameState?.inventory?.[slot] ?? null;
+    }
+
+    getCurrentRestorationPrompt() {
+        const stats = this.getRestorationStats();
+        if (stats.total <= 0) return 'NO RESTORE SITES NEARBY';
+        return `RESTORATION ${stats.restored}/${stats.total}`;
     }
 
     interactBlock(camera) {
@@ -851,7 +1242,13 @@ export class World {
             return true;
         }
 
-        return false;
+        const holdingBlock = Boolean(this.resolveBlockPlacementId(this.getSelectedInventoryItem()));
+        if (!holdingBlock && this.tryRestoreNearbyLandmark(camera.position)) return true;
+        if (!holdingBlock) {
+            window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: this.getCurrentRestorationPrompt() } }));
+            return true;
+        }
+        return null;
     }
 
     placeBlock(camera, slotId) {
@@ -865,14 +1262,15 @@ export class World {
         const pz = hit.previous.z;
         const key = this.getKey(px, py, pz);
         const existingId = this.blockMap.get(key);
+        const replaceExisting = this.isReplaceableForPlacement(existingId);
 
         const playerPos = camera.position;
-        if (new THREE.Vector3(px, py, pz).distanceTo(playerPos) < 1.4) return false;
-        if (existingId && existingId !== 'water' && existingId !== 'lava') return false;
+        if (new THREE.Vector3(px, py, pz).distanceTo(playerPos) < 1.05) return false;
+        if (existingId && !replaceExisting) return false;
 
         const ownerKey = this.getChunkKey(this.getChunkCoord(px), this.getChunkCoord(pz));
         this.changedBlocks.set(key, blockId);
-        this.addBlock(px, py, pz, blockId, ownerKey, Boolean(existingId));
+        this.addBlock(px, py, pz, blockId, ownerKey, replaceExisting);
         window.dispatchEvent(new CustomEvent('block-placed', { detail: { id: blockId } }));
         return true;
     }
@@ -896,14 +1294,45 @@ export class World {
         }
         const chunk = new Chunk(this, cx, cz);
         this.chunks.set(key, chunk);
-        chunk.generate();
-        this.pendingChunkSet.delete(key);
+        try {
+            chunk.generate();
+            // Build mesh immediately so newly loaded chunks don't appear as holes.
+            if (chunk.dirty && !chunk.destroyed) chunk.update();
+        } catch (error) {
+            console.warn('[ArloCraft] Chunk generation failed:', key, error);
+            chunk.destroy();
+            this.chunks.delete(key);
+        } finally {
+            this.pendingChunkSet.delete(key);
+        }
 
-        if (this.hash2D(cx + 411, cz - 108) > 0.93 && this.game.entities.entities.length < this.game.entities.maxEntities) {
+        if (
+            this.corruptionEnabled
+            && this.hash2D(cx + 411, cz - 108) > 0.93
+            && this.game.entities.entities.length < this.game.entities.maxEntities
+        ) {
             const wx = (cx * this.chunkSize) + Math.floor(this.chunkSize / 2);
             const wz = (cz * this.chunkSize) + Math.floor(this.chunkSize / 2);
             const wy = this.getTerrainHeight(wx, wz) + 2;
             this.game.entities.spawn('virus_grunt', wx + 0.5, wy, wz + 0.5);
+        }
+    }
+
+    ensureCriticalChunks(centerCx, centerCz, radius = 1) {
+        for (let dx = -radius; dx <= radius; dx++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                const cx = centerCx + dx;
+                const cz = centerCz + dz;
+                const key = this.getChunkKey(cx, cz);
+                const chunk = this.chunks.get(key);
+                if (!chunk) {
+                    this.loadChunk(cx, cz);
+                    continue;
+                }
+                if (chunk.dirty && !chunk.destroyed) {
+                    chunk.update();
+                }
+            }
         }
     }
 
@@ -920,9 +1349,9 @@ export class World {
         let budget = explicitBudget;
         if (!Number.isFinite(budget)) {
             const tier = this.game?.qualityTier ?? 'balanced';
-            if (tier === 'low') budget = 4;
-            else if (tier === 'high') budget = 12;
-            else budget = 7;
+            if (tier === 'low') budget = 6;
+            else if (tier === 'high') budget = 14;
+            else budget = 10;
         }
 
         budget = Math.max(1, Math.floor(budget));
@@ -954,7 +1383,7 @@ export class World {
         if (total === 0) return;
 
         const tier = this.game?.qualityTier ?? 'balanced';
-        const rebuildBudget = tier === 'low' ? 1 : (tier === 'high' ? 4 : 2);
+        const rebuildBudget = tier === 'low' ? 2 : (tier === 'high' ? 5 : 3);
         let rebuilt = 0;
         let scanned = 0;
         let cursor = this.chunkMeshRebuildCursor % total;
@@ -1007,7 +1436,7 @@ export class World {
     }
 
     unloadFarChunks(centerCx, centerCz) {
-        const unloadRadius = this.renderDistance + 2;
+        const unloadRadius = this.renderDistance + 3;
         for (const [key, chunk] of this.chunks.entries()) {
             const dx = Math.abs(chunk.cx - centerCx);
             const dz = Math.abs(chunk.cz - centerCz);
@@ -1137,15 +1566,19 @@ export class World {
     }
 
     getAreaInfluence(position) {
+        if (!this.corruptionEnabled && !this.structureVirusInfluenceEnabled) {
+            this.areaInfluenceSample = { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+            return this.areaInfluenceSample;
+        }
         if (!position) return this.areaInfluenceSample ?? { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
 
-        this.auraSampleTick = (this.auraSampleTick + 1) % 6;
+        this.auraSampleTick = (this.auraSampleTick + 1) % 10;
         if (this.auraSampleTick !== 0 && this.areaInfluenceSample) return this.areaInfluenceSample;
 
         const px = Math.round(position.x);
         const py = Math.round(position.y);
         const pz = Math.round(position.z);
-        const radius = 4;
+        const radius = this.virusInfluenceRadiusBlocks;
         let virusHits = 0;
         let arloHits = 0;
         let samples = 0;
@@ -1167,20 +1600,10 @@ export class World {
             x: px,
             y: py,
             z: pz,
-            virus: Math.max(0, Math.min(1, virusHits / Math.max(6, densityBase * 0.4))),
+            virus: Math.max(0, Math.min(1, virusHits / Math.max(16, densityBase * 0.9))),
             arlo: Math.max(0, Math.min(1, arloHits / Math.max(4, densityBase * 0.3)))
         };
         return this.areaInfluenceSample;
-    }
-
-    isPositionInWater(x, y, z) {
-        const samples = [y + 0.15, y - 0.2];
-        for (let i = 0; i < samples.length; i++) {
-            const sy = samples[i];
-            const cy = Math.floor(sy + 0.5);
-            if (this.isWaterAt(x, cy, z)) return true;
-        }
-        return false;
     }
 
     hasHeadroomAt(x, y, z) {
@@ -1247,50 +1670,6 @@ export class World {
             this.starterChestKey = key;
             return;
         }
-    }
-
-    mineBlockProgress(camera, delta, selectedItem, mode = 'SURVIVAL') {
-        const hit = this.raycastBlocks(camera, 6, false);
-        if (!hit) {
-            this.resetMiningProgress();
-            return false;
-        }
-
-        const blockId = hit.id;
-        if (blockId === 'bedrock') {
-            this.resetMiningProgress();
-            return false;
-        }
-
-        if (mode === 'CREATIVE') {
-            const broken = this.breakBlockAt(hit.cell.x, hit.cell.y, hit.cell.z);
-            this.resetMiningProgress();
-            return broken;
-        }
-
-        const key = this.getKey(hit.cell.x, hit.cell.y, hit.cell.z);
-        if (this.miningState.key !== key) {
-            this.miningState.key = key;
-            this.miningState.progress = 0;
-            this.miningState.required = this.computeMineDuration(blockId, selectedItem, mode);
-        }
-
-        this.miningState.progress += Math.max(0, delta);
-        const ratio = Math.max(0, Math.min(1, this.miningState.progress / Math.max(0.01, this.miningState.required)));
-        
-        // Update Crack Overlay
-        this.miningCracks.visible = true;
-        this.miningCracks.position.set(hit.cell.x, hit.cell.y, hit.cell.z);
-        this.miningCracks.material.opacity = 0.15 + (ratio * 0.45);
-        this.miningCracks.scale.set(1, 1, 1).multiplyScalar(1 - (ratio * 0.05)); // Subtle shrinking effect
-
-        window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio, id: blockId, done: false } }));
-
-        if (this.miningState.progress < this.miningState.required) return false;
-
-        const broken = this.breakBlockAt(hit.cell.x, hit.cell.y, hit.cell.z);
-        this.resetMiningProgress();
-        return broken;
     }
 
     removeBlockAt(x, y, z) {
@@ -1365,6 +1744,7 @@ export class World {
         const playerCx = this.getChunkCoord(playerPosition.x);
         const playerCz = this.getChunkCoord(playerPosition.z);
         const key = this.getChunkKey(playerCx, playerCz);
+        if (!this.chunks.has(key)) this.loadChunk(playerCx, playerCz);
 
         if (this.lastPlayerChunkKey !== key) {
             this.unloadFarChunks(playerCx, playerCz);
@@ -1374,6 +1754,11 @@ export class World {
         this.chunkRefreshTick = (this.chunkRefreshTick + 1) % 20;
         if (this.chunkRefreshTick === 0) {
             this.ensureChunksAround(playerCx, playerCz);
+        }
+
+        this.criticalChunkTick = (this.criticalChunkTick + 1) % 4;
+        if (this.criticalChunkTick === 0) {
+            this.ensureCriticalChunks(playerCx, playerCz, 2);
         }
         this.processChunkLoadQueue(playerCx, playerCz);
 
@@ -1428,6 +1813,7 @@ export class World {
         const inWater = this.isWaterAt(sx, height, sz);
 
         const possibleMobs = MOBS.filter(m => {
+            if (!this.corruptionEnabled && m.id === 'virus_grunt') return false;
             const matchBiome = m.biomes?.includes(biome.id) || m.biomes?.includes('any');
             const matchAquatic = m.aquatic ? inWater : !inWater;
             return matchBiome && matchAquatic;
@@ -1442,51 +1828,6 @@ export class World {
             ? (waterSurface + halfHeight)
             : (height + halfHeight);
         this.game.entities.spawn(mob.id, sx, spawnY, sz);
-    }
-    isWaterAt(x, y, z) {
-        const id = this.blockMap.get(this.getKey(Math.round(x), Math.round(y), Math.round(z)));
-        return id === 'water';
-    }
-
-    breakBlockAt(x, y, z) {
-        const id = this.blockMap.get(this.getKey(x, y, z));
-        if (!id || id === 'bedrock') return false;
-
-        this.removeBlockAt(x, y, z);
-        this.flushPriorityChunkRebuilds(20);
-        this.ensureSubsurfaceBelow(x, y - 1, z);
-        this.spawnBreakParticles(x, y, z, id);
-        this.spawnPickupEffect(x, y, z, id, this.game?.getPlayerPosition?.());
-        
-        window.dispatchEvent(new CustomEvent('block-mined', { detail: { id, x, y, z } }));
-        return true;
-    }
-
-    interactBlock(camera) {
-        const hit = this.raycastBlocks(camera, 6, true);
-        if (!hit) return false;
-        if (hit.id === 'crafting_table') {
-            window.dispatchEvent(new CustomEvent('interact-crafting-table'));
-            return true;
-        }
-        if (hit.id === 'starter_chest') {
-            if (!this.starterChestClaimed) {
-                this.starterChestClaimed = true;
-                this.game?.grantStarterChestLoot?.();
-                window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: 'CHEST LOOTED' } }));
-            }
-            return true;
-        }
-        return false;
-    }
-
-    digDownFrom(position, mode = 'SURVIVAL') {
-        if (!position) return false;
-        const x = Math.round(position.x);
-        const z = Math.round(position.z);
-        const y = Math.floor(position.y - 0.85);
-        if (mode !== 'CREATIVE' && this.isWaterAt(x, y, z)) return false;
-        return this.breakBlockAt(x, y, z);
     }
 }
     

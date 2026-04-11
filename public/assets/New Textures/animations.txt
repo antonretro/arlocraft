@@ -1,0 +1,30 @@
+# still water
+14 0 0 0 16 32 2
+# still lava
+14 1 0 16 16 38 2
+# fire
+6 2 0 32 16 32 0
+# magma
+6 5 512 0 16 3 8
+# portal-ns
+4 22 0 80 16 32 0
+# water
+8 23 0 48 16 64 0
+# lava
+9 23 0 64 16 32 3
+# sea lantern
+15 28 512 32 16 5 5
+# lantern-d
+8 28 592 32 16 3 8
+# lantern-u
+9 28 640 32 16 3 8
+# prismarine
+12 28 560 0 16 4 300
+# stonecutter
+13 19 640 0 16 3 1
+# icomblock
+13 20 688 0 16 4 10
+# ccomblock
+14 20 688 16 16 4 10
+# rcomblock
+15 20 688 32 16 4 10

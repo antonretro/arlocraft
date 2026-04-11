@@ -47,7 +47,17 @@
 
     <div id="crosshair"></div>
     <div id="underwater-light"></div>
+    <div id="corruption-overlay"></div>
     <div id="interaction-prompt" class="hidden"></div>
+
+    <div id="zone-meter" aria-live="polite">
+        <div id="zone-label">ZONE</div>
+        <div id="zone-bars">
+            <div id="zone-bar-virus"><div id="zone-fill-virus"></div></div>
+            <div id="zone-bar-arlo"><div id="zone-fill-arlo"></div></div>
+        </div>
+        <div id="zone-status">NEUTRAL</div>
+    </div>
 
     <div id="arlo-face-widget" aria-hidden="true">
         <img id="arlo-face-image" src="/faces/arlo_happy.png" alt="Arlo Face" />
@@ -88,7 +98,8 @@
             </div>
             <div id="title-copy">
                 <h1 id="title-main">ARLOCRAFT</h1>
-                <div id="title-sub">Infinite Chunks. Virus Blocks. Survival Systems.</div>
+                <div id="title-sub">The world has fallen. Mine, build, and restore what was lost.</div>
+                <div id="title-lore">A viral corruption spreads across the land. You are the last builder — uncover ruins, cleanse the blight, and bring light back to a broken world.</div>
             </div>
 
             <div id="title-seed-row">
@@ -111,7 +122,8 @@
             </div>
 
             <div id="title-controls">
-                WASD move | Mouse look | Left Click mine/attack | Right Click place/interact | E inventory | F offhand | Q dig down | F3 debug | F5 camera | ESC pause
+                WASD &mdash; Move &nbsp;|&nbsp; Mouse &mdash; Look &nbsp;|&nbsp; LMB &mdash; Mine/Attack &nbsp;|&nbsp; RMB &mdash; Place/Interact<br>
+                E &mdash; Inventory &nbsp;|&nbsp; F &mdash; Offhand &nbsp;|&nbsp; Q &mdash; Dig Down &nbsp;|&nbsp; ESC &mdash; Pause
             </div>
         </div>
     </div>
@@ -131,25 +143,52 @@
     </div>
 
     <div id="settings-panel" style="display: none;">
-        <h2>Settings & World</h2>
-
-        <div class="setting-row">
-            <label for="setting-sensitivity">Mouse Sensitivity</label>
-            <input id="setting-sensitivity" type="range" min="0.0007" max="0.0030" step="0.0001" value="0.00145" />
-            <span id="setting-sensitivity-value">0.0015</span>
+        <div class="settings-header">
+            <h2>Settings</h2>
+            <button class="btn settings-close-x" id="btn-settings-close" aria-label="Close">&#x2715;</button>
         </div>
 
-        <div class="setting-row">
-            <label for="setting-invert-y">Invert Y</label>
-            <input id="setting-invert-y" type="checkbox" />
+        <div class="settings-section">
+            <div class="settings-section-title">Controls</div>
+            <div class="setting-row">
+                <label for="setting-sensitivity">Mouse Sensitivity</label>
+                <input id="setting-sensitivity" type="range" min="0.0007" max="0.0030" step="0.0001" value="0.00145" />
+                <span id="setting-sensitivity-value" class="setting-val">0.0015</span>
+            </div>
+            <div class="setting-row setting-row-check">
+                <label for="setting-invert-y">Invert Y-Axis</label>
+                <label class="toggle-switch">
+                    <input id="setting-invert-y" type="checkbox" />
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+            </div>
         </div>
 
-        <div class="setting-actions">
-            <button class="btn" id="btn-save-world">Save</button>
-            <button class="btn" id="btn-load-world">Load</button>
-            <button class="btn" id="btn-export-world">Export</button>
-            <button class="btn" id="btn-import-world">Import</button>
-            <button class="btn" id="btn-settings-close">Close</button>
+        <div class="settings-section">
+            <div class="settings-section-title">Graphics</div>
+            <div class="setting-row">
+                <label for="setting-fov">Field of View</label>
+                <input id="setting-fov" type="range" min="60" max="110" step="1" value="75" />
+                <span id="setting-fov-value" class="setting-val">75°</span>
+            </div>
+            <div class="setting-row setting-row-buttons">
+                <label>Quality</label>
+                <div class="btn-group">
+                    <button class="btn btn-quality active" id="btn-quality-low" data-tier="low">Low</button>
+                    <button class="btn btn-quality" id="btn-quality-balanced" data-tier="balanced">Balanced</button>
+                    <button class="btn btn-quality" id="btn-quality-high" data-tier="high">High</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="settings-section-title">World</div>
+            <div class="setting-actions">
+                <button class="btn" id="btn-save-world">&#128190; Save</button>
+                <button class="btn" id="btn-load-world">&#128193; Load</button>
+                <button class="btn" id="btn-export-world">&#8599; Export</button>
+                <button class="btn" id="btn-import-world">&#8595; Import</button>
+            </div>
         </div>
 
         <input id="import-world-input" type="file" accept=".json,application/json" style="display: none;" />

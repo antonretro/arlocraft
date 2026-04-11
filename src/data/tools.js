@@ -1,21 +1,75 @@
-export const TOOLS = [
-    { id: 'pick_wood', name: 'Wooden Pickaxe', type: 'pick', efficiency: 1, damage: 2, range: 3.6, cooldown: 0.28, knockback: 0.4, critChance: 0.02 },
-    { id: 'sledge_iron', name: 'Iron Sledge', type: 'pick', efficiency: 3, damage: 5, range: 3.8, cooldown: 0.3, knockback: 0.7, critChance: 0.04 },
-    { id: 'power_blade', name: 'Power Blade', type: 'sword', efficiency: 1, damage: 10, range: 4.1, cooldown: 0.25, knockback: 0.95, critChance: 0.08 },
-    { id: 'glitch_saber', name: 'Glitch Saber', type: 'sword', efficiency: 2, damage: 25, range: 4.6, cooldown: 0.22, knockback: 1.2, critChance: 0.15 },
-    { id: 'byte_axe', name: 'Byte Axe', type: 'axe', efficiency: 2, damage: 14, range: 4.0, cooldown: 0.32, knockback: 1.35, critChance: 0.1 },
-    { id: 'echo_dagger', name: 'Echo Dagger', type: 'dagger', efficiency: 1, damage: 12, range: 3.4, cooldown: 0.17, knockback: 0.55, critChance: 0.2 },
-    { id: 'arc_spear', name: 'Arc Spear', type: 'spear', efficiency: 1, damage: 16, range: 5.1, cooldown: 0.3, knockback: 1.05, critChance: 0.09 },
-    { id: 'plasma_hammer', name: 'Plasma Hammer', type: 'hammer', efficiency: 3, damage: 19, range: 3.9, cooldown: 0.36, knockback: 1.75, critChance: 0.07 },
-    { id: 'pulse_pistol', name: 'Pulse Pistol', type: 'gun', efficiency: 0, damage: 13, range: 16, cooldown: 0.2, knockback: 0.55, critChance: 0.09 },
-    { id: 'rail_rifle', name: 'Rail Rifle', type: 'gun', efficiency: 0, damage: 24, range: 28, cooldown: 0.55, knockback: 1.4, critChance: 0.16 },
-    { id: 'scatter_blaster', name: 'Scatter Blaster', type: 'gun', efficiency: 0, damage: 18, range: 12, cooldown: 0.42, knockback: 1.1, critChance: 0.12 },
-    { id: 'static_bow', name: 'Static Bow', type: 'ranged', efficiency: 0, damage: 15, range: 14, cooldown: 0.5, knockback: 0.7, critChance: 0.1 },
-    { id: 'data_drill', name: 'Data Drill', type: 'pick', efficiency: 10, damage: 1, range: 3.5, cooldown: 0.22, knockback: 0.35, critChance: 0.02 },
-    { id: 'decoder_wand', name: 'Decoder Wand', type: 'magic', efficiency: 1, damage: 20, range: 13, cooldown: 0.42, knockback: 1.0, critChance: 0.12 },
-    { id: 'magnet_glove', name: 'Magnet Glove', type: 'utility', efficiency: 0, damage: 0, range: 3.2, cooldown: 0.25, knockback: 0.2, critChance: 0 },
-    { id: 'rocket_boots', name: 'Rocket Boots', type: 'utility', efficiency: 0, damage: 0, range: 3.2, cooldown: 0.25, knockback: 0.2, critChance: 0 },
-    { id: 'grappler', name: 'Grappler', type: 'utility', efficiency: 0, damage: 0, range: 6.5, cooldown: 0.35, knockback: 0.1, critChance: 0 },
-    { id: 'scanner', name: 'Scanner', type: 'utility', efficiency: 0, damage: 0, range: 4.5, cooldown: 0.25, knockback: 0.1, critChance: 0 },
-    { id: 'master_key', name: 'Master Key', type: 'utility', efficiency: 0, damage: 0, range: 3.2, cooldown: 0.25, knockback: 0.2, critChance: 0 }
-];
+import { TOOLS as BASE_TOOLS } from '../content/items/base.js';
+
+const packModules = import.meta.glob('../content/items/packs/*.js', { eager: true });
+
+function toTitleCase(id) {
+    return id
+        .split(/[_-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+}
+
+function normalizeTool(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const id = String(raw.id ?? '').trim();
+    if (!id) return null;
+
+    const normalized = { ...raw };
+    normalized.id = id;
+    normalized.name = typeof raw.name === 'string' && raw.name.trim()
+        ? raw.name.trim()
+        : toTitleCase(id);
+    normalized.type = typeof raw.type === 'string' && raw.type.trim()
+        ? raw.type.trim()
+        : 'utility';
+
+    const efficiency = Number(raw.efficiency);
+    normalized.efficiency = Number.isFinite(efficiency) ? efficiency : 0;
+
+    const damage = Number(raw.damage);
+    normalized.damage = Number.isFinite(damage) ? damage : 0;
+
+    const range = Number(raw.range);
+    normalized.range = Number.isFinite(range) ? range : 3.2;
+
+    const cooldown = Number(raw.cooldown);
+    normalized.cooldown = Number.isFinite(cooldown) ? cooldown : 0.25;
+
+    const knockback = Number(raw.knockback);
+    normalized.knockback = Number.isFinite(knockback) ? knockback : 0.2;
+
+    const critChance = Number(raw.critChance);
+    normalized.critChance = Number.isFinite(critChance) ? critChance : 0;
+
+    return normalized;
+}
+
+function entriesFromModule(mod) {
+    if (Array.isArray(mod?.default)) return mod.default;
+    if (Array.isArray(mod?.TOOLS)) return mod.TOOLS;
+    if (Array.isArray(mod?.TOOL_PACK)) return mod.TOOL_PACK;
+    return [];
+}
+
+function mergeTools() {
+    const merged = new Map();
+
+    for (const entry of BASE_TOOLS) {
+        const tool = normalizeTool(entry);
+        if (tool) merged.set(tool.id, tool);
+    }
+
+    const sortedPacks = Object.keys(packModules).sort();
+    for (const path of sortedPacks) {
+        const entries = entriesFromModule(packModules[path]);
+        for (const entry of entries) {
+            const tool = normalizeTool(entry);
+            if (tool) merged.set(tool.id, tool);
+        }
+    }
+
+    return Array.from(merged.values());
+}
+
+export const TOOLS = mergeTools();

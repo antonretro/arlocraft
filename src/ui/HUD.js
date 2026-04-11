@@ -101,6 +101,7 @@ export class HUD {
             rail_rifle: 'static_bow',
             scatter_blaster: 'static_bow'
         };
+        this.generatedIconCache = new Map();
 
         this.carryItem = null;
         this.carryOrigin = null;
@@ -339,6 +340,9 @@ export class HUD {
         const icon = this.getIconPath(item.id);
         if (icon) {
             element.style.backgroundImage = `url('${icon}')`;
+            if (icon.startsWith('data:image/svg+xml')) {
+                element.classList.add('generated');
+            }
         } else {
             element.textContent = item.id.slice(0, 2).toUpperCase();
         }
@@ -571,7 +575,7 @@ export class HUD {
     }
 
     getIconPath(itemId) {
-        if (!itemId) return '/icons/items/stone.png';
+        if (!itemId) return this.getGeneratedIconPath('item');
 
         const direct = this.iconMap[itemId];
         if (direct) {
@@ -584,7 +588,74 @@ export class HUD {
             return `/icons/items/${alias}.png`;
         }
 
-        return '/icons/items/stone.png';
+        return this.getGeneratedIconPath(itemId);
+    }
+
+    getGeneratedIconPath(itemId) {
+        const id = String(itemId || 'item').toLowerCase();
+        if (this.generatedIconCache.has(id)) return this.generatedIconCache.get(id);
+
+        const monogram = this.getIconMonogram(id);
+        const accent = this.getIconAccentColor(id);
+        const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="#151f35"/>
+<stop offset="100%" stop-color="#09101d"/>
+</linearGradient>
+<linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="${accent}"/>
+<stop offset="100%" stop-color="#ffffff"/>
+</linearGradient>
+</defs>
+<rect x="4" y="4" width="56" height="56" rx="12" fill="url(#bg)" stroke="${accent}" stroke-width="2.5"/>
+<rect x="10" y="10" width="44" height="44" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+<circle cx="16" cy="16" r="2.2" fill="${accent}" />
+<text x="32" y="39" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="23" font-weight="700" fill="url(#accent)">${monogram}</text>
+</svg>`;
+
+        const data = `data:image/svg+xml;utf8,${encodeURIComponent(svg.trim())}`;
+        this.generatedIconCache.set(id, data);
+        return data;
+    }
+
+    getIconMonogram(itemId) {
+        const parts = String(itemId || 'it')
+            .split(/[_-]+/)
+            .filter(Boolean);
+        if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+        const compact = parts[0] || 'it';
+        return compact.slice(0, 2).toUpperCase();
+    }
+
+    getIconAccentColor(itemId) {
+        const alias = this.resolveIconAlias(itemId) ?? itemId;
+        const palette = {
+            stone: '#7bc8ff',
+            dirt: '#f0a56d',
+            grass: '#76f59f',
+            wood: '#ffc176',
+            leaves: '#8de86b',
+            sand: '#ffe384',
+            water: '#7bd2ff',
+            iron: '#b8c8ff',
+            gold: '#ffe36a',
+            diamond: '#6bffe6',
+            static_bow: '#8ad7ff',
+            power_blade: '#ff8fb2',
+            pick_wood: '#ffcf8d',
+            magnet_glove: '#ffd28f',
+            virus: '#d08bff',
+            arlo: '#ffb0d7'
+        };
+        if (palette[alias]) return palette[alias];
+
+        let hash = 0;
+        const value = String(itemId ?? '');
+        for (let i = 0; i < value.length; i++) hash = ((hash << 5) - hash) + value.charCodeAt(i);
+        const hue = Math.abs(hash) % 360;
+        return `hsl(${hue} 82% 66%)`;
     }
 
     resolveIconAlias(itemId) {

@@ -22,25 +22,28 @@ if (!this.game?.features?.myNewSystem) return;
 
 ## 2) Adding New Blocks
 Files:
-- `src/data/blocks.js`
+- `src/content/blocks/packs/*.js`
 - `src/blocks/BlockRegistry.js`
 - `public/icons/items/<block>.png` (optional UI icon)
 
 Steps:
-1. Add block metadata to `blocks.js` (`id`, `name`, `hardness`, `xp`).
+1. Add block metadata to a new pack file in `src/content/blocks/packs`.
 2. Add color/texture mapping in `BlockRegistry.js`.
 3. Optional: add icon in `public/icons/items` for HUD/hotbar.
+4. See `docs/CONTENT_PACKS.md` for pack format and examples.
+5. Existing built-in blocks are in `src/content/blocks/packs/core.pack.js`.
 
 ## 3) Adding New Tools
 Files:
-- `src/data/tools.js`
+- `src/content/items/packs/*.js`
 - `src/ui/HUD.js`
 - `public/icons/items/<tool>.png`
 
 Steps:
-1. Add tool entry (`id`, `name`, `type`, `efficiency`, `damage`).
+1. Add tool entry to a new pack file in `src/content/items/packs`.
 2. Add icon mapping in HUD icon map.
 3. Tool auto-affects mining speed via world mining-duration logic.
+4. See `docs/CONTENT_PACKS.md` for pack format and examples.
 
 ## 4) Adding Recipes
 File: `src/data/recipes.js`
@@ -69,5 +72,6 @@ Before shipping a new system:
 - `src/world/*`: chunks, generation, mining/place interactions
 - `src/ui/*`: menus, HUD, minimap, prompts
 - `src/data/*`: content definitions (blocks/tools/recipes/features)
+- `src/rendering/*`: shared render config and layer ordering
 
 Keeping new features inside one layer first reduces regressions.

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CLOUD_SETTINGS, computeFogDensity } from '../rendering/RenderConfig.js';
 
 export class Renderer {
     constructor() {
@@ -16,8 +17,11 @@ export class Renderer {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x87ceeb);
         
-        // FOV-based Fog initialization
-        this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.012);
+        this.daylight = 1;
+        this.submerged = false;
+
+        // Exponential fog tuned by day/night + underwater state.
+        this.scene.fog = new THREE.FogExp2(0x87ceeb, computeFogDensity(this.daylight, this.submerged));
 
         this.hemiLight = new THREE.HemisphereLight(0xb9e3ff, 0x3a301f, 0.45);
         this.scene.add(this.hemiLight);
@@ -34,6 +38,7 @@ export class Renderer {
         this.setupClouds();
         this.lastCloudUpdateMs = performance.now();
         this.areaInfluence = { virus: 0, arlo: 0 };
+        this.applyScreenFilter();
     }
 
     setupSky() {
@@ -90,9 +95,9 @@ export class Renderer {
         this.cloudGroup = new THREE.Group();
         this.scene.add(this.cloudGroup);
 
-        for (let i = 0; i < 52; i++) {
-            const width = THREE.MathUtils.randFloat(12, 34);
-            const depth = THREE.MathUtils.randFloat(7, 18);
+        for (let i = 0; i < CLOUD_SETTINGS.count; i++) {
+            const width = THREE.MathUtils.randFloat(CLOUD_SETTINGS.widthMin, CLOUD_SETTINGS.widthMax);
+            const depth = THREE.MathUtils.randFloat(CLOUD_SETTINGS.depthMin, CLOUD_SETTINGS.depthMax);
             const cloud = new THREE.Mesh(
                 new THREE.PlaneGeometry(width, depth),
                 new THREE.MeshLambertMaterial({
@@ -105,11 +110,11 @@ export class Renderer {
             );
             cloud.rotation.x = -Math.PI / 2;
             cloud.position.set(
-                THREE.MathUtils.randFloatSpread(1300),
-                THREE.MathUtils.randFloat(44, 68),
-                THREE.MathUtils.randFloatSpread(1300)
+                THREE.MathUtils.randFloatSpread(CLOUD_SETTINGS.spread),
+                THREE.MathUtils.randFloat(CLOUD_SETTINGS.yMin, CLOUD_SETTINGS.yMax),
+                THREE.MathUtils.randFloatSpread(CLOUD_SETTINGS.spread)
             );
-            cloud.userData.speed = THREE.MathUtils.randFloat(0.45, 1.1);
+            cloud.userData.speed = THREE.MathUtils.randFloat(CLOUD_SETTINGS.speedMin, CLOUD_SETTINGS.speedMax);
             this.cloudGroup.add(cloud);
         }
     }
@@ -139,6 +144,7 @@ export class Renderer {
 
     updateEnvironmentLighting(daylight, playerPosition) {
         const clamped = Math.max(0.05, Math.min(1, daylight));
+        this.daylight = clamped;
 
         const topDay = new THREE.Color(0x5ea4ff);
         const topNight = new THREE.Color(0x041029);
@@ -153,7 +159,7 @@ export class Renderer {
         this.hemiLight.color.set(top);
         this.hemiLight.groundColor.set(0x2e261d);
 
-        this.scene.fog.density = THREE.MathUtils.lerp(0.018, 0.010, clamped);
+        this.scene.fog.density = computeFogDensity(this.daylight, this.submerged);
 
         this.playerLight.intensity = THREE.MathUtils.lerp(0.9, 0.0, clamped);
         if (playerPosition) {
@@ -161,9 +167,55 @@ export class Renderer {
         }
     }
 
+    setUnderwaterState(submerged) {
+        const next = Boolean(submerged);
+        if (this.submerged === next) return;
+        this.submerged = next;
+        this.scene.fog.density = computeFogDensity(this.daylight, this.submerged);
+        this.applyScreenFilter();
+    }
+
     setAreaInfluence(influence) {
-        this.areaInfluence.virus = Math.max(0, Math.min(1, influence?.virus ?? 0));
-        this.areaInfluence.arlo = Math.max(0, Math.min(1, influence?.arlo ?? 0));
+        const v = Math.max(0, Math.min(1, influence?.virus ?? 0));
+        const a = Math.max(0, Math.min(1, influence?.arlo ?? 0));
+        // Skip redundant filter recalculation when values haven't shifted meaningfully
+        if (Math.abs(v - this.areaInfluence.virus) < 0.005 &&
+            Math.abs(a - this.areaInfluence.arlo) < 0.005) return;
+        this.areaInfluence.virus = v;
+        this.areaInfluence.arlo = a;
+        this.applyScreenFilter();
+    }
+
+    applyScreenFilter() {
+        const v = this.areaInfluence.virus;
+        const a = this.areaInfluence.arlo;
+
+        // Corruption influence is intentionally subtle: slight dim + purple shift.
+        let brightness = 1 - v * 0.05 + a * 0.03;
+        let saturation = 1 - v * 0.18 + a * 0.10;
+        let contrast = 1 + v * 0.04;
+        let hueRotate = v * 22;
+
+        if (this.submerged) {
+            saturation += 0.05;
+            contrast -= 0.05;
+            hueRotate -= 6;
+        }
+
+        brightness = Math.max(0.94, Math.min(1.06, brightness));
+        saturation = Math.max(0.78, Math.min(1.15, saturation));
+
+        // Drive the corruption overlay element
+        const overlay = document.getElementById('corruption-overlay');
+        if (overlay) overlay.style.opacity = String((v * 0.12).toFixed(3));
+
+        const filterParts = [];
+        if (Math.abs(brightness - 1) > 0.002) filterParts.push(`brightness(${brightness.toFixed(3)})`);
+        if (Math.abs(saturation - 1) > 0.002) filterParts.push(`saturate(${saturation.toFixed(3)})`);
+        if (Math.abs(contrast - 1) > 0.002) filterParts.push(`contrast(${contrast.toFixed(3)})`);
+        if (Math.abs(hueRotate) > 0.5) filterParts.push(`hue-rotate(${hueRotate.toFixed(1)}deg)`);
+
+        this.instance.domElement.style.filter = filterParts.length > 0 ? filterParts.join(' ') : 'none';
     }
 
     setSize(w, h) {
@@ -178,9 +230,7 @@ export class Renderer {
         const delta = Math.max(0, Math.min(0.05, (now - this.lastCloudUpdateMs) / 1000));
         this.lastCloudUpdateMs = now;
         this.updateClouds(camera, delta);
-        
-        this.instance.domElement.style.filter = 'none';
-        
+
         this.instance.render(this.scene, camera);
     }
 }

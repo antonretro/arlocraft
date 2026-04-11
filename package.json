@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "build:web:portable": "vite build --base ./",
     "build:exe": "npm run build:web:portable && electron-builder --win portable",
-    "start:desktop": "electron ."
+    "start:desktop": "node desktop/start-desktop.cjs"
   },
   "build": {
     "appId": "com.arlocraft.game",

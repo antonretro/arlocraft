@@ -35,7 +35,9 @@ export class MiniMap {
             crafting_table: '#94724b',
             brick: '#a6543f',
             obsidian: '#2d283e',
-            bedrock: '#1f1f1f'
+            bedrock: '#1f1f1f',
+            snow_block: '#d9ecff',
+            sandstone: '#cbbd8f'
         };
 
         if (this.container) this.container.style.display = 'none';
@@ -103,5 +105,28 @@ export class MiniMap {
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.font = '12px monospace';
         ctx.fillText('N', c - 4, 12);
+
+        // Draw landmark labels
+        const landmarks = this.game.world?.getLandmarksNear?.(playerPos.x, playerPos.z, this.radius + 8);
+        if (landmarks?.length) {
+            ctx.font = 'bold 7px sans-serif';
+            for (const lm of landmarks) {
+                const lx = ((lm.x - startX) / (this.radius * 2)) * size;
+                const lz = ((lm.z - startZ) / (this.radius * 2)) * size;
+                if (lx < 4 || lx > size - 4 || lz < 4 || lz > size - 4) continue;
+                // Dot
+                ctx.fillStyle = lm.restored ? '#7cff9c' : '#ffe87a';
+                ctx.beginPath();
+                ctx.arc(lx, lz, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                // Label with shadow
+                const baseLabel = lm.name.length > 14 ? lm.name.slice(0, 13) + '...' : lm.name;
+                const label = lm.restored ? `+ ${baseLabel}` : baseLabel;
+                ctx.fillStyle = 'rgba(0,0,0,0.65)';
+                ctx.fillText(label, lx + 5 + 1, lz + 1);
+                ctx.fillStyle = lm.restored ? '#7cff9c' : '#ffe87a';
+                ctx.fillText(label, lx + 5, lz);
+            }
+        }
     }
 }

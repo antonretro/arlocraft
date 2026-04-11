@@ -3,6 +3,12 @@ import { BLOCKS } from '../data/blocks.js';
 import grassTopTexture from '../assets/grass_top_texture.png';
 import grassSideTexture from '../assets/grass_side_texture.png';
 import stoneTexture from '../assets/stone_texture.png';
+import dirtTexture from '../assets/dirt.png';
+import woodTexture from '../assets/wood.png';
+import leavesTexture from '../assets/leaves.png';
+import sandTexture from '../assets/sand.png';
+import ironOreTexture from '../assets/iron_ore.png';
+import { BLOCK_TEXTURE_ATLAS, getAtlasFacesForBlock } from '../rendering/BlockTextureMap.js';
 
 
 export class BlockRegistry {
@@ -11,6 +17,7 @@ export class BlockRegistry {
         this.blocks = new Map();
         this.materialCache = new Map();
         this.textureCache = new Map();
+        this.atlasTileCache = new Map();
         this.pixelTextures = new Map();
         this.animatedGif = null;
         this.init();
@@ -65,8 +72,26 @@ export class BlockRegistry {
                      sideMaterial
                  ]);
             } else {
-                this.materialCache.set(id, new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.1 }));
+                this.materialCache.set(id, new THREE.MeshLambertMaterial({
+                    map: tex,
+                    transparent: true,
+                    alphaTest: 0.1,
+                    depthWrite: false
+                }));
             }
+        }
+    }
+
+    configureTransparentMaterial(material) {
+        if (!material) return;
+        if (Array.isArray(material)) {
+            for (let i = 0; i < material.length; i++) {
+                this.configureTransparentMaterial(material[i]);
+            }
+            return;
+        }
+        if (material.transparent) {
+            material.depthWrite = false;
         }
     }
 
@@ -75,8 +100,75 @@ export class BlockRegistry {
         const texture = this.textureLoader.load(src);
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
+        texture.colorSpace = THREE.SRGBColorSpace;
         this.textureCache.set(src, texture);
         return texture;
+    }
+
+    getAtlasTileTexture(tileX, tileY) {
+        const columns = Math.max(1, BLOCK_TEXTURE_ATLAS.columns);
+        const rows = Math.max(1, BLOCK_TEXTURE_ATLAS.rows);
+        const safeX = Math.max(0, Math.min(columns - 1, Number(tileX) || 0));
+        const safeY = Math.max(0, Math.min(rows - 1, Number(tileY) || 0));
+        const key = `${safeX}|${safeY}`;
+        if (this.atlasTileCache.has(key)) return this.atlasTileCache.get(key);
+
+        // Load a fresh texture per tile (TextureLoader caches the underlying Image,
+        // so no duplicate network requests) — this guarantees each tile gets its own
+        // needsUpdate event when the image finishes loading, preventing black tiles.
+        const tile = this.textureLoader.load(BLOCK_TEXTURE_ATLAS.src);
+        tile.magFilter = THREE.NearestFilter;
+        tile.minFilter = THREE.NearestFilter;
+        tile.colorSpace = THREE.SRGBColorSpace;
+        tile.wrapS = THREE.RepeatWrapping;
+        tile.wrapT = THREE.RepeatWrapping;
+        tile.repeat.set(1 / columns, 1 / rows);
+        tile.offset.set(safeX / columns, 1 - ((safeY + 1) / rows));
+
+        this.atlasTileCache.set(key, tile);
+        return tile;
+    }
+
+    createMappedFaceMaterial(config, tileCoord) {
+        if (!tileCoord || !Array.isArray(tileCoord) || tileCoord.length < 2) return null;
+        const tex = this.getAtlasTileTexture(tileCoord[0], tileCoord[1]);
+        return new THREE.MeshLambertMaterial({
+            map: tex,
+            transparent: Boolean(config?.transparent),
+            opacity: config?.transparent ? 0.65 : 1,
+            depthWrite: !config?.transparent
+        });
+    }
+
+    createAtlasMaterial(id, config) {
+        if (id === 'water') return null;
+        const faces = getAtlasFacesForBlock(id);
+        if (!faces) return null;
+
+        const hasAnyFace = Boolean(
+            faces.all || faces.side || faces.top || faces.bottom || faces.front || faces.back || faces.left || faces.right
+        );
+        if (!hasAnyFace) return null;
+
+        const all = this.createMappedFaceMaterial(config, faces.all);
+        if (all && !faces.side && !faces.top && !faces.bottom) return all;
+
+        const side = this.createMappedFaceMaterial(config, faces.side ?? faces.all);
+        const top = this.createMappedFaceMaterial(config, faces.top ?? faces.side ?? faces.all);
+        const bottom = this.createMappedFaceMaterial(config, faces.bottom ?? faces.side ?? faces.all);
+        const front = this.createMappedFaceMaterial(config, faces.front ?? faces.side ?? faces.all);
+        const back = this.createMappedFaceMaterial(config, faces.back ?? faces.side ?? faces.all);
+        const right = this.createMappedFaceMaterial(config, faces.right ?? faces.side ?? faces.all);
+        const left = this.createMappedFaceMaterial(config, faces.left ?? faces.side ?? faces.all);
+
+        return [
+            right ?? side ?? all,
+            left ?? side ?? all,
+            top ?? all,
+            bottom ?? all,
+            front ?? side ?? all,
+            back ?? side ?? all
+        ];
     }
 
     updateShaderMaterials(timeSeconds) {
@@ -90,11 +182,11 @@ export class BlockRegistry {
         const config = this.blocks.get(id);
         if (!config) return new THREE.MeshLambertMaterial({ color: 0xff00ff });
 
-        let material;
+        let material = null;
         if (id === 'grass') {
             const side = this.loadTexture(grassSideTexture);
             const top = this.loadTexture(grassTopTexture);
-            const bottom = this.loadTexture(stoneTexture);
+            const bottom = this.loadTexture(dirtTexture);
             material = [
                 new THREE.MeshLambertMaterial({ map: side }),
                 new THREE.MeshLambertMaterial({ map: side }),
@@ -103,9 +195,31 @@ export class BlockRegistry {
                 new THREE.MeshLambertMaterial({ map: side }),
                 new THREE.MeshLambertMaterial({ map: side })
             ];
+        } else if (id === 'dirt') {
+            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(dirtTexture) });
         } else if (id === 'stone') {
             material = new THREE.MeshLambertMaterial({ map: this.loadTexture(stoneTexture) });
-        } else {
+        } else if (id === 'cobblestone') {
+            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(stoneTexture) });
+        } else if (id === 'sand') {
+            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(sandTexture) });
+        } else if (id === 'sandstone') {
+            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(sandTexture) });
+        } else if (id === 'wood' || id.startsWith('wood_')) {
+            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(woodTexture) });
+        } else if (id === 'leaves' || id.startsWith('leaves_')) {
+            material = new THREE.MeshLambertMaterial({
+                map: this.loadTexture(leavesTexture)
+            });
+        } else if (id === 'iron') {
+            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(ironOreTexture) });
+        }
+
+        if (!material) {
+            material = this.createAtlasMaterial(id, config);
+        }
+
+        if (!material) {
             const palette = {
                 dirt: 0x7a5f3a,
                 wood: 0x8f673c,
@@ -228,13 +342,14 @@ export class BlockRegistry {
                     `,
                     transparent: true,
                     depthTest: true,
-                    depthWrite: true
+                    depthWrite: false
                 });
             } else {
                 material = new THREE.MeshLambertMaterial({
                     color: palette[id] ?? 0x9c9c9c,
                     transparent: Boolean(config.transparent),
-                    opacity: config.transparent ? 0.65 : 1
+                    opacity: config.transparent ? 0.65 : 1,
+                    depthWrite: !config.transparent
                 });
             }
 
@@ -248,6 +363,7 @@ export class BlockRegistry {
             }
         }
 
+        this.configureTransparentMaterial(material);
         this.materialCache.set(id, material);
         return material;
     }

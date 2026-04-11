@@ -155,6 +155,8 @@ export class Game {
         const defaults = {
             sensitivity: 0.00145,
             invertY: false,
+            fov: 75,
+            qualityTierPref: 'low',
             preferredMode: 'SURVIVAL'
         };
 
@@ -162,9 +164,12 @@ export class Game {
             const raw = localStorage.getItem('arlocraft-settings');
             if (!raw) return defaults;
             const parsed = JSON.parse(raw);
+            const fov = Number(parsed.fov);
             return {
                 sensitivity: Number.isFinite(parsed.sensitivity) ? parsed.sensitivity : defaults.sensitivity,
                 invertY: Boolean(parsed.invertY),
+                fov: Number.isFinite(fov) && fov >= 60 && fov <= 110 ? fov : defaults.fov,
+                qualityTierPref: ['low', 'balanced', 'high'].includes(parsed.qualityTierPref) ? parsed.qualityTierPref : defaults.qualityTierPref,
                 preferredMode: parsed.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL'
             };
         } catch {
@@ -601,6 +606,9 @@ export class Game {
         const sensitivityInput = document.getElementById('setting-sensitivity');
         const sensitivityLabel = document.getElementById('setting-sensitivity-value');
         const invertYInput = document.getElementById('setting-invert-y');
+        const fovInput = document.getElementById('setting-fov');
+        const fovLabel = document.getElementById('setting-fov-value');
+        const qualityBtns = document.querySelectorAll('.btn-quality');
         const btnSave = document.getElementById('btn-save-world');
         const btnLoad = document.getElementById('btn-load-world');
         const btnExport = document.getElementById('btn-export-world');
@@ -658,6 +666,37 @@ export class Game {
             });
         }
 
+        if (fovInput) {
+            fovInput.value = String(this.settings.fov);
+            if (fovLabel) fovLabel.textContent = `${this.settings.fov}°`;
+            fovInput.addEventListener('input', () => {
+                const value = Number(fovInput.value);
+                this.settings.fov = value;
+                this.saveSettings();
+                if (fovLabel) fovLabel.textContent = `${value}°`;
+                this.camera.instance.fov = value;
+                this.camera.instance.updateProjectionMatrix();
+                this.setStatus(`FOV: ${value}°`);
+            });
+        }
+
+        const syncQualityBtns = () => {
+            qualityBtns.forEach((btn) => {
+                btn.classList.toggle('active', btn.dataset.tier === this.qualityTier);
+            });
+        };
+        qualityBtns.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const tier = btn.dataset.tier;
+                this.settings.qualityTierPref = tier;
+                this.saveSettings();
+                this.applyQualityTier(tier);
+                syncQualityBtns();
+                this.setStatus(`Quality: ${tier.charAt(0).toUpperCase() + tier.slice(1)}`);
+            });
+        });
+        syncQualityBtns();
+
         if (btnOptions) {
             btnOptions.addEventListener('click', () => {
                 this.showSettings(true);
@@ -712,7 +751,9 @@ export class Game {
 
     async init() {
         await this.physics.init();
-        this.applyQualityTier('low');
+        this.applyQualityTier(this.settings.qualityTierPref ?? 'low');
+        this.camera.instance.fov = this.settings.fov ?? 75;
+        this.camera.instance.updateProjectionMatrix();
         this.hud.init();
         this.initPerfPanel();
 
@@ -795,6 +836,49 @@ export class Game {
         desired.add(new THREE.Vector3(shakeX, shakeY, shakeZ));
         this.camera.instance.position.lerp(desired, 0.4);
         this.camera.instance.lookAt(head);
+    }
+
+    updateZoneMeter(influence) {
+        const v = influence?.virus ?? 0;
+        const a = influence?.arlo ?? 0;
+
+        // Cache DOM refs once
+        if (!this._zoneDom) {
+            this._zoneDom = {
+                meter: document.getElementById('zone-meter'),
+                fillV: document.getElementById('zone-fill-virus'),
+                fillA: document.getElementById('zone-fill-arlo'),
+                status: document.getElementById('zone-status')
+            };
+            this._zoneLastV = -1;
+            this._zoneLastA = -1;
+            this._zoneLastCls = '';
+        }
+        const dom = this._zoneDom;
+        if (!dom.meter) return;
+
+        // Only update DOM when values change meaningfully (>0.5%)
+        const vRound = Math.round(v * 200);
+        const aRound = Math.round(a * 200);
+        if (vRound !== this._zoneLastV || aRound !== this._zoneLastA) {
+            this._zoneLastV = vRound;
+            this._zoneLastA = aRound;
+            if (dom.fillV) dom.fillV.style.width = `${(v * 100).toFixed(0)}%`;
+            if (dom.fillA) dom.fillA.style.width = `${(a * 100).toFixed(0)}%`;
+        }
+
+        let label = 'NEUTRAL';
+        let cls = '';
+        if (v > 0.5) { label = 'CORRUPTED'; cls = 'zone-corrupted'; }
+        else if (v > 0.15) { label = 'TAINTED'; cls = 'zone-tainted'; }
+        else if (a > 0.4) { label = 'RESTORED'; cls = 'zone-restored'; }
+        else if (a > 0.1) { label = 'CLEANSING'; cls = 'zone-cleansing'; }
+
+        if (cls !== this._zoneLastCls) {
+            this._zoneLastCls = cls;
+            dom.meter.className = cls;
+            if (dom.status) dom.status.textContent = label;
+        }
     }
 
     updateDebugOverlay(delta) {
@@ -1048,6 +1132,7 @@ export class Game {
             this.camera.viewmodelGroup.visible = false;
             this.updateCameraFromPlayer(playerPos);
         }
+        this.updateUnderwaterState();
         this.hand.update(delta, this.bobCycle, speed > 0.1);
         
         // Sync hand item
@@ -1064,6 +1149,7 @@ export class Game {
 
         const areaInfluence = this.world.getAreaInfluence(playerPos);
         this.renderer.setAreaInfluence(areaInfluence);
+        this.updateZoneMeter(areaInfluence);
 
         this.updateDayNight(delta);
         this.updateDebugOverlay(delta);
@@ -1098,25 +1184,14 @@ export class Game {
 
     updateUnderwaterState() {
         const camPos = this.camera.instance.position;
-        const submerged = this.world.isWaterAt(camPos.x, camPos.y, camPos.z);
+        const submerged = this.world.isPositionInWater(camPos.x, camPos.y, camPos.z);
         
         const overlay = document.getElementById('underwater-light');
         if (overlay) {
             if (submerged) overlay.classList.add('submerged');
             else overlay.classList.remove('submerged');
         }
-
-        // Adjust fog for underwater visibility
-        if (this.renderer.scene.fog) {
-            const fog = this.renderer.scene.fog;
-            if (submerged) {
-                fog.near = 1;
-                fog.far = 12;
-            } else {
-                fog.near = 15;
-                fog.far = 150;
-            }
-        }
+        this.renderer.setUnderwaterState(submerged);
     }
 
     processSmelting() {

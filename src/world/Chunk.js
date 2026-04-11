@@ -1,5 +1,28 @@
 import * as THREE from 'three';
 import { STRUCTURES } from './structures/StructureRegistry.js';
+import { RENDER_LAYERS, materialIsTransparent } from '../rendering/RenderConfig.js';
+
+const CORRUPTION_STRUCTURE_KEYS = new Set([
+    'virus_nexus',
+    'corrupted_lab',
+    'restoration_shrine'
+]);
+
+const CIVIC_STRUCTURE_POOL = [
+    'village_hut',
+    'market_stall',
+    'blacksmith_forge',
+    'village_well',
+    'mine_entrance',
+    'ruined_bridge',
+    'lamp_plaza',
+    'orchard_grove',
+    'fishing_dock',
+    'abandoned_camp',
+    'collapsed_bunker',
+    'broken_statue',
+    'windmill_outpost'
+];
 
 export class Chunk {
     constructor(world, cx, cz) {
@@ -73,16 +96,10 @@ export class Chunk {
         return material?.clone ? material.clone() : material;
     }
 
-    collectAuraSources(limit = 24) {
-        const sources = [];
-        for (const key of this.blockKeys) {
-            const id = this.world.blockMap.get(key);
-            if (id !== 'virus' && id !== 'arlo') continue;
-            const [x, y, z] = this.world.keyToCoords(key);
-            sources.push({ id, x, y, z });
-            if (sources.length >= limit) break;
-        }
-        return sources;
+    getRenderOrder(id, material) {
+        if (id === 'water') return RENDER_LAYERS.WATER;
+        if (materialIsTransparent(material)) return RENDER_LAYERS.TRANSPARENT;
+        return RENDER_LAYERS.OPAQUE;
     }
 
     addGeneratedBlock(x, y, z, id) {
@@ -94,6 +111,15 @@ export class Chunk {
         this.world.addBlock(x, y, z, finalId, this.key);
     }
 
+    addGeneratedStructureBlock(x, y, z, id) {
+        const key = this.world.getKey(x, y, z);
+        if (this.world.changedBlocks.get(key) === null) return;
+
+        const override = this.world.changedBlocks.get(key);
+        const finalId = override ?? id;
+        this.world.addBlock(x, y, z, finalId, this.key, false, { allowCorruption: true });
+    }
+
     // ... existing terrain gen methods ...
     generateTerrainColumn(wx, wz) {
         const terrainHeight = this.world.getColumnHeight(wx, wz);
@@ -101,8 +127,16 @@ export class Chunk {
         const biome = this.world.getBiomeAt(wx, wz);
         const waterLevel = this.world.seaLevel + (biome.waterLevelOffset ?? 0);
         let surfaceId = terrainHeight <= waterLevel ? 'sand' : biome.surfaceBlock;
-        if (!inForcedSpawnZone && terrainHeight > waterLevel && this.world.isPathAt(wx, wz)) {
+        const hasRoad = !inForcedSpawnZone && terrainHeight > waterLevel && this.world.isPathAt(wx, wz);
+        const hasHighway = !inForcedSpawnZone && terrainHeight > waterLevel && this.world.isHighwayAt(wx, wz);
+        if (hasHighway) {
+            surfaceId = 'cobblestone';
+        } else if (hasRoad) {
             surfaceId = 'path_block';
+        }
+        // Snow caps on very tall peaks
+        if (!inForcedSpawnZone && terrainHeight > 58 && surfaceId !== 'path_block') {
+            surfaceId = 'snow_block';
         }
         this.addGeneratedBlock(wx, terrainHeight, wz, surfaceId);
 
@@ -113,12 +147,19 @@ export class Chunk {
         const minNeighbor = Math.min(nx, px, nz, pz);
         const exposedDepth = Math.max(0, terrainHeight - minNeighbor);
 
-        for (let d = 1; d <= Math.max(1, Math.min(3, exposedDepth + 1)); d++) {
+        // Top 3 layers always filled with biome filler (dirt/stone etc.)
+        for (let d = 1; d <= 3; d++) {
             const y = terrainHeight - d;
             if (y < this.world.minTerrainY) break;
-            if (d > 2 && this.world.shouldCarveCave(wx, y, wz, terrainHeight)) continue;
-            const fillerId = d <= 2 ? biome.fillerBlock : this.world.getDeepBlockId(wx, y, wz);
-            this.addGeneratedBlock(wx, y, wz, fillerId);
+            this.addGeneratedBlock(wx, y, wz, biome.fillerBlock);
+        }
+        // Fill exposed cliff faces with stone so mountains look solid
+        const cliffFill = Math.min(exposedDepth, 50);
+        for (let d = 4; d <= cliffFill; d++) {
+            const y = terrainHeight - d;
+            if (y < this.world.minTerrainY) break;
+            if (this.world.shouldCarveCave(wx, y, wz, terrainHeight)) continue;
+            this.addGeneratedBlock(wx, y, wz, 'stone');
         }
 
         if (!inForcedSpawnZone) {
@@ -144,16 +185,14 @@ export class Chunk {
             }
         }
 
-        if (!inForcedSpawnZone && this.world.shouldPlaceTree(wx, wz, terrainHeight, biome)) {
+        const isHighAltitude = terrainHeight > 46;
+
+        if (!inForcedSpawnZone && !isHighAltitude && this.world.shouldPlaceTree(wx, wz, terrainHeight, biome)) {
             this.placeTree(wx, terrainHeight + 1, wz, biome);
         }
 
-        if (!inForcedSpawnZone && this.world.hash2D(wx + 123, wz - 456) < 0.0035) {
-            this.placeRandomStructure(wx, terrainHeight + 1, wz, biome);
-        }
-
         // --- DECO & CLOUDS ---
-        if (!inForcedSpawnZone && terrainHeight > waterLevel && this.world.blockMap.get(this.world.getKey(wx, terrainHeight, wz)) !== 'water') {
+        if (!inForcedSpawnZone && !isHighAltitude && terrainHeight > waterLevel && this.world.blockMap.get(this.world.getKey(wx, terrainHeight, wz)) !== 'water') {
             const decoHash = this.world.hash2D(wx * 22, wz * 33);
             if (decoHash < 0.08) {
                 const decoId = decoHash < 0.06 ? 'grass_tall' : (decoHash < 0.07 ? 'flower_rose' : 'flower_dandelion');
@@ -165,7 +204,22 @@ export class Chunk {
     }
 
     placeRandomStructure(x, y, z, biome) {
-        const keys = Object.keys(STRUCTURES);
+        const allKeys = Object.keys(STRUCTURES);
+        const virusRoll = this.world.hash2D(x + 811, z - 204);
+        let keys = allKeys;
+        if (!this.world.corruptionEnabled) {
+            const allowVirusRuin = virusRoll > 0.996;
+            keys = allKeys.filter((key) => {
+                if (!CORRUPTION_STRUCTURE_KEYS.has(key)) return true;
+                return allowVirusRuin && key !== 'restoration_shrine';
+            });
+            if (virusRoll < 0.94) {
+                const civicOnly = CIVIC_STRUCTURE_POOL.filter((key) => keys.includes(key));
+                if (civicOnly.length > 0) keys = civicOnly;
+            }
+        }
+        if (keys.length === 0) return;
+
         const hash = this.world.hash2D(x - 99, z + 88);
         const structKey = keys[Math.floor(hash * keys.length)];
         const struct = STRUCTURES[structKey];
@@ -184,7 +238,10 @@ export class Chunk {
 
         const blocks = struct.blueprints(x, y, z);
         for (const b of blocks) {
-            this.addGeneratedBlock(b.x, b.y, b.z, b.id);
+            this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
+        }
+        if (struct.name) {
+            this.world.registerLandmark(x, z, struct.name);
         }
     }
 
@@ -195,8 +252,10 @@ export class Chunk {
         if (biome.id === 'desert') type = 'palm';
         else if (biome.id === 'forest') type = hash > 0.6 ? 'birch' : (hash > 0.3 ? 'oak' : 'pine');
         else if (biome.id === 'swamp') type = 'willow';
-        else if (biome.id === 'plains') type = hash > 0.8 ? 'cherry' : 'oak';
-        else if (biome.id === 'highlands') type = 'redwood';
+        else if (biome.id === 'plains' || biome.id === 'meadow') type = hash > 0.8 ? 'cherry' : 'oak';
+        else if (biome.id === 'highlands') type = hash > 0.6 ? 'redwood' : 'pine';
+        else if (biome.id === 'alpine' || biome.id === 'tundra') type = 'pine';
+        else if (biome.id === 'badlands' || biome.id === 'canyon') type = 'palm';
         else if (this.world.isCorruptedAt(x, z)) type = 'crystal';
 
         const config = {
@@ -279,21 +338,15 @@ export class Chunk {
         const worldX = this.cx * this.world.chunkSize;
         const worldZ = this.cz * this.world.chunkSize;
 
-        const auraSources = this.collectAuraSources();
-        const useAuraTinting = auraSources.length > 0;
-
         for (const [id, keys] of byType.entries()) {
             const count = keys.length;
             const blockData = this.world.getBlockData(id);
             const baseMaterial = this.world.blockRegistry.getMaterial(id);
             const isWater = id === 'water';
             const isDeco = blockData?.deco;
-            const tintable = useAuraTinting && !isWater && !isDeco;
-            // Always reset shared/cached base material vertex color mode to avoid global black chunks.
+            const tintable = false;
             this.disableMaterialInstanceColors(baseMaterial);
-            const material = tintable ? this.cloneMaterial(baseMaterial) : baseMaterial;
-            if (tintable) this.enableMaterialInstanceColors(material);
-            const requiresInstanceColor = tintable;
+            const material = baseMaterial;
             
             const geometry = isWater
                 ? this.world.sharedChunkGeometries.water
@@ -302,8 +355,11 @@ export class Chunk {
             const im = new THREE.InstancedMesh(geometry, material, count);
             im.instanceMatrix.setUsage(THREE.StaticDrawUsage);
             im.userData.id = id;
-            im.userData.ownedMaterial = tintable;
+            im.userData.ownedMaterial = false;
+            // Chunk-level culling is already handled by world chunk visibility.
+            // Keep mesh frustum culling off to avoid false-negative culls that create holes.
             im.frustumCulled = false;
+            im.renderOrder = this.getRenderOrder(id, material);
 
             let renderCount = 0;
             for (let i = 0; i < count; i++) {
@@ -332,9 +388,6 @@ export class Chunk {
                 
                 temp.updateMatrix();
                 im.setMatrixAt(renderCount, temp.matrix);
-                if (requiresInstanceColor) {
-                    im.setColorAt(renderCount, new THREE.Color(0xffffff));
-                }
                 renderCount++;
             }
             
@@ -344,7 +397,6 @@ export class Chunk {
 
             im.count = renderCount;
             im.instanceMatrix.needsUpdate = true;
-            if (requiresInstanceColor && im.instanceColor) im.instanceColor.needsUpdate = true;
             im.computeBoundingSphere();
             
             this.instancedMeshes.set(id, im);
@@ -363,21 +415,44 @@ export class Chunk {
         if (this.destroyed) return;
         const startX = this.cx * this.world.chunkSize;
         const startZ = this.cz * this.world.chunkSize;
+        const centerX = startX + Math.floor(this.world.chunkSize * 0.5);
+        const centerZ = startZ + Math.floor(this.world.chunkSize * 0.5);
         for (let lx = 0; lx < this.world.chunkSize; lx++) {
             for (let lz = 0; lz < this.world.chunkSize; lz++) {
                 this.generateTerrainColumn(startX + lx, startZ + lz);
             }
         }
+        this.registerRoadLandmark(startX, startZ);
+        if (this.world.shouldPlaceStructureChunk(this.cx, this.cz)) {
+            const sy = this.world.getColumnHeight(centerX, centerZ) + 1;
+            const biome = this.world.getBiomeAt(centerX, centerZ);
+            this.placeRandomStructure(centerX, sy, centerZ, biome);
+        }
         if (this.world.shouldPlaceVillageChunk(this.cx, this.cz)) {
-            const vx = startX + Math.floor(this.world.chunkSize * 0.5);
-            const vz = startZ + Math.floor(this.world.chunkSize * 0.5);
+            const vx = centerX;
+            const vz = centerZ;
             const vy = this.world.getColumnHeight(vx, vz) + 1;
             this.placeVillageCluster(vx, vy, vz);
         }
         this.applyPlayerOverrides();
     }
 
+    registerRoadLandmark(startX, startZ) {
+        const midX = startX + Math.floor(this.world.chunkSize * 0.5);
+        const midZ = startZ + Math.floor(this.world.chunkSize * 0.5);
+        if (!this.world.isHighwayAt(midX, midZ)) return;
+        if (this.world.hash2D(this.cx + 519, this.cz - 733) < 0.78) return;
+        this.world.registerLandmark(midX, midZ, 'Abandoned Highway');
+    }
+
     placeVillageCluster(centerX, centerY, centerZ) {
+        const settlementName = this.world.getSettlementNameAt(centerX, centerZ);
+        this.world.registerLandmark(centerX, centerZ, settlementName, {
+            baseName: settlementName,
+            category: 'settlement',
+            displayName: settlementName
+        });
+
         const hutOffsets = [
             [-6, -4],
             [6, -3],
