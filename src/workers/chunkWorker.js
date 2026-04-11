@@ -1,8 +1,9 @@
 import { expose } from 'comlink';
+import { Noise } from '../world/Noise.js';
 
 const SEA_LEVEL = 1;
-const MIN_TERRAIN_Y = -4;
-const MAX_TERRAIN_Y = 7;
+const MIN_TERRAIN_Y = -12;
+const MAX_TERRAIN_Y = 126;
 const DEEP_MIN_Y = -220;
 
 const BIOMES = {
@@ -13,60 +14,22 @@ const BIOMES = {
     highlands: { surfaceBlock: 'stone', fillerBlock: 'stone', terrainBias: 1.1, terrainRoughness: 1.35, waterLevelOffset: -1, treeDensity: 0.03 }
 };
 
-function hashSeed(seedValue) {
-    const raw = String(seedValue ?? 'arlocraft').trim() || 'arlocraft';
-    const numeric = Number(raw);
-    if (Number.isFinite(numeric)) return Math.floor(Math.abs(numeric)) + 1;
+let workerNoise = null;
+let currentSeedString = null;
 
-    let hash = 2166136261;
-    for (let i = 0; i < raw.length; i++) {
-        hash ^= raw.charCodeAt(i);
-        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+function getNoise(seedString) {
+    if (currentSeedString !== seedString || !workerNoise) {
+        workerNoise = new Noise(seedString);
+        currentSeedString = seedString;
     }
-    return Math.abs(hash >>> 0) + 1;
+    return workerNoise;
 }
 
-function smoothstep(t) {
-    return t * t * (3 - (2 * t));
-}
 
-function lerp(a, b, t) {
-    return a + ((b - a) * t);
-}
-
-function hash2D(x, z, seed) {
-    const value = Math.sin((x * 127.1) + (z * 311.7) + seed) * 43758.5453;
-    return value - Math.floor(value);
-}
-
-function hash3D(x, y, z, seed) {
-    const value = Math.sin((x * 12.9898) + (y * 78.233) + (z * 37.719) + seed) * 43758.5453;
-    return value - Math.floor(value);
-}
-
-function valueNoise2D(x, z, scale, seed) {
-    const sx = x / scale;
-    const sz = z / scale;
-    const x0 = Math.floor(sx);
-    const z0 = Math.floor(sz);
-    const x1 = x0 + 1;
-    const z1 = z0 + 1;
-    const tx = smoothstep(sx - x0);
-    const tz = smoothstep(sz - z0);
-
-    const n00 = hash2D(x0, z0, seed);
-    const n10 = hash2D(x1, z0, seed);
-    const n01 = hash2D(x0, z1, seed);
-    const n11 = hash2D(x1, z1, seed);
-    const nx0 = lerp(n00, n10, tx);
-    const nx1 = lerp(n01, n11, tx);
-    return lerp(nx0, nx1, tz);
-}
-
-function getBiomeAt(x, z, seed) {
-    const temperature = valueNoise2D(x + 911, z - 1441, 220, seed);
-    const moisture = valueNoise2D(x - 1283, z + 677, 210, seed);
-    const continental = valueNoise2D(x + 2057, z + 111, 320, seed);
+function getBiomeAt(x, z, noise) {
+    const temperature = noise.fbm2D(x + 911, z - 1441, 3, 0.5, 2.0) * 0.5 + 0.5;
+    const moisture = noise.fbm2D(x - 1283, z + 677, 3, 0.5, 2.0) * 0.5 + 0.5;
+    const continental = noise.fbm2D(x + 2057, z + 111, 2, 0.5, 2.0) * 0.5 + 0.5;
 
     if (temperature > 0.68 && moisture < 0.38) return BIOMES.desert;
     if (moisture > 0.74 && temperature < 0.56) return BIOMES.swamp;
@@ -75,28 +38,53 @@ function getBiomeAt(x, z, seed) {
     return BIOMES.plains;
 }
 
-function getTerrainHeight(x, z, seed) {
-    const biome = getBiomeAt(x, z, seed);
+function getTerrainHeight(x, z, noise) {
+    const biome = getBiomeAt(x, z, noise);
     const roughness = biome.terrainRoughness ?? 1;
-    const broad = (valueNoise2D(x, z, 72, seed) - 0.5) * 6;
-    const detail = (valueNoise2D(x, z, 24, seed) - 0.5) * 3.5 * roughness;
-    const ridges = (valueNoise2D(x, z, 12, seed) - 0.5) * 1.5 * roughness;
-    const h = Math.floor(1 + broad + detail + ridges + (biome.terrainBias ?? 0));
+
+    // Base continental shapes
+    const continental = noise.fbm2D(x * 0.003, z * 0.003, 4) * 28;
+    // Regional hills
+    const regional = noise.fbm2D(x * 0.008, z * 0.008, 3) * 18 * roughness;
+    // Fine detail
+    const detail = noise.simplex2D(x * 0.03, z * 0.03) * 10 * roughness;
+    // Even finer detail
+    const fine = noise.simplex2D(x * 0.08, z * 0.08) * 4.5 * roughness;
+
+    // Mountains
+    const mountainMask = noise.fbm2D(x * 0.004, z * 0.004, 2) * 0.5 + 0.5;
+    const mountainStrength = Math.max(0, (mountainMask - 0.58) / 0.42);
+    const mountainLift = (mountainStrength ** 1.9) * 72;
+
+    const cliffBand = Math.abs(noise.simplex2D(x * 0.02, z * 0.02));
+    const cliffLift = cliffBand < 0.07 ? ((0.07 - cliffBand) / 0.07) * 26 : 0;
+    
+    const canyonCut = Math.max(0, (0.2 - Math.abs(noise.fbm2D(x * 0.015, z * 0.015, 2))) / 0.2) * 14;
+
+    const h = Math.floor(10 + continental + regional + detail + fine + mountainLift + cliffLift - canyonCut + (biome.terrainBias ?? 0));
     return Math.max(MIN_TERRAIN_Y + 2, Math.min(MAX_TERRAIN_Y, h));
 }
 
-function shouldCarveCave(x, y, z, terrainHeight, seed, cavesEnabled) {
+function shouldCarveCave(x, y, z, terrainHeight, noise, cavesEnabled) {
     if (!cavesEnabled) return false;
     if (y >= terrainHeight - 2) return false;
     if (y <= DEEP_MIN_Y + 2) return false;
-    const nA = hash3D(x * 0.8, y * 0.6, z * 0.8, seed);
-    const nB = hash3D((x * 0.23) + 17, (y * 0.32) - 9, (z * 0.23) + 4, seed);
-    const caveValue = (nA * 0.68) + (nB * 0.32);
-    return caveValue > 0.83;
+    const nA = noise.simplex3D(x * 0.04, y * 0.03, z * 0.04) * 0.5 + 0.5;
+    const nB = noise.simplex3D(x * 0.01 + 17, y * 0.015 - 9, z * 0.01 + 4) * 0.5 + 0.5;
+    const nC = noise.simplex3D(x * 0.005 - 41, y * 0.05 + 12, z * 0.005 + 63) * 0.5 + 0.5;
+    const caveValue = (nA * 0.5) + (nB * 0.35) + (nC * 0.15);
+    const depthRatio = Math.max(0, Math.min(1, (terrainHeight - y) / 96));
+
+    const chamber = caveValue > (0.865 - (depthRatio * 0.08));
+    const tunnelBand = Math.abs(nC - 0.5) < 0.04 && nA > 0.44;
+    const fissureNoise = noise.simplex3D(x * 0.002 + 9, y * 0.02 - 31, z * 0.002 - 21) * 0.5 + 0.5;
+    const fissure = Math.abs(fissureNoise - 0.5) < 0.03 && y < terrainHeight - 8;
+
+    return chamber || tunnelBand || fissure;
 }
 
-function getDeepBlockId(x, y, z, seed) {
-    const r = hash3D((x * 17) + 13, y * 7, (z * 19) - 5, seed);
+function getDeepBlockId(x, y, z, noise) {
+    const r = noise.simplex3D(x * 0.05 + 13, y * 0.05, z * 0.05 - 5) * 0.5 + 0.5;
     if (y > -8) {
         if (r > 0.992) return 'coal';
         if (r > 0.986) return 'copper';
@@ -132,15 +120,15 @@ function shouldForceSpawnZone(x, z) {
     return Math.abs(x) <= 4 && Math.abs(z) <= 4;
 }
 
-function shouldPlaceVirus(x, z, height, seed) {
+function shouldPlaceVirus(x, z, height, noise) {
     if (height < SEA_LEVEL + 1) return false;
-    return hash2D(x - 991, z + 417, seed) > 0.985;
+    return noise.simplex2D(x * 0.1 - 991, z * 0.1 + 417) * 0.5 + 0.5 > 0.985;
 }
 
-function shouldPlaceTree(x, z, height, biome, seed) {
+function shouldPlaceTree(x, z, height, biome, noise) {
     if (height <= SEA_LEVEL + 1) return false;
-    const density = hash2D((x * 2) + 11, (z * 2) - 9, seed);
-    const spacing = hash2D(x + 301, z - 173, seed);
+    const density = noise.simplex2D(x * 0.1 + 11, z * 0.1 - 9) * 0.5 + 0.5;
+    const spacing = noise.simplex2D(x * 0.05 + 301, z * 0.05 - 173) * 0.5 + 0.5;
     const threshold = 1 - Math.max(0.01, Math.min(0.45, biome.treeDensity ?? 0.08));
     return density > threshold && spacing > 0.55;
 }
@@ -153,8 +141,8 @@ function makeKey(x, y, z) {
     return `${x}|${y}|${z}`;
 }
 
-function addTree(planMap, x, y, z, changedMap, seed) {
-    const trunkHeight = 4 + Math.floor(hash2D(x + 7, z - 19, seed) * 2);
+function addTree(planMap, x, y, z, changedMap, noise) {
+    const trunkHeight = 4 + Math.floor((noise.simplex2D(x * 0.1 + 7, z * 0.1 - 19) * 0.5 + 0.5) * 2);
     for (let i = 0; i < trunkHeight; i++) {
         const k = makeKey(x, y + i, z);
         if (changedMap.get(k) === null) continue;
@@ -184,7 +172,7 @@ const api = {
         changedEntries = [],
         cavesEnabled = true
     }) {
-        const seed = hashSeed(seedString);
+        const noise = getNoise(seedString);
         const changedMap = new Map(changedEntries);
         const planMap = new Map();
         const startX = cx * chunkSize;
@@ -194,8 +182,8 @@ const api = {
             for (let lz = 0; lz < chunkSize; lz++) {
                 const wx = startX + lx;
                 const wz = startZ + lz;
-                const terrainHeight = getTerrainHeight(wx, wz, seed);
-                const biome = getBiomeAt(wx, wz, seed);
+                const terrainHeight = getTerrainHeight(wx, wz, noise);
+                const biome = getBiomeAt(wx, wz, noise);
                 const inForcedSpawnZone = shouldForceSpawnZone(wx, wz);
                 const waterLevel = SEA_LEVEL + (biome.waterLevelOffset ?? 0);
                 const surfaceId = terrainHeight <= waterLevel ? 'sand' : biome.surfaceBlock;
@@ -203,10 +191,10 @@ const api = {
                 const surfaceKey = makeKey(wx, terrainHeight, wz);
                 if (changedMap.get(surfaceKey) !== null) planMap.set(surfaceKey, changedMap.get(surfaceKey) ?? surfaceId);
 
-                const nx = getTerrainHeight(wx + 1, wz, seed);
-                const px = getTerrainHeight(wx - 1, wz, seed);
-                const nz = getTerrainHeight(wx, wz + 1, seed);
-                const pz = getTerrainHeight(wx, wz - 1, seed);
+                const nx = getTerrainHeight(wx + 1, wz, noise);
+                const px = getTerrainHeight(wx - 1, wz, noise);
+                const nz = getTerrainHeight(wx, wz + 1, noise);
+                const pz = getTerrainHeight(wx, wz - 1, noise);
                 const minNeighbor = Math.min(nx, px, nz, pz);
                 const exposedDepth = Math.max(0, terrainHeight - minNeighbor);
                 const stableDepth = 6;
@@ -214,8 +202,8 @@ const api = {
                 for (let d = 1; d <= Math.max(stableDepth, Math.min(12, exposedDepth + 2)); d++) {
                     const y = terrainHeight - d;
                     if (y < MIN_TERRAIN_Y) break;
-                    if (d > 2 && shouldCarveCave(wx, y, wz, terrainHeight, seed, cavesEnabled)) continue;
-                    const fillerId = d <= 2 ? biome.fillerBlock : getDeepBlockId(wx, y, wz, seed);
+                    if (d > 2 && shouldCarveCave(wx, y, wz, terrainHeight, noise, cavesEnabled)) continue;
+                    const fillerId = d <= 2 ? biome.fillerBlock : getDeepBlockId(wx, y, wz, noise);
                     const key = makeKey(wx, y, wz);
                     if (changedMap.get(key) === null) continue;
                     planMap.set(key, changedMap.get(key) ?? fillerId);
@@ -229,13 +217,13 @@ const api = {
                     }
                 }
 
-                if (shouldPlaceVirus(wx, wz, terrainHeight, seed)) {
+                if (shouldPlaceVirus(wx, wz, terrainHeight, noise)) {
                     const key = makeKey(wx, terrainHeight + 1, wz);
                     if (changedMap.get(key) !== null) planMap.set(key, changedMap.get(key) ?? 'virus');
                 }
 
-                if (!inForcedSpawnZone && shouldPlaceTree(wx, wz, terrainHeight, biome, seed)) {
-                    addTree(planMap, wx, terrainHeight + 1, wz, changedMap, seed);
+                if (!inForcedSpawnZone && shouldPlaceTree(wx, wz, terrainHeight, biome, noise)) {
+                    addTree(planMap, wx, terrainHeight + 1, wz, changedMap, noise);
                 }
             }
         }

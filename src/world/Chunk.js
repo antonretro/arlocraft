@@ -404,10 +404,50 @@ export class Chunk {
         }
     }
 
-    generate() {
+    async generate() {
         if (this.generating || this.destroyed) return;
         this.generating = true;
-        this.generateSync(); // Background worker is disabled for stability during overhaul
+
+        if (this.world.chunkGenerator && this.world.chunkGenerator.available) {
+            try {
+                const results = await this.world.chunkGenerator.generateChunk(this.cx, this.cz);
+                if (this.destroyed) return;
+                if (results) {
+                    for (const block of results) {
+                        const key = this.world.getKey(block.x, block.y, block.z);
+                        if (this.world.changedBlocks.get(key) === null) continue;
+                        const override = this.world.changedBlocks.get(key);
+                        const finalId = override ?? block.id;
+                        this.world.addBlock(block.x, block.y, block.z, finalId, this.key);
+                    }
+                    
+                    const startX = this.cx * this.world.chunkSize;
+                    const startZ = this.cz * this.world.chunkSize;
+                    const centerX = startX + Math.floor(this.world.chunkSize * 0.5);
+                    const centerZ = startZ + Math.floor(this.world.chunkSize * 0.5);
+
+                    this.registerRoadLandmark(startX, startZ);
+                    if (this.world.shouldPlaceStructureChunk(this.cx, this.cz)) {
+                        const sy = this.world.getColumnHeight(centerX, centerZ) + 1;
+                        const biome = this.world.getBiomeAt(centerX, centerZ);
+                        this.placeRandomStructure(centerX, sy, centerZ, biome);
+                    }
+                    if (this.world.shouldPlaceVillageChunk(this.cx, this.cz)) {
+                        const vx = centerX;
+                        const vz = centerZ;
+                        const vy = this.world.getColumnHeight(vx, vz) + 1;
+                        this.placeVillageCluster(vx, vy, vz);
+                    }
+                    this.applyPlayerOverrides();
+                    this.generating = false;
+                    return;
+                }
+            } catch (error) {
+                console.warn('[ArloCraft] Chunk Worker failed, falling back to sync', error);
+            }
+        }
+
+        this.generateSync();
         this.generating = false;
     }
 

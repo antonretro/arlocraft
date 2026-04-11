@@ -1,0 +1,7 @@
+{
+    "name": "Mythril Ore",
+    "hardness": 7,
+    "xp": 220,
+    "emissive": true,
+    "color": "0x43f3ff"
+}

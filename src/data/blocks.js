@@ -1,6 +1,4 @@
-import { BLOCKS as BASE_BLOCKS } from '../content/blocks/base.js';
-
-const packModules = import.meta.glob('../content/blocks/packs/*.js', { eager: true });
+const configModules = import.meta.glob('../content/blocks/*/config.json', { eager: true });
 
 function toTitleCase(id) {
     return id
@@ -10,10 +8,8 @@ function toTitleCase(id) {
         .join(' ');
 }
 
-function normalizeBlock(raw) {
+function normalizeBlock(id, raw) {
     if (!raw || typeof raw !== 'object') return null;
-    const id = String(raw.id ?? '').trim();
-    if (!id) return null;
 
     const normalized = { ...raw };
     normalized.id = id;
@@ -21,37 +17,20 @@ function normalizeBlock(raw) {
         ? raw.name.trim()
         : toTitleCase(id);
 
-    const hardness = Number(raw.hardness);
-    normalized.hardness = Number.isFinite(hardness) ? hardness : 1;
-
-    const xp = Number(raw.xp);
-    normalized.xp = Number.isFinite(xp) ? xp : 0;
+    normalized.hardness = Number.isFinite(Number(raw.hardness)) ? Number(raw.hardness) : 1;
+    normalized.xp = Number.isFinite(Number(raw.xp)) ? Number(raw.xp) : 0;
 
     return normalized;
-}
-
-function entriesFromModule(mod) {
-    if (Array.isArray(mod?.default)) return mod.default;
-    if (Array.isArray(mod?.BLOCKS)) return mod.BLOCKS;
-    if (Array.isArray(mod?.BLOCK_PACK)) return mod.BLOCK_PACK;
-    return [];
 }
 
 function mergeBlocks() {
     const merged = new Map();
 
-    for (const entry of BASE_BLOCKS) {
-        const block = normalizeBlock(entry);
-        if (block) merged.set(block.id, block);
-    }
-
-    const sortedPacks = Object.keys(packModules).sort();
-    for (const path of sortedPacks) {
-        const entries = entriesFromModule(packModules[path]);
-        for (const entry of entries) {
-            const block = normalizeBlock(entry);
-            if (block) merged.set(block.id, block);
-        }
+    for (const [path, module] of Object.entries(configModules)) {
+        const segments = path.split('/');
+        const id = segments[segments.length - 2]; // id is folder name
+        const block = normalizeBlock(id, module.default || module);
+        if (block) merged.set(id, block);
     }
 
     return Array.from(merged.values());

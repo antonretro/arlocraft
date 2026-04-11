@@ -1,14 +1,9 @@
 import * as THREE from 'three';
 import { BLOCKS } from '../data/blocks.js';
-import grassTopTexture from '../assets/grass_top_texture.png';
-import grassSideTexture from '../assets/grass_side_texture.png';
-import stoneTexture from '../assets/stone_texture.png';
-import dirtTexture from '../assets/dirt.png';
-import woodTexture from '../assets/wood.png';
-import leavesTexture from '../assets/leaves.png';
-import sandTexture from '../assets/sand.png';
-import ironOreTexture from '../assets/iron_ore.png';
-import { BLOCK_TEXTURE_ATLAS, getAtlasFacesForBlock } from '../rendering/BlockTextureMap.js';
+
+const textureModules = import.meta.glob('../content/blocks/*/*.png', { eager: true, query: '?url' });
+const pixelArtModules = import.meta.glob('/arlo_real.png', { eager: true, query: '?url' }); // preserve arlo expansion placeholder logic
+
 
 
 export class BlockRegistry {
@@ -24,6 +19,15 @@ export class BlockRegistry {
     }
 
     init() {
+        this.blockTextures = new Map();
+        for (const [path, module] of Object.entries(textureModules)) {
+            const segments = path.split('/');
+            const blockId = segments[segments.length - 2];
+            const fileName = segments[segments.length - 1];
+            if (!this.blockTextures.has(blockId)) this.blockTextures.set(blockId, {});
+            this.blockTextures.get(blockId)[fileName] = module.default || module;
+        }
+
         BLOCKS.forEach((config) => {
             this.blocks.set(config.id, config);
         });
@@ -141,34 +145,7 @@ export class BlockRegistry {
     }
 
     createAtlasMaterial(id, config) {
-        if (id === 'water') return null;
-        const faces = getAtlasFacesForBlock(id);
-        if (!faces) return null;
-
-        const hasAnyFace = Boolean(
-            faces.all || faces.side || faces.top || faces.bottom || faces.front || faces.back || faces.left || faces.right
-        );
-        if (!hasAnyFace) return null;
-
-        const all = this.createMappedFaceMaterial(config, faces.all);
-        if (all && !faces.side && !faces.top && !faces.bottom) return all;
-
-        const side = this.createMappedFaceMaterial(config, faces.side ?? faces.all);
-        const top = this.createMappedFaceMaterial(config, faces.top ?? faces.side ?? faces.all);
-        const bottom = this.createMappedFaceMaterial(config, faces.bottom ?? faces.side ?? faces.all);
-        const front = this.createMappedFaceMaterial(config, faces.front ?? faces.side ?? faces.all);
-        const back = this.createMappedFaceMaterial(config, faces.back ?? faces.side ?? faces.all);
-        const right = this.createMappedFaceMaterial(config, faces.right ?? faces.side ?? faces.all);
-        const left = this.createMappedFaceMaterial(config, faces.left ?? faces.side ?? faces.all);
-
-        return [
-            right ?? side ?? all,
-            left ?? side ?? all,
-            top ?? all,
-            bottom ?? all,
-            front ?? side ?? all,
-            back ?? side ?? all
-        ];
+        return null; // Atlas logic deprecated in favor of folder-based textures
     }
 
     updateShaderMaterials(timeSeconds) {
@@ -182,132 +159,52 @@ export class BlockRegistry {
         const config = this.blocks.get(id);
         if (!config) return new THREE.MeshLambertMaterial({ color: 0xff00ff });
 
+        const textures = this.blockTextures.get(id) || {};
+        
+        const load = (name) => {
+            const url = textures[name];
+            if (!url) return null;
+            return this.loadTexture(url);
+        };
+
+        const allTex = load('all.png');
+        const sideTex = load('side.png') || allTex;
+        const topTex = load('top.png') || allTex;
+        const bottomTex = load('bottom.png') || allTex;
+        const frontTex = load('front.png') || sideTex;
+        const backTex = load('back.png') || sideTex;
+        const leftTex = load('left.png') || sideTex;
+        const rightTex = load('right.png') || sideTex;
+
         let material = null;
-        if (id === 'grass') {
-            const side = this.loadTexture(grassSideTexture);
-            const top = this.loadTexture(grassTopTexture);
-            const bottom = this.loadTexture(dirtTexture);
-            material = [
-                new THREE.MeshLambertMaterial({ map: side }),
-                new THREE.MeshLambertMaterial({ map: side }),
-                new THREE.MeshLambertMaterial({ map: top }),
-                new THREE.MeshLambertMaterial({ map: bottom }),
-                new THREE.MeshLambertMaterial({ map: side }),
-                new THREE.MeshLambertMaterial({ map: side })
-            ];
-        } else if (id === 'dirt') {
-            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(dirtTexture) });
-        } else if (id === 'stone') {
-            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(stoneTexture) });
-        } else if (id === 'cobblestone') {
-            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(stoneTexture) });
-        } else if (id === 'sand') {
-            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(sandTexture) });
-        } else if (id === 'sandstone') {
-            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(sandTexture) });
-        } else if (id === 'wood' || id.startsWith('wood_')) {
-            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(woodTexture) });
-        } else if (id === 'leaves' || id.startsWith('leaves_')) {
-            material = new THREE.MeshLambertMaterial({
-                map: this.loadTexture(leavesTexture)
-            });
-        } else if (id === 'iron') {
-            material = new THREE.MeshLambertMaterial({ map: this.loadTexture(ironOreTexture) });
-        }
 
-        if (!material) {
-            material = this.createAtlasMaterial(id, config);
-        }
-
-        if (!material) {
-            const palette = {
-                dirt: 0x7a5f3a,
-                wood: 0x8f673c,
-                leaves: 0x3f8f3f,
-                sand: 0xd6c891,
-                lava: 0xff6b1a,
-                iron: 0xb0afb5,
-                gold: 0xf2d438,
-                diamond: 0x55ffd9,
-                coal: 0x3b3f47,
-                copper: 0xc1773b,
-                tin: 0xa9b2bb,
-                silver: 0xd5dbe2,
-                ruby: 0xd7265d,
-                sapphire: 0x2e78ff,
-                amethyst: 0x8d5fe8,
-                uranium: 0x78ff4f,
-                platinum: 0xc6d8eb,
-                mythril: 0x43f3ff,
-                tnt: 0xff3b30,
-                nuke: 0x1c1c1c,
-                glass: 0xa9d6ff,
-                clay: 0xb49582,
-                brick: 0xb24936,
-                cobblestone: 0x7d8087,
-                path_block: 0x9c7a4f,
-                lantern: 0xffdc78,
-                wood_planks: 0xb78354,
-                crafting_table: 0xa67c52,
-                starter_chest: 0xb37a3a,
-                wool_white: 0xeeeeee,
-                wool_orange: 0xf9801d,
-                wool_magenta: 0xc74ebb,
-                wool_light_blue: 0x3ab3da,
-                wool_yellow: 0xfed83d,
-                wool_lime: 0x80c71f,
-                wool_pink: 0xf38baa,
-                wool_gray: 0x474f52,
-                wool_light_gray: 0x9d9d97,
-                wool_cyan: 0x169c9c,
-                wool_purple: 0x8932b8,
-                wool_blue: 0x3c44aa,
-                wool_brown: 0x835432,
-                wool_green: 0x5e7c16,
-                wool_red: 0xb02e26,
-                wool_black: 0x1d1d21,
-                obsidian: 0x2e2540,
-                bedrock: 0x222222,
-
-                // Expansion Blocks
-                wood_birch: 0xd8d4cb,
-                wood_pine: 0x473824,
-                wood_palm: 0x987146,
-                wood_willow: 0x5a5840,
-                wood_cherry: 0x6e453d,
-                wood_redwood: 0x51291b,
-                wood_crystal: 0x211042,
-
-                leaves_birch: 0x568041,
-                leaves_pine: 0x2d4834,
-                leaves_palm: 0x548622,
-                leaves_willow: 0x51643c,
-                leaves_cherry: 0xffadc0,
-                leaves_redwood: 0x2d4f21,
-                leaves_crystal: 0xbc7fff,
-
-                sandstone: 0xdbd3a0,
-                snow_block: 0xfafafa,
-                ice: 0xd1e9ff,
-                cloud_block: 0xffffff,
-
-                // Culinary Expansion Colors
-                apple: 0xf44336,
-                tomato: 0xff5252,
-                carrot: 0xff9800,
-                potato: 0xcd853f,
-                corn: 0xffeb3b,
-                blueberry: 0x3f51b5,
-                strawberry: 0xe91e63,
-                melon_slice: 0xff8a65,
-                pumpkin_pie: 0xbf360c,
-                bread: 0x8d6e63,
-                steak: 0x5d4037,
-                cooked_fish: 0x81d4fa,
-                mushroom_brown: 0x795548,
-                honey_bottle: 0xffb300,
-                cookie: 0x6d4c41
+        // Face order: px, nx, py, ny, pz, nz (Right, Left, Top, Bottom, Front, Back)
+        if (topTex || bottomTex || sideTex || frontTex || backTex || leftTex || rightTex) {
+            const matConfig = {
+                transparent: Boolean(config.transparent),
+                opacity: config.transparent ? 0.65 : 1,
+                depthWrite: !config.transparent
             };
+
+            const mats = [
+                new THREE.MeshLambertMaterial({ ...matConfig, map: rightTex }),
+                new THREE.MeshLambertMaterial({ ...matConfig, map: leftTex }),
+                new THREE.MeshLambertMaterial({ ...matConfig, map: topTex }),
+                new THREE.MeshLambertMaterial({ ...matConfig, map: bottomTex }),
+                new THREE.MeshLambertMaterial({ ...matConfig, map: frontTex }),
+                new THREE.MeshLambertMaterial({ ...matConfig, map: backTex })
+            ];
+            
+            // If all sides are identical and no specific ones provided, use a single material
+            if (!textures['top.png'] && !textures['bottom.png'] && !textures['side.png'] && 
+                !textures['front.png'] && !textures['back.png'] && !textures['left.png'] && !textures['right.png'] && allTex) {
+                material = mats[0];
+            } else {
+                material = mats;
+            }
+        }
+
+        if (!material) {
 
             if (id === 'water') {
                 material = new THREE.ShaderMaterial({
@@ -346,7 +243,7 @@ export class BlockRegistry {
                 });
             } else {
                 material = new THREE.MeshLambertMaterial({
-                    color: palette[id] ?? 0x9c9c9c,
+                    color: config.color ? parseInt(config.color) : 0x9c9c9c,
                     transparent: Boolean(config.transparent),
                     opacity: config.transparent ? 0.65 : 1,
                     depthWrite: !config.transparent
@@ -355,7 +252,7 @@ export class BlockRegistry {
 
             // Special handling for wool texture/grain
             if (id.startsWith('wool_')) {
-                material.emissive = new THREE.Color(palette[id]).multiplyScalar(0.08);
+                material.emissive = new THREE.Color(config.color ? parseInt(config.color) : 0x000000).multiplyScalar(0.08);
             }
 
             if (config.emissive) {

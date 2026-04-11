@@ -8,6 +8,7 @@ import { Chunk } from './Chunk.js';
 import { ChunkGenerator } from './ChunkGenerator.js';
 import { generateSettlementName, SETTLEMENT_LIBRARY_SIZE } from './naming/SettlementNameGenerator.js';
 import { getRestorationSiteByLandmarkName } from './restoration/RestorationRegistry.js';
+import { Noise } from './Noise.js';
 
 export class World {
     constructor(scene, game) {
@@ -152,6 +153,8 @@ export class World {
             hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
         }
         this.seed = Math.abs(hash >>> 0) + 1;
+        
+        this.noise = new Noise(this.seedString);
     }
 
     clearWorld() {
@@ -234,6 +237,14 @@ export class World {
         return `${cx}|${cz}`;
     }
 
+    getChunk(cx, cz) {
+        return this.chunks.get(this.getChunkKey(cx, cz));
+    }
+
+    getChunkAt(x, z) {
+        return this.getChunk(this.getChunkCoord(x), this.getChunkCoord(z));
+    }
+
     pointToBlockCoord(value) {
         return Math.floor(value + 0.5);
     }
@@ -314,11 +325,11 @@ export class World {
     }
 
     getBiomeAt(x, z) {
-        const temperature = this.valueNoise2D(x + 911, z - 1441, 220);
-        const moisture = this.valueNoise2D(x - 1283, z + 677, 210);
-        const continental = this.valueNoise2D(x + 2057, z + 111, 320);
-        const rugged = this.valueNoise2D(x - 811, z + 1507, 180);
-        const openness = this.valueNoise2D(x + 339, z - 921, 250);
+        const temperature = this.noise.fbm2D(x + 911, z - 1441, 3, 0.5, 2.0) * 0.5 + 0.5; // range roughly 0 to 1
+        const moisture = this.noise.fbm2D(x - 1283, z + 677, 3, 0.5, 2.0) * 0.5 + 0.5;
+        const continental = this.noise.fbm2D(x + 2057, z + 111, 2, 0.5, 2.0) * 0.5 + 0.5;
+        const rugged = this.noise.fbm2D(x - 811, z + 1507, 3, 0.5, 2.0) * 0.5 + 0.5;
+        const openness = this.noise.fbm2D(x + 339, z - 921, 2, 0.5, 2.0) * 0.5 + 0.5;
         const dryness = (1 - moisture) * 0.68 + (temperature * 0.32);
 
         let biomeId = 'plains';
@@ -339,20 +350,29 @@ export class World {
         const biome = this.getBiomeAt(x, z);
         const roughness = biome.terrainRoughness ?? 1;
 
-        const continental = (this.valueNoise2D(x + 500, z + 300, 280) - 0.5) * 28;
-        const regional = (this.valueNoise2D(x - 93, z + 171, 96) - 0.5) * 18 * roughness;
-        const detail = (this.valueNoise2D(x + 41, z - 19, 30) - 0.5) * 10 * roughness;
-        const fine = (this.valueNoise2D(x * 2.1 + 91, z * 2.1 - 37, 12) - 0.5) * 4.5 * roughness;
+        // Base continental shapes (flat plains vs large landmasses)
+        const continental = this.noise.fbm2D(x * 0.003, z * 0.003, 4) * 28;
+        
+        // Regional hills
+        const regional = this.noise.fbm2D(x * 0.008, z * 0.008, 3) * 18 * roughness;
+        
+        // Fine detail
+        const detail = this.noise.simplex2D(x * 0.03, z * 0.03) * 10 * roughness;
+        
+        // Even finer detail
+        const fine = this.noise.simplex2D(x * 0.08, z * 0.08) * 4.5 * roughness;
 
-        const mountainMask = this.valueNoise2D(x - 701, z + 447, 210);
+        // Mountains
+        const mountainMask = this.noise.fbm2D(x * 0.004, z * 0.004, 2) * 0.5 + 0.5;
         const mountainStrength = Math.max(0, (mountainMask - 0.58) / 0.42);
         const mountainLift = (mountainStrength ** 1.9) * 72;
 
-        const cliffBand = Math.abs(this.valueNoise2D(x + 163, z - 511, 44) - 0.5);
+        const cliffBand = Math.abs(this.noise.simplex2D(x * 0.02, z * 0.02));
         const cliffLift = cliffBand < 0.07 ? ((0.07 - cliffBand) / 0.07) * 26 : 0;
-        const canyonCut = Math.max(0, (0.2 - Math.abs(this.valueNoise2D(x - 188, z + 640, 54) - 0.5)) / 0.2) * 14;
+        
+        const canyonCut = Math.max(0, (0.2 - Math.abs(this.noise.fbm2D(x * 0.015, z * 0.015, 2))) / 0.2) * 14;
 
-        const h = Math.floor(5 + continental + regional + detail + fine + mountainLift + cliffLift - canyonCut + (biome.terrainBias ?? 0));
+        const h = Math.floor(10 + continental + regional + detail + fine + mountainLift + cliffLift - canyonCut + (biome.terrainBias ?? 0));
         return Math.max(this.minTerrainY + 2, Math.min(this.maxTerrainY, h));
     }
 
@@ -405,15 +425,15 @@ export class World {
     }
 
     isPathAt(x, z) {
-        const trunk = Math.abs(this.valueNoise2D(x + 1307, z - 811, 48) - 0.5);
-        const branch = Math.abs(this.valueNoise2D(x - 547, z + 199, 24) - 0.5);
-        return trunk < 0.017 || branch < 0.011;
+        const trunk = Math.abs(this.noise.simplex2D(x * 0.02 + 1307, z * 0.02 - 811));
+        const branch = Math.abs(this.noise.simplex2D(x * 0.04 - 547, z * 0.04 + 199));
+        return trunk < 0.03 || branch < 0.02;
     }
 
     isHighwayAt(x, z) {
-        const corridorA = Math.abs(this.valueNoise2D(x + 2143, z - 937, 120) - 0.5);
-        const corridorB = Math.abs(this.valueNoise2D(x - 1841, z + 221, 130) - 0.5);
-        return corridorA < 0.008 || corridorB < 0.009;
+        const corridorA = Math.abs(this.noise.simplex2D(x * 0.008 + 2143, z * 0.008 - 937));
+        const corridorB = Math.abs(this.noise.simplex2D(x * 0.007 - 1841, z * 0.007 + 221));
+        return corridorA < 0.015 || corridorB < 0.018;
     }
 
     getLandmarkStorageKey(x, z) {
@@ -750,15 +770,15 @@ export class World {
         if (y >= terrainHeight - 2) return false;
         if (y <= this.deepMinY + 2) return false;
 
-        const nA = this.hash3D(x * 0.8, y * 0.6, z * 0.8);
-        const nB = this.hash3D((x * 0.23) + 17, (y * 0.32) - 9, (z * 0.23) + 4);
-        const nC = this.hash3D((x * 0.11) - 41, (y * 0.9) + 12, (z * 0.11) + 63);
+        const nA = this.noise.simplex3D(x * 0.04, y * 0.03, z * 0.04) * 0.5 + 0.5;
+        const nB = this.noise.simplex3D(x * 0.01 + 17, y * 0.015 - 9, z * 0.01 + 4) * 0.5 + 0.5;
+        const nC = this.noise.simplex3D(x * 0.005 - 41, y * 0.05 + 12, z * 0.005 + 63) * 0.5 + 0.5;
         const caveValue = (nA * 0.5) + (nB * 0.35) + (nC * 0.15);
         const depthRatio = Math.max(0, Math.min(1, (terrainHeight - y) / 96));
 
         const chamber = caveValue > (0.865 - (depthRatio * 0.08));
         const tunnelBand = Math.abs(nC - 0.5) < 0.04 && nA > 0.44;
-        const fissureNoise = this.hash3D((x * 0.05) + 9, (y * 0.45) - 31, (z * 0.05) - 21);
+        const fissureNoise = this.noise.simplex3D(x * 0.002 + 9, y * 0.02 - 31, z * 0.002 - 21) * 0.5 + 0.5;
         const fissure = Math.abs(fissureNoise - 0.5) < 0.03 && y < terrainHeight - 8;
 
         return chamber || tunnelBand || fissure;
@@ -1032,7 +1052,7 @@ export class World {
         
         if (id === 'virus') this.virusBlockCount++;
         
-        const ownerChunk = this.chunks.get(owner);
+        const ownerChunk = this.getChunk(this.getChunkCoord(gx), this.getChunkCoord(gz));
         if (ownerChunk) {
             ownerChunk.blockKeys.add(key);
             ownerChunk.dirty = true;
@@ -1101,11 +1121,10 @@ export class World {
         for (const [dx, dy, dz] of neighbors) {
             const nx = x + dx;
             const nz = z + dz;
-            const owner = this.getChunkKey(this.getChunkCoord(nx), this.getChunkCoord(nz));
-            const chunk = this.chunks.get(owner);
+            const chunk = this.getChunk(this.getChunkCoord(nx), this.getChunkCoord(nz));
             if (!chunk) continue;
             chunk.dirty = true;
-            this.priorityDirtyChunkKeys.add(owner);
+            this.priorityDirtyChunkKeys.add(chunk.key);
         }
     }
 
