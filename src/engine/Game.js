@@ -20,6 +20,7 @@ export class Game {
     constructor() {
         this.settings = this.loadSettings();
         this.selectedStartMode = this.settings.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
+        this.selectedWorldSlot = this.settings.selectedWorldSlot ?? 'slot-1';
         this.systemTimers = { hunger: 0, regen: 0, starve: 0 };
         this.timeOfDay = 0.3;
         this.dayDurationSeconds = 420;
@@ -41,6 +42,7 @@ export class Game {
         this.features = { ...FEATURES };
         this.features.workerChunkGeneration = true;
         this.features.perfPanel = true;
+        this.features.dynamicQualityAuto = this.settings.autoQuality;
         this.profiler = { physicsMs: 0, worldMs: 0, renderMs: 0, uiMs: 0 };
 
         this.hasStarted = false;
@@ -59,6 +61,7 @@ export class Game {
         this.world.init();
 
         this.physics = new Physics(this.camera, this.world);
+        this.physics.autoJumpEnabled = this.settings.autoJump;
         this.hand = new PlayerHand();
         this.camera.viewmodelGroup.add(this.hand.group);
         this.actionSystem = new ActionSystem(this.gameState);
@@ -103,7 +106,7 @@ export class Game {
         head.position.set(0, 1.72, 0);
         group.add(head);
 
-        const facePath = '/arlo_real.png';
+        const facePath = 'arlo_real.png';
         const faceTexture = new THREE.TextureLoader().load(facePath);
         faceTexture.magFilter = THREE.NearestFilter;
         faceTexture.minFilter = THREE.NearestFilter;
@@ -157,7 +160,11 @@ export class Game {
             invertY: false,
             fov: 75,
             qualityTierPref: 'low',
-            preferredMode: 'SURVIVAL'
+            preferredMode: 'SURVIVAL',
+            autoJump: true,
+            autoQuality: true,
+            renderDistance: 2,
+            selectedWorldSlot: 'slot-1'
         };
 
         try {
@@ -170,7 +177,13 @@ export class Game {
                 invertY: Boolean(parsed.invertY),
                 fov: Number.isFinite(fov) && fov >= 60 && fov <= 110 ? fov : defaults.fov,
                 qualityTierPref: ['low', 'balanced', 'high'].includes(parsed.qualityTierPref) ? parsed.qualityTierPref : defaults.qualityTierPref,
-                preferredMode: parsed.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL'
+                preferredMode: parsed.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL',
+                autoJump: parsed.autoJump !== undefined ? Boolean(parsed.autoJump) : defaults.autoJump,
+                autoQuality: parsed.autoQuality !== undefined ? Boolean(parsed.autoQuality) : defaults.autoQuality,
+                renderDistance: Number.isFinite(parsed.renderDistance)
+                    ? Math.max(1, Math.min(6, Math.round(parsed.renderDistance)))
+                    : defaults.renderDistance,
+                selectedWorldSlot: typeof parsed.selectedWorldSlot === 'string' ? parsed.selectedWorldSlot : defaults.selectedWorldSlot
             };
         } catch {
             return defaults;
@@ -179,6 +192,62 @@ export class Game {
 
     saveSettings() {
         localStorage.setItem('arlocraft-settings', JSON.stringify(this.settings));
+    }
+
+    getWorldSlotIds() {
+        return ['slot-1', 'slot-2', 'slot-3', 'slot-4', 'slot-5'];
+    }
+
+    getWorldSlotStorageKey(slotId = this.selectedWorldSlot) {
+        return `arlocraft-world-save-${slotId}`;
+    }
+
+    readWorldSlotSummary(slotId) {
+        try {
+            const raw = localStorage.getItem(this.getWorldSlotStorageKey(slotId));
+            if (!raw) return null;
+            const data = this.decodeSavePayload(raw);
+            return {
+                exists: true,
+                seed: String(data?.world?.seed ?? 'unknown'),
+                savedAt: String(data?.savedAt ?? ''),
+                mode: String(data?.player?.mode ?? 'SURVIVAL')
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    selectWorldSlot(slotId) {
+        if (!this.getWorldSlotIds().includes(slotId)) return;
+        this.selectedWorldSlot = slotId;
+        this.settings.selectedWorldSlot = slotId;
+        this.saveSettings();
+        this.renderWorldList();
+    }
+
+    renderWorldList() {
+        const list = document.getElementById('title-world-list');
+        if (!list) return;
+        list.innerHTML = '';
+
+        for (const slotId of this.getWorldSlotIds()) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'title-world-item';
+            if (slotId === this.selectedWorldSlot) button.classList.add('active');
+
+            const summary = this.readWorldSlotSummary(slotId);
+            if (summary?.exists) {
+                const when = summary.savedAt ? new Date(summary.savedAt).toLocaleString() : 'Unknown';
+                button.innerHTML = `<strong>${slotId.toUpperCase()}</strong><span>Seed ${summary.seed} | ${summary.mode} | ${when}</span>`;
+            } else {
+                button.innerHTML = `<strong>${slotId.toUpperCase()}</strong><span>Empty slot</span>`;
+            }
+
+            button.addEventListener('click', () => this.selectWorldSlot(slotId));
+            list.appendChild(button);
+        }
     }
 
     setStatus(message, isError = false) {
@@ -391,26 +460,28 @@ export class Game {
         this.setStatus(`Offhand: ${label}`);
     }
 
-    saveWorldLocal() {
+    saveWorldLocal(slotId = this.selectedWorldSlot) {
         const data = this.getSaveData();
         const packed = this.encodeSavePayload(data);
-        localStorage.setItem('arlocraft-world-save', JSON.stringify(packed));
-        this.setStatus('World saved locally.');
+        localStorage.setItem(this.getWorldSlotStorageKey(slotId), JSON.stringify(packed));
+        this.renderWorldList();
+        this.setStatus(`World saved to ${slotId.toUpperCase()}.`);
     }
 
-    loadWorldLocal() {
+    loadWorldLocal(slotId = this.selectedWorldSlot, options = {}) {
         try {
-            const raw = localStorage.getItem('arlocraft-world-save');
+            const raw = localStorage.getItem(this.getWorldSlotStorageKey(slotId));
             if (!raw) {
-                this.setStatus('No local save found.', true);
+                if (!options.silent) this.setStatus(`No save in ${slotId.toUpperCase()}.`, true);
                 return false;
             }
             const data = this.decodeSavePayload(raw);
             this.applySaveData(data);
-            this.setStatus('Local world loaded.');
+            this.renderWorldList();
+            if (!options.silent) this.setStatus(`Loaded ${slotId.toUpperCase()}.`);
             return true;
         } catch {
-            this.setStatus('Failed to load local save.', true);
+            if (!options.silent) this.setStatus(`Failed to load ${slotId.toUpperCase()}.`, true);
             return false;
         }
     }
@@ -606,8 +677,12 @@ export class Game {
         const sensitivityInput = document.getElementById('setting-sensitivity');
         const sensitivityLabel = document.getElementById('setting-sensitivity-value');
         const invertYInput = document.getElementById('setting-invert-y');
+        const autoJumpInput = document.getElementById('setting-auto-jump');
         const fovInput = document.getElementById('setting-fov');
         const fovLabel = document.getElementById('setting-fov-value');
+        const renderDistanceInput = document.getElementById('setting-render-distance');
+        const renderDistanceLabel = document.getElementById('setting-render-distance-value');
+        const autoQualityInput = document.getElementById('setting-auto-quality');
         const qualityBtns = document.querySelectorAll('.btn-quality');
         const btnSave = document.getElementById('btn-save-world');
         const btnLoad = document.getElementById('btn-load-world');
@@ -624,7 +699,10 @@ export class Game {
         if (seedInput) seedInput.value = this.world.seedString;
 
         if (btnStart) {
-            btnStart.addEventListener('click', () => this.startGame());
+            btnStart.addEventListener('click', () => {
+                const loaded = this.loadWorldLocal(this.selectedWorldSlot, { silent: true });
+                this.startGame({ skipSeedApply: loaded, preserveCurrentMode: loaded });
+            });
         }
 
         if (btnModeSurvival) {
@@ -640,7 +718,7 @@ export class Game {
 
         if (btnTitleLoad) {
             btnTitleLoad.addEventListener('click', () => {
-                const loaded = this.loadWorldLocal();
+                const loaded = this.loadWorldLocal(this.selectedWorldSlot);
                 if (loaded) this.startGame({ skipSeedApply: true, preserveCurrentMode: true });
             });
         }
@@ -666,17 +744,40 @@ export class Game {
             });
         }
 
+        if (autoJumpInput) {
+            autoJumpInput.checked = this.settings.autoJump;
+            autoJumpInput.addEventListener('change', () => {
+                this.settings.autoJump = autoJumpInput.checked;
+                this.physics.autoJumpEnabled = autoJumpInput.checked;
+                this.saveSettings();
+                this.setStatus(`Auto Jump: ${autoJumpInput.checked ? 'ON' : 'OFF'}`);
+            });
+        }
+
         if (fovInput) {
             fovInput.value = String(this.settings.fov);
-            if (fovLabel) fovLabel.textContent = `${this.settings.fov}°`;
+            if (fovLabel) fovLabel.textContent = `${this.settings.fov} deg`;
             fovInput.addEventListener('input', () => {
                 const value = Number(fovInput.value);
                 this.settings.fov = value;
                 this.saveSettings();
-                if (fovLabel) fovLabel.textContent = `${value}°`;
+                if (fovLabel) fovLabel.textContent = `${value} deg`;
                 this.camera.instance.fov = value;
                 this.camera.instance.updateProjectionMatrix();
-                this.setStatus(`FOV: ${value}°`);
+                this.setStatus(`FOV: ${value} deg`);
+            });
+        }
+
+        if (renderDistanceInput) {
+            renderDistanceInput.value = String(this.settings.renderDistance);
+            if (renderDistanceLabel) renderDistanceLabel.textContent = String(this.settings.renderDistance);
+            renderDistanceInput.addEventListener('input', () => {
+                const value = Math.max(1, Math.min(6, Math.round(Number(renderDistanceInput.value))));
+                this.settings.renderDistance = value;
+                this.world.setRenderDistance(value);
+                this.saveSettings();
+                if (renderDistanceLabel) renderDistanceLabel.textContent = String(value);
+                this.setStatus(`Render Distance: ${value}`);
             });
         }
 
@@ -697,6 +798,16 @@ export class Game {
         });
         syncQualityBtns();
 
+        if (autoQualityInput) {
+            autoQualityInput.checked = this.settings.autoQuality;
+            autoQualityInput.addEventListener('change', () => {
+                this.settings.autoQuality = autoQualityInput.checked;
+                this.features.dynamicQualityAuto = autoQualityInput.checked;
+                this.saveSettings();
+                this.setStatus(`Auto Quality: ${autoQualityInput.checked ? 'ON' : 'OFF'}`);
+            });
+        }
+
         if (btnOptions) {
             btnOptions.addEventListener('click', () => {
                 this.showSettings(true);
@@ -716,25 +827,18 @@ export class Game {
             this.showPause(false);
             this.showSettings(true);
         });
-        if (btnPauseSave) btnPauseSave.addEventListener('click', () => this.saveWorldLocal());
-        if (btnPauseLoad) btnPauseLoad.addEventListener('click', () => this.loadWorldLocal());
+        if (btnPauseSave) btnPauseSave.addEventListener('click', () => this.saveWorldLocal(this.selectedWorldSlot));
+        if (btnPauseLoad) btnPauseLoad.addEventListener('click', () => this.loadWorldLocal(this.selectedWorldSlot));
         if (btnBackTitle) btnBackTitle.addEventListener('click', () => this.returnToTitle());
 
-        if (btnSave) btnSave.addEventListener('click', () => this.saveWorldLocal());
-        if (btnLoad) btnLoad.addEventListener('click', () => this.loadWorldLocal());
+        if (btnSave) btnSave.addEventListener('click', () => this.saveWorldLocal(this.selectedWorldSlot));
+        if (btnLoad) btnLoad.addEventListener('click', () => this.loadWorldLocal(this.selectedWorldSlot));
         if (btnExport) btnExport.addEventListener('click', () => this.exportWorldFile());
         if (btnImport && fileInput) {
             btnImport.addEventListener('click', () => fileInput.click());
             fileInput.addEventListener('change', () => {
                 const file = fileInput.files?.[0];
                 if (!file) return;
-                const container = document.getElementById('title-container');
-                if (container) {
-                    const art = document.createElement('div');
-                    art.id = 'title-art';
-                    art.innerHTML = '<img src="/arlo_real.png" alt="Arlo" />';
-                    container.appendChild(art);
-                }
                 this.importWorldFile(file);
                 fileInput.value = '';
             });
@@ -747,8 +851,9 @@ export class Game {
         });
 
         this.setMenuMode(this.selectedStartMode, false);
+        this.world.setRenderDistance(this.settings.renderDistance);
+        this.renderWorldList();
     }
-
     async init() {
         await this.physics.init();
         this.applyQualityTier(this.settings.qualityTierPref ?? 'low');

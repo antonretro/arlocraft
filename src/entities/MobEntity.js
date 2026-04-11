@@ -3,7 +3,7 @@ import * as THREE from 'three';
 let villagerArloTexture = null;
 function getVillagerArloTexture() {
     if (villagerArloTexture) return villagerArloTexture;
-    villagerArloTexture = new THREE.TextureLoader().load('/faces/arlo_happy.png');
+    villagerArloTexture = new THREE.TextureLoader().load('faces/arlo_happy.png');
     villagerArloTexture.colorSpace = THREE.SRGBColorSpace;
     villagerArloTexture.magFilter = THREE.NearestFilter;
     villagerArloTexture.minFilter = THREE.NearestMipmapNearestFilter;
@@ -321,3 +321,4 @@ export class MobEntity {
         this.game.renderer.scene.remove(other.mesh);
     }
 }
+

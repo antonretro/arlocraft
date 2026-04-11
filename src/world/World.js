@@ -9,6 +9,7 @@ import { ChunkGenerator } from './ChunkGenerator.js';
 import { generateSettlementName, SETTLEMENT_LIBRARY_SIZE } from './naming/SettlementNameGenerator.js';
 import { getRestorationSiteByLandmarkName } from './restoration/RestorationRegistry.js';
 import { Noise } from './Noise.js';
+import { NoiseRouter } from './NoiseRouter.js';
 
 export class World {
     constructor(scene, game) {
@@ -88,6 +89,10 @@ export class World {
         this.structureVirusInfluenceEnabled = true;
         this.settlementNameLibrarySize = SETTLEMENT_LIBRARY_SIZE;
         this.landmarks = new Map(); // key → { x, z, name }
+        this.terrainHeightCache = new Map();
+        this.biomeCache = new Map();
+        this.maxTerrainCacheEntries = 120000;
+        this.maxBiomeCacheEntries = 120000;
         this.virusInfluenceRadiusBlocks = 3;
         this.arloNeighborOffsets = [
             [1, 0, 0], [-1, 0, 0],
@@ -144,17 +149,20 @@ export class World {
         const numeric = Number(this.seedString);
         if (Number.isFinite(numeric)) {
             this.seed = Math.floor(Math.abs(numeric)) + 1;
-            return;
+        } else {
+            let hash = 2166136261;
+            for (let i = 0; i < this.seedString.length; i++) {
+                hash ^= this.seedString.charCodeAt(i);
+                hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+            }
+            this.seed = Math.abs(hash >>> 0) + 1;
         }
 
-        let hash = 2166136261;
-        for (let i = 0; i < this.seedString.length; i++) {
-            hash ^= this.seedString.charCodeAt(i);
-            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-        }
-        this.seed = Math.abs(hash >>> 0) + 1;
-        
         this.noise = new Noise(this.seedString);
+        this.router = new NoiseRouter(this.seedString);
+        if (this.terrainHeightCache) this.terrainHeightCache.clear();
+        if (this.biomeCache) this.biomeCache.clear();
+        this.seaLevel = 64;
     }
 
     clearWorld() {
@@ -174,6 +182,8 @@ export class World {
         this.pendingChunkLoads.length = 0;
         this.pendingChunkSet.clear();
         this.lastPlayerChunkKey = null;
+        this.terrainHeightCache.clear();
+        this.biomeCache.clear();
         this.resetMiningProgress();
         for (const particle of this.breakParticles) {
             this.scene.remove(particle.mesh);
@@ -325,55 +335,31 @@ export class World {
     }
 
     getBiomeAt(x, z) {
-        const temperature = this.noise.fbm2D(x + 911, z - 1441, 3, 0.5, 2.0) * 0.5 + 0.5; // range roughly 0 to 1
-        const moisture = this.noise.fbm2D(x - 1283, z + 677, 3, 0.5, 2.0) * 0.5 + 0.5;
-        const continental = this.noise.fbm2D(x + 2057, z + 111, 2, 0.5, 2.0) * 0.5 + 0.5;
-        const rugged = this.noise.fbm2D(x - 811, z + 1507, 3, 0.5, 2.0) * 0.5 + 0.5;
-        const openness = this.noise.fbm2D(x + 339, z - 921, 2, 0.5, 2.0) * 0.5 + 0.5;
-        const dryness = (1 - moisture) * 0.68 + (temperature * 0.32);
-
-        let biomeId = 'plains';
-        if (continental > 0.84 && rugged > 0.58) biomeId = 'alpine';
-        else if (dryness > 0.76 && rugged > 0.6) biomeId = 'canyon';
-        else if (dryness > 0.78 && moisture < 0.35) biomeId = 'badlands';
-        else if (temperature < 0.3 && moisture < 0.58) biomeId = 'tundra';
-        else if (temperature > 0.68 && moisture < 0.38) biomeId = 'desert';
-        else if (moisture > 0.74 && temperature < 0.56) biomeId = 'swamp';
-        else if (continental > 0.72 && moisture < 0.5) biomeId = 'highlands';
-        else if (openness > 0.67 && moisture > 0.34 && moisture < 0.72) biomeId = 'meadow';
-        else if (moisture > 0.62) biomeId = 'forest';
-
-        return BIOME_BY_ID.get(biomeId) ?? BIOME_BY_ID.get('plains');
+        const gx = Math.round(x);
+        const gz = Math.round(z);
+        const key = `${gx}|${gz}`;
+        let id = this.biomeCache.get(key);
+        if (!id) {
+            id = this.router.getBiomeID(gx, gz);
+            if (this.biomeCache.size > this.maxBiomeCacheEntries) this.biomeCache.clear();
+            this.biomeCache.set(key, id);
+        }
+        return BIOME_BY_ID.get(id) ?? BIOME_BY_ID.get('plains');
     }
 
     getTerrainHeight(x, z) {
-        const biome = this.getBiomeAt(x, z);
-        const roughness = biome.terrainRoughness ?? 1;
+        const gx = Math.round(x);
+        const gz = Math.round(z);
+        const key = `${gx}|${gz}`;
+        const cached = this.terrainHeightCache.get(key);
+        if (cached !== undefined) return cached;
 
-        // Base continental shapes (flat plains vs large landmasses)
-        const continental = this.noise.fbm2D(x * 0.003, z * 0.003, 4) * 28;
-        
-        // Regional hills
-        const regional = this.noise.fbm2D(x * 0.008, z * 0.008, 3) * 18 * roughness;
-        
-        // Fine detail
-        const detail = this.noise.simplex2D(x * 0.03, z * 0.03) * 10 * roughness;
-        
-        // Even finer detail
-        const fine = this.noise.simplex2D(x * 0.08, z * 0.08) * 4.5 * roughness;
+        const routed = this.router.getTerrainHeight(gx, gz);
+        const height = Math.max(this.minTerrainY, Math.min(this.maxTerrainY, Math.round(routed)));
 
-        // Mountains
-        const mountainMask = this.noise.fbm2D(x * 0.004, z * 0.004, 2) * 0.5 + 0.5;
-        const mountainStrength = Math.max(0, (mountainMask - 0.58) / 0.42);
-        const mountainLift = (mountainStrength ** 1.9) * 72;
-
-        const cliffBand = Math.abs(this.noise.simplex2D(x * 0.02, z * 0.02));
-        const cliffLift = cliffBand < 0.07 ? ((0.07 - cliffBand) / 0.07) * 26 : 0;
-        
-        const canyonCut = Math.max(0, (0.2 - Math.abs(this.noise.fbm2D(x * 0.015, z * 0.015, 2))) / 0.2) * 14;
-
-        const h = Math.floor(10 + continental + regional + detail + fine + mountainLift + cliffLift - canyonCut + (biome.terrainBias ?? 0));
-        return Math.max(this.minTerrainY + 2, Math.min(this.maxTerrainY, h));
+        if (this.terrainHeightCache.size > this.maxTerrainCacheEntries) this.terrainHeightCache.clear();
+        this.terrainHeightCache.set(key, height);
+        return height;
     }
 
     getColumnHeight(x, z) {

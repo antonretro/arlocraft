@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:pages": "vite build --base ./",
     "preview": "vite preview",
     "build:web:portable": "vite build --base ./",
     "build:exe": "npm run build:web:portable && electron-builder --win portable",
@@ -45,6 +46,7 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
     "comlink": "^4.4.2",
+    "fastnoise-lite": "^1.1.1",
     "lz-string": "^1.5.0",
     "stats.js": "^0.17.0",
     "three": "^0.183.2",

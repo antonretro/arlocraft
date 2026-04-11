@@ -14,7 +14,7 @@ export class ArloBlock extends MobEntity {
         
         // Custom Arlo Texture (Using the provided face)
         const loader = new THREE.TextureLoader();
-        const texture = loader.load('/faces/arlo_happy.png');
+        const texture = loader.load('faces/arlo_happy.png');
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
         
@@ -77,3 +77,4 @@ export class ArloBlock extends MobEntity {
         this.mesh.position.y += this.velocity.y * delta;
     }
 }
+

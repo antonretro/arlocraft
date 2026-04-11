@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ArloCraft</title>
 </head>
@@ -60,7 +60,7 @@
     </div>
 
     <div id="arlo-face-widget" aria-hidden="true">
-        <img id="arlo-face-image" src="/faces/arlo_happy.png" alt="Arlo Face" />
+        <img id="arlo-face-image" src="faces/arlo_happy.png" alt="Arlo Face" />
     </div>
 
     <pre id="coords-display"></pre>
@@ -94,12 +94,12 @@
         <div class="title-bg-orb title-bg-orb-b"></div>
         <div id="title-card">
             <div id="title-art">
-                <img src="/icons/items/arlo.png" alt="Arlo" />
+                <img src="icons/items/arlo.png" alt="Arlo" />
             </div>
             <div id="title-copy">
                 <h1 id="title-main">ARLOCRAFT</h1>
                 <div id="title-sub">The world has fallen. Mine, build, and restore what was lost.</div>
-                <div id="title-lore">A viral corruption spreads across the land. You are the last builder — uncover ruins, cleanse the blight, and bring light back to a broken world.</div>
+                <div id="title-lore">A viral corruption spreads across the land. You are the last builder - uncover ruins, cleanse the blight, and bring light back to a broken world.</div>
             </div>
 
             <div id="title-seed-row">
@@ -114,16 +114,21 @@
                 <button class="btn btn-mode" id="btn-mode-creative" type="button">Creative</button>
             </div>
 
+            <div id="title-worlds">
+                <div id="title-worlds-head">Worlds</div>
+                <div id="title-world-list" aria-live="polite"></div>
+            </div>
+
             <div id="title-buttons">
-                <button class="btn btn-hero" id="btn-start">Start Game</button>
-                <button class="btn" id="btn-title-load">Load World</button>
+                <button class="btn btn-hero" id="btn-start">Play Selected World</button>
+                <button class="btn" id="btn-title-load">Load Selected</button>
                 <button class="btn" id="btn-title-random-seed">Random Seed</button>
                 <button class="btn" id="btn-options">Settings / Save</button>
             </div>
 
             <div id="title-controls">
-                WASD &mdash; Move &nbsp;|&nbsp; Mouse &mdash; Look &nbsp;|&nbsp; LMB &mdash; Mine/Attack &nbsp;|&nbsp; RMB &mdash; Place/Interact<br>
-                E &mdash; Inventory &nbsp;|&nbsp; F &mdash; Offhand &nbsp;|&nbsp; Q &mdash; Dig Down &nbsp;|&nbsp; ESC &mdash; Pause
+                WASD - Move | Mouse - Look | LMB - Mine/Attack | RMB - Place/Interact<br>
+                E - Inventory | F - Offhand | Q - Dig Down | ESC - Pause
             </div>
         </div>
     </div>
@@ -162,6 +167,13 @@
                     <span class="toggle-track"><span class="toggle-thumb"></span></span>
                 </label>
             </div>
+            <div class="setting-row setting-row-check">
+                <label for="setting-auto-jump">Auto Jump</label>
+                <label class="toggle-switch">
+                    <input id="setting-auto-jump" type="checkbox" />
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+            </div>
         </div>
 
         <div class="settings-section">
@@ -171,6 +183,11 @@
                 <input id="setting-fov" type="range" min="60" max="110" step="1" value="75" />
                 <span id="setting-fov-value" class="setting-val">75°</span>
             </div>
+            <div class="setting-row">
+                <label for="setting-render-distance">Render Distance</label>
+                <input id="setting-render-distance" type="range" min="1" max="6" step="1" value="2" />
+                <span id="setting-render-distance-value" class="setting-val">2</span>
+            </div>
             <div class="setting-row setting-row-buttons">
                 <label>Quality</label>
                 <div class="btn-group">
@@ -178,6 +195,13 @@
                     <button class="btn btn-quality" id="btn-quality-balanced" data-tier="balanced">Balanced</button>
                     <button class="btn btn-quality" id="btn-quality-high" data-tier="high">High</button>
                 </div>
+            </div>
+            <div class="setting-row setting-row-check">
+                <label for="setting-auto-quality">Auto Quality</label>
+                <label class="toggle-switch">
+                    <input id="setting-auto-quality" type="checkbox" />
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
             </div>
         </div>
 
@@ -197,6 +221,6 @@
 
     <pre id="debug-overlay"></pre>
 
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="src/main.js"></script>
 </body>
 </html>

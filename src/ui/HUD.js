@@ -11,34 +11,34 @@ export class HUD {
         this.craftingSystem = new CraftingSystem();
 
         this.iconMap = {
-            stone: '/icons/items/stone.png',
-            grass: '/icons/items/grass.png',
-            wood: '/icons/items/wood.png',
-            dirt: '/icons/items/dirt.png',
-            sand: '/icons/items/sand.png',
-            leaves: '/icons/items/leaves.png',
-            water: '/icons/items/water.png',
-            virus: '/icons/items/virus.png',
-            arlo: '/icons/items/arlo.png',
-            glass: '/icons/items/glass.png',
-            brick: '/icons/items/brick.png',
-            crafting_table: '/icons/items/crafting_table.png',
-            pick_wood: '/icons/items/pick_wood.png',
-            sledge_iron: '/icons/items/sledge_iron.png',
-            power_blade: '/icons/items/power_blade.png',
-            glitch_saber: '/icons/items/glitch_saber.png',
-            data_drill: '/icons/items/data_drill.png',
-            decoder_wand: '/icons/items/decoder_wand.png',
-            magnet_glove: '/icons/items/magnet_glove.png',
-            rocket_boots: '/icons/items/rocket_boots.png',
-            static_bow: '/icons/items/static_bow.png',
-            byte_axe: '/icons/items/power_blade.png',
-            echo_dagger: '/icons/items/glitch_saber.png',
-            arc_spear: '/icons/items/sledge_iron.png',
-            plasma_hammer: '/icons/items/sledge_iron.png',
-            pulse_pistol: '/icons/items/static_bow.png',
-            rail_rifle: '/icons/items/static_bow.png',
-            scatter_blaster: '/icons/items/static_bow.png'
+            stone: 'icons/items/stone.png',
+            grass: 'icons/items/grass.png',
+            wood: 'icons/items/wood.png',
+            dirt: 'icons/items/dirt.png',
+            sand: 'icons/items/sand.png',
+            leaves: 'icons/items/leaves.png',
+            water: 'icons/items/water.png',
+            virus: 'icons/items/virus.png',
+            arlo: 'icons/items/arlo.png',
+            glass: 'icons/items/glass.png',
+            brick: 'icons/items/brick.png',
+            crafting_table: 'icons/items/crafting_table.png',
+            pick_wood: 'icons/items/pick_wood.png',
+            sledge_iron: 'icons/items/sledge_iron.png',
+            power_blade: 'icons/items/power_blade.png',
+            glitch_saber: 'icons/items/glitch_saber.png',
+            data_drill: 'icons/items/data_drill.png',
+            decoder_wand: 'icons/items/decoder_wand.png',
+            magnet_glove: 'icons/items/magnet_glove.png',
+            rocket_boots: 'icons/items/rocket_boots.png',
+            static_bow: 'icons/items/static_bow.png',
+            byte_axe: 'icons/items/power_blade.png',
+            echo_dagger: 'icons/items/glitch_saber.png',
+            arc_spear: 'icons/items/sledge_iron.png',
+            plasma_hammer: 'icons/items/sledge_iron.png',
+            pulse_pistol: 'icons/items/static_bow.png',
+            rail_rifle: 'icons/items/static_bow.png',
+            scatter_blaster: 'icons/items/static_bow.png'
         };
         this.availableIconIds = new Set([
             'arlo',
@@ -115,6 +115,12 @@ export class HUD {
         this.faceResetTimer = null;
     }
 
+    resolveAsset(path) {
+        const base = import.meta.env.BASE_URL || '/';
+        const normalized = String(path || '').replace(/^\/+/, '');
+        return `${base}${normalized}`;
+    }
+
     init() {
         this.createDragGhost();
         this.updateHP(this.gameState.hp);
@@ -176,13 +182,23 @@ export class HUD {
         if (!img) return;
 
         const faces = {
-            happy: '/faces/arlo_happy.png',
-            sad: '/faces/arlo_sad.png',
-            surprised: '/faces/arlo_surprised.png',
-            mad: '/faces/arlo_mad.png'
+            happy: 'faces/arlo_happy.png',
+            sad: 'faces/arlo_sad.png',
+            surprised: 'faces/arlo_surprised.png',
+            mad: 'faces/arlo_mad.png'
         };
 
-        img.src = faces[mood] ?? faces.happy;
+        if (!img.dataset.faceFallbackBound) {
+            img.dataset.faceFallbackBound = '1';
+            img.addEventListener('error', () => {
+                if (img.dataset.faceFallbackApplied === '1') return;
+                img.dataset.faceFallbackApplied = '1';
+                img.src = this.resolveAsset(faces.happy);
+            });
+        }
+
+        img.dataset.faceFallbackApplied = '0';
+        img.src = this.resolveAsset(faces[mood] ?? faces.happy);
 
         if (this.faceResetTimer) {
             clearTimeout(this.faceResetTimer);
@@ -585,7 +601,7 @@ export class HUD {
 
         const alias = this.resolveIconAlias(itemId);
         if (alias && this.availableIconIds.has(alias)) {
-            return `/icons/items/${alias}.png`;
+            return `icons/items/${alias}.png`;
         }
 
         return this.getGeneratedIconPath(itemId);

@@ -32,6 +32,12 @@ export class Physics {
         this.bodyHeight = 1.75;
         this.eyeHeight = 1.32;
         this.voidFallTimer = 0;
+        this.autoJumpEnabled = true;
+        this.jumpBufferWindow = 0.14;
+        this.coyoteWindow = 0.09;
+        this.jumpBufferTimer = 0;
+        this.coyoteTimer = 0;
+        this.autoJumpCooldown = 0;
         this.lastSafePosition = new THREE.Vector3(0, 2.5, 0);
         this.tmpRescuePos = new THREE.Vector3();
 
@@ -216,6 +222,22 @@ export class Physics {
         return true;
     }
 
+    shouldAutoJump() {
+        if (this.moveDir.lengthSq() < 0.01) return false;
+        const ahead = this.playerRadius + 0.48;
+        const ax = this.position.x + (this.moveDir.x * ahead);
+        const az = this.position.z + (this.moveDir.z * ahead);
+        const feetY = this.position.y - this.feetOffset;
+        const baseY = Math.floor(feetY + 0.5);
+
+        const obstacleAtFeet = this.world.isSolidAt(ax, baseY, az);
+        if (!obstacleAtFeet) return false;
+
+        const headClear1 = !this.world.isSolidAt(ax, baseY + 1, az);
+        const headClear2 = !this.world.isSolidAt(ax, baseY + 2, az);
+        return headClear1 && headClear2;
+    }
+
     update(delta, input, lookYaw) {
         if (!this.isReady) return;
 
@@ -244,6 +266,13 @@ export class Physics {
         const targetX = this.moveDir.x * moveSpeed;
         const targetZ = this.moveDir.z * moveSpeed;
         const grounded = !inWater && this.mode === 'SURVIVAL' && this.isGrounded();
+        if (input.consumeKeyPress('Space')) {
+            this.jumpBufferTimer = this.jumpBufferWindow;
+        } else {
+            this.jumpBufferTimer = Math.max(0, this.jumpBufferTimer - delta);
+        }
+        this.coyoteTimer = grounded ? this.coyoteWindow : Math.max(0, this.coyoteTimer - delta);
+        this.autoJumpCooldown = Math.max(0, this.autoJumpCooldown - delta);
         
         const friction = inWater ? this.waterFriction : (grounded ? this.groundFriction : this.airFriction);
         const lerpT = Math.min(1, friction * delta);
@@ -266,8 +295,14 @@ export class Physics {
                 this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, targetY, delta * 5.8);
             } else if (grounded) {
                 if (this.velocity.y < 0) this.velocity.y = 0;
-                if (input.consumeKeyPress('Space')) {
+                const bufferedJump = this.jumpBufferTimer > 0 && this.coyoteTimer > 0;
+                if (bufferedJump) {
                     this.velocity.y = this.jumpSpeed;
+                    this.jumpBufferTimer = 0;
+                    this.coyoteTimer = 0;
+                } else if (this.autoJumpEnabled && this.autoJumpCooldown <= 0 && this.shouldAutoJump()) {
+                    this.velocity.y = this.jumpSpeed;
+                    this.autoJumpCooldown = 0.2;
                 }
             } else {
                 this.velocity.y += this.gravity * delta;

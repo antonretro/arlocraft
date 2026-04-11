@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { BLOCKS } from '../data/blocks.js';
 
 const textureModules = import.meta.glob('../content/blocks/*/*.png', { eager: true, query: '?url' });
-const pixelArtModules = import.meta.glob('/arlo_real.png', { eager: true, query: '?url' }); // preserve arlo expansion placeholder logic
 
 
 
@@ -36,7 +35,7 @@ export class BlockRegistry {
 
     async loadStunningExpansion() {
         const paths = {
-            arlo: '/arlo_real.png'
+            arlo: 'arlo_real.png'
         };
 
         const loadOne = (id, path) => {
@@ -118,7 +117,7 @@ export class BlockRegistry {
         if (this.atlasTileCache.has(key)) return this.atlasTileCache.get(key);
 
         // Load a fresh texture per tile (TextureLoader caches the underlying Image,
-        // so no duplicate network requests) — this guarantees each tile gets its own
+        // so no duplicate network requests) - this guarantees each tile gets its own
         // needsUpdate event when the image finishes loading, preventing black tiles.
         const tile = this.textureLoader.load(BLOCK_TEXTURE_ATLAS.src);
         tile.magFilter = THREE.NearestFilter;
@@ -265,3 +264,4 @@ export class BlockRegistry {
         return material;
     }
 }
+
