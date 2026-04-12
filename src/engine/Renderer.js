@@ -85,12 +85,13 @@ export class Renderer {
                 exponent: { value: 0.6 }
             },
             vertexShader: `
-                varying vec3 vWorldPosition;
+                varying vec3 vLocalPos;
                 varying vec2 vUv;
                 void main() {
                     vUv = uv;
-                    vec4 worldPosition = modelMatrix * vec4( position, 1.0 );
-                    vWorldPosition = worldPosition.xyz;
+                    // Use LOCAL position (camera-relative) so sky direction is
+                    // independent of where the player is in the world.
+                    vLocalPos = position;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
                 }
             `,
@@ -102,14 +103,13 @@ export class Renderer {
                 uniform vec3 bottomColor;
                 uniform vec3 horizonColor;
                 uniform vec3 sunPos;
-                uniform float offset;
                 uniform float exponent;
-                varying vec3 vWorldPosition;
+                varying vec3 vLocalPos;
                 varying vec2 vUv;
 
                 void main() {
-                    vec3 sphereDir = normalize(vWorldPosition);
-                    vec3 dir = normalize(vWorldPosition + offset);
+                    // sphereDir is a pure view direction — unaffected by player position
+                    vec3 sphereDir = normalize(vLocalPos);
                     float h = sphereDir.y;
 
                     // Equirectangular mapping logic
@@ -167,10 +167,13 @@ export class Renderer {
                     gl_FragColor = vec4(color, 1.0);
                 }
             `,
-            side: THREE.BackSide
+            side: THREE.BackSide,
+            depthWrite: false,   // never pollute the depth buffer
+            depthTest: false     // always render as background behind everything
         });
 
         this.skyDome = new THREE.Mesh(skyGeo, skyMat);
+        this.skyDome.renderOrder = -1;  // render before all terrain/entities
         this.scene.add(this.skyDome);
 
         // Starfield
@@ -373,7 +376,9 @@ export class Renderer {
         uniforms.topColor.value.copy(top);
         uniforms.bottomColor.value.copy(bottom);
         uniforms.horizonColor.value.copy(horizon);
-        uniforms.sunPos.value.copy(sunPos);
+        // Pass sun as a normalised direction so the shader result is the
+        // same regardless of how far the player is from the world origin.
+        uniforms.sunPos.value.copy(sunPos).normalize();
         uniforms.mixFactor.value = mixFactor;
         
         // Assign textures if loaded
