@@ -1285,267 +1285,214 @@ canvas { display: block; }
         display: none !important;
     }
 
-    /* ── HUD ── */
+    /* ── HUD wrapper: pull it closer to the bottom edge ── */
     #hud {
-        bottom: 16px;
-        gap: 6px;
-    }
-
-    .hud-pill {
-        padding: 3px 8px;
-        font-size: 0.48rem;
-        letter-spacing: 0.7px;
-    }
-
-    #selected-item-readout {
-        padding: 5px 10px;
-        width: min(72vw, 320px);
-    }
-
-    #selected-item-name {
-        font-size: 0.68rem;
-    }
-
-    #selected-item-stats {
-        font-size: 0.54rem;
-        margin-top: 1px;
-    }
-
-    #stats-bars {
-        width: min(94vw, 320px);
-        gap: 7px;
-    }
-
-    .bar-container {
-        height: 26px;
-        padding: 0 8px;
-        gap: 6px;
-    }
-
-    .bar-label {
-        font-size: 0.5rem;
-    }
-
-    .hud-meter {
-        height: 7px;
-    }
-
-    #hotbar {
+        bottom: 10px;
         gap: 4px;
-        padding: 5px;
-        border-radius: 12px;
     }
 
-    .slot {
-        width: 28px;
-        height: 28px;
-        border-radius: 7px;
+    /* Pills — tiny */
+    #hud-headline {
+        transform: scale(0.45);
+        transform-origin: center bottom;
+        margin-bottom: -14px; /* collapse the dead space left by scale */
     }
 
-    .item-icon {
-        width: 22px;
-        height: 22px;
-        line-height: 22px;
-        font-size: 0.5rem;
+    /* Selected item readout — tiny */
+    #selected-item-readout {
+        transform: scale(0.45);
+        transform-origin: center bottom;
+        width: 680px; /* keep intrinsic width; scale handles the rest */
+        margin-bottom: -56px;
     }
 
-    .item-count {
-        font-size: 0.46rem;
-        min-width: 11px;
-        height: 11px;
+    /* Stats bars — tiny */
+    #stats-bars {
+        transform: scale(0.45);
+        transform-origin: center bottom;
+        width: 580px;
+        margin-bottom: -44px;
     }
 
+    /* Hotbar — kept larger so blocks are tappable */
+    #hotbar {
+        gap: 5px;
+        padding: 6px;
+        border-radius: 14px;
+        transform: scale(0.78);
+        transform-origin: center bottom;
+        margin-bottom: -8px;
+    }
+
+    /* XP bar — tiny */
     #xp-bar-container {
-        width: min(94vw, 220px);
-        height: 6px;
+        transform: scale(0.45);
+        transform-origin: center bottom;
+        width: 364px;
+        margin-bottom: -6px;
     }
 
     /* ── Corner widgets ── */
     #arlo-face-widget {
-        width: 42px;
-        height: 42px;
-        top: 12px;
-        left: 12px;
-        border-width: 2px;
+        transform: scale(0.45);
+        transform-origin: top left;
+        top: 8px;
+        left: 8px;
     }
 
     #coords-display {
-        top: 64px;
-        left: 12px;
-        font-size: 0.6rem;
-        padding: 6px 10px;
+        transform: scale(0.45);
+        transform-origin: top left;
+        top: 42px;
+        left: 8px;
     }
 
     #minimap {
-        width: 110px;
-        right: 8px;
+        transform: scale(0.45);
+        transform-origin: top right;
         top: 8px;
-        padding: 6px;
-    }
-
-    #minimap-canvas {
-        width: 98px;
-        height: 98px;
-    }
-
-    #minimap-caption {
-        font-size: 0.58rem;
-        margin-top: 4px;
-    }
-
-    #controls-help {
-        left: 8px;
-        bottom: 8px;
-        padding: 7px 10px;
-    }
-
-    #controls-help-title {
-        font-size: 0.65rem;
-    }
-
-    #controls-help-body {
-        font-size: 0.6rem;
+        right: 8px;
     }
 
     /* ── Title screen ── */
     #ni-profile-bar {
-        top: 20px;
-        left: 20px;
-        right: 20px;
+        top: 16px;
+        left: 16px;
+        right: 16px;
     }
 
     .ni-avatar {
-        width: 32px;
-        height: 32px;
+        width: 28px;
+        height: 28px;
     }
 
     .ni-username,
     .ni-time {
-        font-size: 0.8rem;
+        font-size: 0.7rem;
     }
 
     .ni-hero {
-        margin-bottom: 30px;
+        margin-bottom: 24px;
     }
 
     .ni-hero-img {
-        width: 70px;
-        height: 70px;
-        margin-bottom: 12px;
+        width: 56px;
+        height: 56px;
+        margin-bottom: 10px;
     }
 
     .ni-title {
-        font-size: 2.2rem;
-        letter-spacing: 4px;
+        font-size: 1.7rem;
+        letter-spacing: 3px;
     }
 
     .ni-subtitle {
-        font-size: 0.65rem;
-        letter-spacing: 2px;
+        font-size: 0.55rem;
+        letter-spacing: 1.5px;
     }
 
     .ni-tile-row {
-        gap: 12px;
-    }
-
-    .ni-tile {
-        width: 110px;
-        height: 110px;
-        border-radius: 14px;
         gap: 10px;
     }
 
+    .ni-tile {
+        width: 88px;
+        height: 88px;
+        border-radius: 12px;
+        gap: 8px;
+    }
+
     .ni-tile-icon {
-        font-size: 1.8rem;
+        font-size: 1.5rem;
     }
 
     .ni-tile span {
-        font-size: 0.65rem;
+        font-size: 0.55rem;
     }
 
     .ni-footer-hint {
-        font-size: 0.6rem;
-        bottom: 16px;
+        font-size: 0.52rem;
+        bottom: 12px;
     }
 
     /* ── World select ── */
     .ni-heading {
-        font-size: 1.6rem;
+        font-size: 1.3rem;
     }
 
     .ni-container {
-        gap: 16px;
+        gap: 12px;
     }
 
     .ni-grid-worlds {
         grid-template-columns: 1fr;
-        gap: 12px;
+        gap: 10px;
     }
 
     .ni-world-card {
-        padding: 14px;
+        padding: 12px;
     }
 
     .ni-world-name {
-        font-size: 1rem;
+        font-size: 0.9rem;
     }
 
     .ni-footer-actions {
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
     }
 
     .ni-btn {
-        padding: 10px 16px;
-        font-size: 0.75rem;
+        padding: 8px 12px;
+        font-size: 0.65rem;
     }
 
     /* ── World create ── */
     .ni-panel-modern {
         width: 90vw;
-        padding: 24px 18px;
-        border-radius: 20px;
+        padding: 18px 14px;
+        border-radius: 16px;
     }
 
     .ni-form-group {
-        margin-bottom: 18px;
+        margin-bottom: 14px;
     }
 
     .ni-input-modern {
-        padding: 10px 12px;
-        font-size: 0.9rem;
+        padding: 8px 10px;
+        font-size: 0.8rem;
     }
 
     .ni-mode-label {
-        font-size: 1rem;
-        margin-bottom: 10px;
+        font-size: 0.85rem;
+        margin-bottom: 8px;
     }
 
     /* ── Pause menu ── */
-    #ni-pause-sidebar {
-        width: 100%;
-        padding: 30px 24px;
-        border-right: none;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
-
     #ni-pause-container {
         flex-direction: column;
     }
 
-    .ni-pause-btn {
-        font-size: 1.1rem;
-        padding: 10px 0;
-    }
-
-    .ni-pause-icon {
-        width: 30px;
-        height: 30px;
-        font-size: 0.8rem;
+    #ni-pause-sidebar {
+        width: 100%;
+        padding: 24px 18px;
+        border-right: none;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
     }
 
     .ni-pause-user {
-        margin-bottom: 30px;
+        margin-bottom: 20px;
+    }
+
+    .ni-pause-btn {
+        font-size: 0.9rem;
+        padding: 8px 0;
+    }
+
+    .ni-pause-icon {
+        width: 26px;
+        height: 26px;
+        font-size: 0.7rem;
     }
 
     #ni-pause-details {
@@ -1557,27 +1504,27 @@ canvas { display: block; }
         flex-direction: column;
         height: auto;
         min-height: 80vh;
-        border-radius: 20px;
+        border-radius: 16px;
     }
 
     #ni-settings-sidebar {
         width: 100%;
-        padding: 20px;
+        padding: 16px;
     }
 
     .ni-settings-title {
-        font-size: 1.3rem;
-        margin-bottom: 16px;
+        font-size: 1.1rem;
+        margin-bottom: 12px;
     }
 
     .ni-settings-tabs {
         flex-direction: row;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
     }
 
     #ni-settings-content {
-        padding: 20px;
+        padding: 16px;
     }
 
     .ni-settings-grid {
@@ -1585,11 +1532,11 @@ canvas { display: block; }
     }
 
     .ni-setting-box {
-        padding: 14px;
+        padding: 10px;
     }
 
     .ni-tab-heading {
-        font-size: 1.1rem;
-        margin-bottom: 16px;
+        font-size: 0.95rem;
+        margin-bottom: 12px;
     }
 }
