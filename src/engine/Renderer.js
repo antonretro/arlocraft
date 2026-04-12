@@ -4,7 +4,7 @@ import { CLOUD_SETTINGS, computeFogDensity, ATMOSPHERIC_COLORS } from '../render
 export class Renderer {
     constructor() {
         this.instance = new THREE.WebGLRenderer({
-            antialias: false,
+            antialias: true,
             powerPreference: 'high-performance'
         });
         this.instance.setSize(window.innerWidth, window.innerHeight);
@@ -30,8 +30,8 @@ export class Renderer {
         this.sun = new THREE.DirectionalLight(0xffffff, 1.0);
         this.sun.position.set(50, 100, 50);
         this.sun.castShadow = true;
-        this.sun.shadow.mapSize.width = 1024;
-        this.sun.shadow.mapSize.height = 1024;
+        this.sun.shadow.mapSize.width = 2048;
+        this.sun.shadow.mapSize.height = 2048;
         this.sun.shadow.camera.near = 0.5;
         this.sun.shadow.camera.far = 400;
         this.sun.shadow.camera.left = -64;
@@ -108,33 +108,50 @@ export class Renderer {
                 varying vec2 vUv;
 
                 void main() {
+                    vec3 sphereDir = normalize(vWorldPosition);
                     vec3 dir = normalize(vWorldPosition + offset);
-                    float h = dir.y;
-                    
+                    float h = sphereDir.y;
+
                     // Equirectangular mapping logic
                     vec2 skyUv = vUv;
                     vec4 noon = texture2D(texNoon, skyUv);
                     vec4 night = texture2D(texNight, skyUv);
-                    
+
                     // Base gradient (procedural fallback/blend)
                     vec3 grad = mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0));
-                    
+
                     // AI Texture blend
                     vec3 texColor = mix(noon.rgb, night.rgb, mixFactor);
-                    
-                    // Final color combines texture with some atmospheric gradient for depth
+
+                    // Final color combines texture with atmospheric gradient
                     vec3 color = mix(grad, texColor, 0.85);
-                    
+
                     // Horizon blend
                     float horizon = 1.0 - abs(h);
                     horizon = pow(max(horizon, 0.0), 12.0);
                     color = mix(color, horizonColor, horizon * 0.4);
-                    
-                    // Sun glow
-                    float sunGlow = max(0.0, dot(dir, normalize(sunPos)));
-                    sunGlow = pow(sunGlow, 50.0);
-                    color += horizonColor * sunGlow * 0.4;
-                    
+
+                    // ── Sun in skybox shader ──────────────────────────────
+                    vec3 sunDir = normalize(sunPos);
+                    float sunHeight = sunDir.y;
+                    // fade in as sun rises above horizon
+                    float sunVisible = smoothstep(-0.08, 0.04, sunHeight);
+
+                    float sunDot = dot(sphereDir, sunDir);
+
+                    // Wide atmospheric glow
+                    float sunAtmos = max(0.0, sunDot);
+                    sunAtmos = pow(sunAtmos, 6.0);
+                    color += horizonColor * sunAtmos * 0.18 * sunVisible;
+
+                    // Tight corona ring
+                    float sunCorona = smoothstep(0.9920, 0.9975, sunDot) * (1.0 - smoothstep(0.9975, 1.0, sunDot));
+                    color += mix(horizonColor, vec3(1.0, 0.92, 0.70), 0.5) * sunCorona * 0.9 * sunVisible;
+
+                    // Hard sun disc
+                    float sunDisc = smoothstep(0.9975, 0.9990, sunDot);
+                    color = mix(color, vec3(1.0, 0.97, 0.88), sunDisc * sunVisible);
+
                     gl_FragColor = vec4(color, 1.0);
                 }
             `,
@@ -168,11 +185,12 @@ export class Renderer {
             side: THREE.BackSide,
             depthWrite: false
         });
+        // Sun is rendered purely in the sky shader; keep the mesh object
+        // so updateEnvironmentLighting references don't break, but don't
+        // add it to the scene.
         this.sunMesh = new THREE.Mesh(geo, mat);
         this.sunMesh.renderOrder = 5;
-        this.scene.add(this.sunMesh);
 
-        // Sun Glow
         const glowGeo = new THREE.CircleGeometry(64, 32);
         const glowMat = new THREE.MeshBasicMaterial({
             color: 0xffaa44,
@@ -184,7 +202,6 @@ export class Renderer {
         });
         this.sunGlow = new THREE.Mesh(glowGeo, glowMat);
         this.sunGlow.renderOrder = 4;
-        this.scene.add(this.sunGlow);
     }
 
     setupMoon() {
