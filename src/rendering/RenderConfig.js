@@ -4,8 +4,8 @@ export const CLOUD_SETTINGS = {
     widthMax: 34,
     depthMin: 7,
     depthMax: 18,
-    yMin: 62,
-    yMax: 90,
+    yMin: 78,
+    yMax: 105,
     spread: 1300,
     speedMin: 0.45,
     speedMax: 1.1

@@ -36,7 +36,7 @@ export class World {
         this.minRenderDistance = 2;
         this.maxRenderDistance = 6;
         this.minTerrainY = -12;
-        this.maxTerrainY = 126;
+        this.maxTerrainY = 65;
         this.deepMinY = -220;
         this.seaLevel = 1;
         this.seed = 0;
@@ -354,7 +354,9 @@ export class World {
         const cached = this.terrainHeightCache.get(key);
         if (cached !== undefined) return cached;
 
-        const routed = this.router.getTerrainHeight(gx, gz);
+        // Router works in MC coordinate space (sea level ≈ 64).
+        // Subtract 63 to map sea level → our seaLevel=1.
+        const routed = this.router.getTerrainHeight(gx, gz) - 63;
         const height = Math.max(this.minTerrainY, Math.min(this.maxTerrainY, Math.round(routed)));
 
         if (this.terrainHeightCache.size > this.maxTerrainCacheEntries) this.terrainHeightCache.clear();
