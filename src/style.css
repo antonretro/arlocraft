@@ -1278,78 +1278,43 @@ canvas { display: block; }
 /* ══════════════════════════════════════════════
    MOBILE — scale the UI down for small screens
    ══════════════════════════════════════════════ */
-@media (max-width: 600px) {
+@media (max-width: 768px) {
 
     /* ── Hide keyboard-shortcut hints on touch devices ── */
     #controls-help {
         display: none !important;
     }
 
-    /* ── HUD wrapper: pull it closer to the bottom edge ── */
+    /* ── HUD — zoom shrinks element + collapses layout space ── */
     #hud {
-        bottom: 10px;
-        gap: 4px;
+        bottom: 8px;
+        gap: 3px;
     }
 
-    /* Pills — tiny */
-    #hud-headline {
-        transform: scale(0.45);
-        transform-origin: center bottom;
-        margin-bottom: -14px; /* collapse the dead space left by scale */
-    }
+    /* Pills, readout, stats, XP — all tiny */
+    #hud-headline        { zoom: 0.4; }
+    #selected-item-readout { zoom: 0.4; }
+    #stats-bars          { zoom: 0.4; }
+    #xp-bar-container    { zoom: 0.4; }
 
-    /* Selected item readout — tiny */
-    #selected-item-readout {
-        transform: scale(0.45);
-        transform-origin: center bottom;
-        width: 680px; /* keep intrinsic width; scale handles the rest */
-        margin-bottom: -56px;
-    }
-
-    /* Stats bars — tiny */
-    #stats-bars {
-        transform: scale(0.45);
-        transform-origin: center bottom;
-        width: 580px;
-        margin-bottom: -44px;
-    }
-
-    /* Hotbar — kept larger so blocks are tappable */
-    #hotbar {
-        gap: 5px;
-        padding: 6px;
-        border-radius: 14px;
-        transform: scale(0.78);
-        transform-origin: center bottom;
-        margin-bottom: -8px;
-    }
-
-    /* XP bar — tiny */
-    #xp-bar-container {
-        transform: scale(0.45);
-        transform-origin: center bottom;
-        width: 364px;
-        margin-bottom: -6px;
-    }
+    /* Hotbar — larger so blocks are tappable */
+    #hotbar              { zoom: 0.68; }
 
     /* ── Corner widgets ── */
     #arlo-face-widget {
-        transform: scale(0.45);
-        transform-origin: top left;
+        zoom: 0.4;
         top: 8px;
         left: 8px;
     }
 
     #coords-display {
-        transform: scale(0.45);
-        transform-origin: top left;
-        top: 42px;
+        zoom: 0.4;
+        top: 38px;
         left: 8px;
     }
 
     #minimap {
-        transform: scale(0.45);
-        transform-origin: top right;
+        zoom: 0.4;
         top: 8px;
         right: 8px;
     }
