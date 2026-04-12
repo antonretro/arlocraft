@@ -1101,3 +1101,123 @@
     0%, 100% { transform: translateY(0px); }
     50%       { transform: translateY(-8px); }
 }
+
+/* ══════════════════════════════════════════════
+   TOUCH CONTROLS
+   ══════════════════════════════════════════════ */
+#touch-controls {
+    display: none;        /* shown only when game starts on touch device */
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 90;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* ── Left joystick zone ── */
+#tc-joystick-zone {
+    position: absolute;
+    left: 0; top: 0;
+    width: 45%;
+    height: 100%;
+    pointer-events: all;
+}
+
+#tc-joystick-base {
+    position: fixed;           /* repositioned in JS to touch origin */
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.07);
+    backdrop-filter: blur(4px);
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+}
+
+#tc-joystick-knob {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    transition: transform 0.04s linear;
+}
+
+/* ── Right look zone ── */
+#tc-look-zone {
+    position: absolute;
+    right: 0; top: 0;
+    width: 55%;
+    height: 100%;
+    pointer-events: all;
+}
+
+/* ── Action buttons ── */
+#tc-action-btns {
+    position: absolute;
+    right: 16px;
+    bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    pointer-events: all;
+}
+
+#tc-row-top, #tc-row-bot {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.tc-btn {
+    border: 2px solid rgba(255,255,255,0.25);
+    border-radius: 50%;
+    background: rgba(20, 28, 44, 0.75);
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    transition: background 0.1s, transform 0.08s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+}
+
+.tc-btn:active {
+    background: rgba(255,255,255,0.18);
+    transform: scale(0.92);
+}
+
+.tc-btn-sm {
+    width: 52px;
+    height: 52px;
+    font-size: 1rem;
+}
+
+.tc-btn-mine {
+    width: 70px;
+    height: 70px;
+    font-size: 1.5rem;
+    background: rgba(200, 60, 40, 0.55);
+    border-color: rgba(255,100,80,0.5);
+}
+
+.tc-btn-place {
+    width: 70px;
+    height: 70px;
+    font-size: 1.5rem;
+    background: rgba(40, 100, 200, 0.55);
+    border-color: rgba(80,140,255,0.5);
+}

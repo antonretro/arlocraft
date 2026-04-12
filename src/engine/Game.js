@@ -13,6 +13,7 @@ import { HUD } from '../ui/HUD.js';
 import { World } from '../world/World.js';
 import { HelpPanel } from '../ui/HelpPanel.js';
 import { MiniMap } from '../ui/MiniMap.js';
+import { TouchControls } from '../ui/TouchControls.js';
 import { FEATURES } from '../data/features.js';
 import { PlayerHand } from '../entities/PlayerHand.js';
 
@@ -620,7 +621,12 @@ export class Game {
         this.showPause(false);
         this.showSettings(false);
         this.helpPanel.setState('playing');
-        this.input.setPointerLock();
+
+        if (this.touchControls) {
+            this.touchControls.show(true);
+        } else {
+            this.input.setPointerLock();
+        }
     }
 
     returnToTitle() {
@@ -633,6 +639,7 @@ export class Game {
         if (this.gameState.isInventoryOpen) this.gameState.toggleInventory();
         if (document.pointerLockElement) document.exitPointerLock();
 
+        this.touchControls?.show(false);
         this.showPause(false);
         this.showSettings(false);
         this.showTitle(true);
@@ -714,6 +721,7 @@ export class Game {
         this.showSettings(false);
         this.showPause(true);
         this.helpPanel.setState('paused');
+        this.touchControls?.show(false);
 
         if (document.pointerLockElement) document.exitPointerLock();
     }
@@ -725,7 +733,10 @@ export class Game {
         this.showPause(false);
         this.showSettings(false);
 
-        if (!this.gameState.isInventoryOpen) {
+        if (this.touchControls) {
+            this.touchControls.show(true);
+            this.helpPanel.setState('playing');
+        } else if (!this.gameState.isInventoryOpen) {
             this.helpPanel.setState('playing');
             this.input.setPointerLock();
         }
@@ -1104,6 +1115,10 @@ export class Game {
         this.hud.init();
         this.initPerfPanel();
 
+        if (TouchControls.isTouchDevice()) {
+            this.touchControls = new TouchControls(this);
+        }
+
         this.showTitle(true);
         this.showPause(false);
         this.showSettings(false);
@@ -1433,6 +1448,7 @@ export class Game {
         let runWorldThisFrame = canSimulate;
 
         if (canSimulate) {
+            this.touchControls?.tick();
             const physicsStart = performance.now();
             this.physics.update(delta, this.input, this.viewYaw);
             this.profiler.physicsMs = performance.now() - physicsStart;
