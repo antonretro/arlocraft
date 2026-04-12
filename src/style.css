@@ -1280,29 +1280,35 @@ canvas { display: block; }
    ══════════════════════════════════════════════ */
 @media (max-width: 600px) {
 
+    /* ── Hide keyboard-shortcut hints on touch devices ── */
+    #controls-help {
+        display: none !important;
+    }
+
     /* ── HUD ── */
     #hud {
         bottom: 16px;
-        gap: 8px;
+        gap: 6px;
     }
 
     .hud-pill {
-        padding: 4px 9px;
-        font-size: 0.52rem;
-        letter-spacing: 0.8px;
+        padding: 3px 8px;
+        font-size: 0.48rem;
+        letter-spacing: 0.7px;
     }
 
     #selected-item-readout {
-        padding: 7px 12px;
+        padding: 5px 10px;
+        width: min(72vw, 320px);
     }
 
     #selected-item-name {
-        font-size: 0.75rem;
+        font-size: 0.68rem;
     }
 
     #selected-item-stats {
-        font-size: 0.58rem;
-        margin-top: 2px;
+        font-size: 0.54rem;
+        margin-top: 1px;
     }
 
     #stats-bars {
