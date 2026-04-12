@@ -60,6 +60,10 @@ export class Chunk {
         this.group.position.set(cx * world.chunkSize, 0, cz * world.chunkSize);
         this.group.updateMatrix();
         this.group.matrixAutoUpdate = false;
+        // Disable THREE.js automatic frustum culling on the group — the bounding
+        // sphere it computes for large instanced chunks is often wrong, causing
+        // entire chunks to vanish. Visibility is controlled manually via setVisible().
+        this.group.frustumCulled = false;
         this.world.scene.add(this.group);
         
         this.instancedMeshes = new Map(); // id -> InstancedMesh

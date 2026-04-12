@@ -162,7 +162,7 @@ export class Game {
             qualityTierPref: 'low',
             preferredMode: 'SURVIVAL',
             autoJump: true,
-            autoQuality: true,
+            autoQuality: false,
             renderDistance: 2,
             selectedWorldSlot: 'slot-1',
             shadowsEnabled: true,
@@ -1290,15 +1290,14 @@ export class Game {
         this.qualityInitialized = true;
 
 
-        const basePixelRatio = Math.min(window.devicePixelRatio || 1, 1);
+        // Quality tier only controls render distance / camera far.
+        // Pixel ratio is owned exclusively by the resolution slider so it
+        // never gets overwritten by the auto-quality system.
         if (tier === 'low') {
-            this.renderer.instance.setPixelRatio(basePixelRatio * 0.35);
             this.camera.instance.far = 72;
         } else if (tier === 'balanced') {
-            this.renderer.instance.setPixelRatio(basePixelRatio * 0.48);
             this.camera.instance.far = 108;
         } else {
-            this.renderer.instance.setPixelRatio(basePixelRatio * 0.6);
             this.camera.instance.far = 140;
         }
         this.world.setRenderDistance(this.getEffectiveRenderDistanceForTier(tier));
