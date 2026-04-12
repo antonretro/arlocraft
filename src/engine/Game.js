@@ -684,7 +684,7 @@ export class Game {
     showSettings(visible) {
         const panel = document.getElementById('settings-panel');
         if (!panel) return;
-        panel.style.display = visible ? 'block' : 'none';
+        panel.style.display = visible ? 'flex' : 'none';
         if (visible && this.isPaused) this.showPause(false);
     }
 
