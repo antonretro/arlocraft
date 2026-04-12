@@ -1274,3 +1274,316 @@ canvas { display: block; }
     background: rgba(40, 100, 200, 0.55);
     border-color: rgba(80,140,255,0.5);
 }
+
+/* ══════════════════════════════════════════════
+   MOBILE — scale the UI down for small screens
+   ══════════════════════════════════════════════ */
+@media (max-width: 600px) {
+
+    /* ── HUD ── */
+    #hud {
+        bottom: 16px;
+        gap: 8px;
+    }
+
+    .hud-pill {
+        padding: 4px 9px;
+        font-size: 0.52rem;
+        letter-spacing: 0.8px;
+    }
+
+    #selected-item-readout {
+        padding: 7px 12px;
+    }
+
+    #selected-item-name {
+        font-size: 0.75rem;
+    }
+
+    #selected-item-stats {
+        font-size: 0.58rem;
+        margin-top: 2px;
+    }
+
+    #stats-bars {
+        width: min(94vw, 320px);
+        gap: 7px;
+    }
+
+    .bar-container {
+        height: 26px;
+        padding: 0 8px;
+        gap: 6px;
+    }
+
+    .bar-label {
+        font-size: 0.5rem;
+    }
+
+    .hud-meter {
+        height: 7px;
+    }
+
+    #hotbar {
+        gap: 4px;
+        padding: 5px;
+        border-radius: 12px;
+    }
+
+    .slot {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+    }
+
+    .item-icon {
+        width: 22px;
+        height: 22px;
+        line-height: 22px;
+        font-size: 0.5rem;
+    }
+
+    .item-count {
+        font-size: 0.46rem;
+        min-width: 11px;
+        height: 11px;
+    }
+
+    #xp-bar-container {
+        width: min(94vw, 220px);
+        height: 6px;
+    }
+
+    /* ── Corner widgets ── */
+    #arlo-face-widget {
+        width: 42px;
+        height: 42px;
+        top: 12px;
+        left: 12px;
+        border-width: 2px;
+    }
+
+    #coords-display {
+        top: 64px;
+        left: 12px;
+        font-size: 0.6rem;
+        padding: 6px 10px;
+    }
+
+    #minimap {
+        width: 110px;
+        right: 8px;
+        top: 8px;
+        padding: 6px;
+    }
+
+    #minimap-canvas {
+        width: 98px;
+        height: 98px;
+    }
+
+    #minimap-caption {
+        font-size: 0.58rem;
+        margin-top: 4px;
+    }
+
+    #controls-help {
+        left: 8px;
+        bottom: 8px;
+        padding: 7px 10px;
+    }
+
+    #controls-help-title {
+        font-size: 0.65rem;
+    }
+
+    #controls-help-body {
+        font-size: 0.6rem;
+    }
+
+    /* ── Title screen ── */
+    #ni-profile-bar {
+        top: 20px;
+        left: 20px;
+        right: 20px;
+    }
+
+    .ni-avatar {
+        width: 32px;
+        height: 32px;
+    }
+
+    .ni-username,
+    .ni-time {
+        font-size: 0.8rem;
+    }
+
+    .ni-hero {
+        margin-bottom: 30px;
+    }
+
+    .ni-hero-img {
+        width: 70px;
+        height: 70px;
+        margin-bottom: 12px;
+    }
+
+    .ni-title {
+        font-size: 2.2rem;
+        letter-spacing: 4px;
+    }
+
+    .ni-subtitle {
+        font-size: 0.65rem;
+        letter-spacing: 2px;
+    }
+
+    .ni-tile-row {
+        gap: 12px;
+    }
+
+    .ni-tile {
+        width: 110px;
+        height: 110px;
+        border-radius: 14px;
+        gap: 10px;
+    }
+
+    .ni-tile-icon {
+        font-size: 1.8rem;
+    }
+
+    .ni-tile span {
+        font-size: 0.65rem;
+    }
+
+    .ni-footer-hint {
+        font-size: 0.6rem;
+        bottom: 16px;
+    }
+
+    /* ── World select ── */
+    .ni-heading {
+        font-size: 1.6rem;
+    }
+
+    .ni-container {
+        gap: 16px;
+    }
+
+    .ni-grid-worlds {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .ni-world-card {
+        padding: 14px;
+    }
+
+    .ni-world-name {
+        font-size: 1rem;
+    }
+
+    .ni-footer-actions {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .ni-btn {
+        padding: 10px 16px;
+        font-size: 0.75rem;
+    }
+
+    /* ── World create ── */
+    .ni-panel-modern {
+        width: 90vw;
+        padding: 24px 18px;
+        border-radius: 20px;
+    }
+
+    .ni-form-group {
+        margin-bottom: 18px;
+    }
+
+    .ni-input-modern {
+        padding: 10px 12px;
+        font-size: 0.9rem;
+    }
+
+    .ni-mode-label {
+        font-size: 1rem;
+        margin-bottom: 10px;
+    }
+
+    /* ── Pause menu ── */
+    #ni-pause-sidebar {
+        width: 100%;
+        padding: 30px 24px;
+        border-right: none;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    #ni-pause-container {
+        flex-direction: column;
+    }
+
+    .ni-pause-btn {
+        font-size: 1.1rem;
+        padding: 10px 0;
+    }
+
+    .ni-pause-icon {
+        width: 30px;
+        height: 30px;
+        font-size: 0.8rem;
+    }
+
+    .ni-pause-user {
+        margin-bottom: 30px;
+    }
+
+    #ni-pause-details {
+        display: none;
+    }
+
+    /* ── Settings ── */
+    #ni-settings-container {
+        flex-direction: column;
+        height: auto;
+        min-height: 80vh;
+        border-radius: 20px;
+    }
+
+    #ni-settings-sidebar {
+        width: 100%;
+        padding: 20px;
+    }
+
+    .ni-settings-title {
+        font-size: 1.3rem;
+        margin-bottom: 16px;
+    }
+
+    .ni-settings-tabs {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    #ni-settings-content {
+        padding: 20px;
+    }
+
+    .ni-settings-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ni-setting-box {
+        padding: 14px;
+    }
+
+    .ni-tab-heading {
+        font-size: 1.1rem;
+        margin-bottom: 16px;
+    }
+}
