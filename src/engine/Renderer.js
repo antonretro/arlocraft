@@ -139,14 +139,17 @@ export class Renderer {
                     // ── Sun in skybox shader ──────────────────────────────
                     vec3 sunDir = normalize(sunPos);
                     float sunHeight = sunDir.y;
-                    // fade in as sun rises above horizon
-                    float sunVisible = smoothstep(-0.08, 0.04, sunHeight);
 
                     float sunDot = dot(sphereDir, sunDir);
 
+                    // Combined visibility: sun above world horizon AND sky pixel above ground plane.
+                    // This prevents any sun rendering from bleeding through terrain.
+                    float sunAbove  = smoothstep(-0.08, 0.04, sunHeight); // sun elevation
+                    float skyAbove  = smoothstep(-0.04, 0.03, h);         // sky pixel elevation
+                    float sunVisible = sunAbove * skyAbove;
+
                     // Wide atmospheric glow
-                    float sunAtmos = max(0.0, sunDot);
-                    sunAtmos = pow(sunAtmos, 6.0);
+                    float sunAtmos = pow(max(0.0, sunDot), 6.0);
                     color += horizonColor * sunAtmos * 0.18 * sunVisible;
 
                     // Tight corona ring
@@ -156,6 +159,10 @@ export class Renderer {
                     // Hard sun disc
                     float sunDisc = smoothstep(0.9975, 0.9990, sunDot);
                     color = mix(color, vec3(1.0, 0.97, 0.88), sunDisc * sunVisible);
+
+                    // Fade the entire bottom hemisphere to the fog/horizon colour so the
+                    // sky sphere never clips through terrain or shows below the ground.
+                    color = mix(bottomColor, color, smoothstep(-0.12, 0.0, h));
 
                     gl_FragColor = vec4(color, 1.0);
                 }
