@@ -1761,13 +1761,10 @@ export class World {
                 const dirX = dx * invDist;
                 const dirZ = dz * invDist;
                 const forwardDot = (dirX * this.tmpCameraForward.x) + (dirZ * this.tmpCameraForward.z);
-                const sideDot = Math.abs((dirX * this.tmpCameraRight.x) + (dirZ * this.tmpCameraRight.z));
-                const distFactor = Math.min(1, dist / Math.max(1, maxCullDistance));
-
-                const backThreshold = THREE.MathUtils.lerp(-0.25, 0.04, distFactor);
-                const sideThreshold = THREE.MathUtils.lerp(0.98, 0.8, distFactor);
-                if (forwardDot < backThreshold) visible = false;
-                if (visible && sideDot > sideThreshold && forwardDot < 0.55) visible = false;
+                // Only hide chunks that are clearly and firmly behind the player.
+                // The old side-threshold check was too aggressive and caused random
+                // chunks to pop in/out; removed it entirely.
+                if (forwardDot < -0.55) visible = false;
             }
 
             chunk.setVisible(visible);

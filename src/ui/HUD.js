@@ -797,7 +797,12 @@ export class HUD {
                 slot.appendChild(this.createItemElement(item));
                 slot.title = this.describeItem(item);
             }
-            slot.onclick = () => this.gameState.setSlot(i);
+            slot.addEventListener('pointerdown', (e) => {
+                if (e.button === 0 || e.pointerType === 'touch') {
+                    this.gameState.setSlot(i);
+                    e.preventDefault();
+                }
+            });
             container.appendChild(slot);
         }
     }

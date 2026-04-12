@@ -117,19 +117,24 @@ export class Renderer {
                     vec4 noon = texture2D(texNoon, skyUv);
                     vec4 night = texture2D(texNight, skyUv);
 
-                    // Base gradient (procedural fallback/blend)
-                    vec3 grad = mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0));
+                    // Atmospheric gradient — richer zenith, warm horizon
+                    float gradT = max(pow(max(h, 0.0), exponent), 0.0);
+                    vec3 grad = mix(bottomColor, topColor, gradT);
+
+                    // Subtle Rayleigh brightening near horizon
+                    float horizonGlow = pow(max(1.0 - abs(h), 0.0), 4.0);
+                    grad += bottomColor * horizonGlow * 0.25;
 
                     // AI Texture blend
                     vec3 texColor = mix(noon.rgb, night.rgb, mixFactor);
 
-                    // Final color combines texture with atmospheric gradient
-                    vec3 color = mix(grad, texColor, 0.85);
+                    // 35% texture, 65% procedural so dawn/dusk colours show clearly
+                    vec3 color = mix(grad, texColor, 0.35);
 
-                    // Horizon blend
+                    // Horizon tint blend
                     float horizon = 1.0 - abs(h);
-                    horizon = pow(max(horizon, 0.0), 12.0);
-                    color = mix(color, horizonColor, horizon * 0.4);
+                    horizon = pow(max(horizon, 0.0), 10.0);
+                    color = mix(color, horizonColor, horizon * 0.55);
 
                     // ── Sun in skybox shader ──────────────────────────────
                     vec3 sunDir = normalize(sunPos);
