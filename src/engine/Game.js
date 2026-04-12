@@ -40,10 +40,9 @@ export class Game {
         this.screenShake = 0;
         this.framePanel = null;
         this.features = { ...FEATURES };
-        this.features.workerChunkGeneration = true;
-        this.features.perfPanel = true;
         this.features.dynamicQualityAuto = this.settings.autoQuality;
         this.profiler = { physicsMs: 0, worldMs: 0, renderMs: 0, uiMs: 0 };
+        this.idleWorldTick = 0;
 
         this.hasStarted = false;
         this.isPaused = false;
@@ -164,7 +163,11 @@ export class Game {
             autoJump: true,
             autoQuality: true,
             renderDistance: 2,
-            selectedWorldSlot: 'slot-1'
+            selectedWorldSlot: 'slot-1',
+            shadowsEnabled: true,
+            fogDensityScale: 1.0,
+            perfPanelVisible: false,
+            resolutionScale: 1.0
         };
 
         try {
@@ -183,7 +186,11 @@ export class Game {
                 renderDistance: Number.isFinite(parsed.renderDistance)
                     ? Math.max(1, Math.min(6, Math.round(parsed.renderDistance)))
                     : defaults.renderDistance,
-                selectedWorldSlot: typeof parsed.selectedWorldSlot === 'string' ? parsed.selectedWorldSlot : defaults.selectedWorldSlot
+                selectedWorldSlot: typeof parsed.selectedWorldSlot === 'string' ? parsed.selectedWorldSlot : defaults.selectedWorldSlot,
+                shadowsEnabled: parsed.shadowsEnabled !== undefined ? Boolean(parsed.shadowsEnabled) : defaults.shadowsEnabled,
+                fogDensityScale: Number.isFinite(parsed.fogDensityScale) ? parsed.fogDensityScale : defaults.fogDensityScale,
+                perfPanelVisible: parsed.perfPanelVisible !== undefined ? Boolean(parsed.perfPanelVisible) : defaults.perfPanelVisible,
+                resolutionScale: Number.isFinite(parsed.resolutionScale) ? parsed.resolutionScale : defaults.resolutionScale
             };
         } catch {
             return defaults;
@@ -227,27 +234,82 @@ export class Game {
     }
 
     renderWorldList() {
-        const list = document.getElementById('title-world-list');
+        const list = document.getElementById('world-list-container');
         if (!list) return;
         list.innerHTML = '';
 
-        for (const slotId of this.getWorldSlotIds()) {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'title-world-item';
-            if (slotId === this.selectedWorldSlot) button.classList.add('active');
+        const slotLabel = document.getElementById('create-slot-label');
+        if (slotLabel) slotLabel.textContent = this.selectedWorldSlot.toUpperCase();
 
+        const icons = ['???', '??', '???', '???', '??'];
+        for (const [idx, slotId] of this.getWorldSlotIds().entries()) {
+            const card = document.createElement('div');
+            card.className = 'ni-world-card';
+            if (slotId === this.selectedWorldSlot) card.classList.add('active');
             const summary = this.readWorldSlotSummary(slotId);
+            const icon = icons[idx % icons.length];
             if (summary?.exists) {
-                const when = summary.savedAt ? new Date(summary.savedAt).toLocaleString() : 'Unknown';
-                button.innerHTML = `<strong>${slotId.toUpperCase()}</strong><span>Seed ${summary.seed} | ${summary.mode} | ${when}</span>`;
+                const when = summary.savedAt ? new Date(summary.savedAt).toLocaleDateString() : 'N/A';
+                card.innerHTML = `
+                    <div class="ni-world-card-icon">${icon}</div>
+                    <div class="ni-world-name">${slotId.toUpperCase()}</div>
+                    <div class="ni-world-meta">${summary.mode} · Seed: ${summary.seed}</div>
+                    <div class="ni-world-meta">${when}</div>
+                `;
             } else {
-                button.innerHTML = `<strong>${slotId.toUpperCase()}</strong><span>Empty slot</span>`;
+                card.innerHTML = `
+                    <div class="ni-world-card-icon" style="opacity: 0.3;">🌑</div>
+                    <div class="ni-world-name" style="opacity: 0.5;">${slotId.toUpperCase()}</div>
+                    <div class="ni-world-meta">Empty Space</div>
+                    <div class="ni-world-meta">Unexplored</div>
+                `;
             }
 
-            button.addEventListener('click', () => this.selectWorldSlot(slotId));
-            list.appendChild(button);
+            card.addEventListener('click', () => this.selectWorldSlot(slotId));
+            list.appendChild(card);
         }
+        this.refreshTitleMenuState();
+    }
+
+    refreshTitleMenuState() {
+        const summary = this.readWorldSlotSummary(this.selectedWorldSlot);
+        const hasSave = Boolean(summary?.exists);
+        const playBtn = document.getElementById('btn-play-world');
+        const deleteBtn = document.getElementById('btn-delete-world');
+        const createBtn = document.getElementById('btn-start');
+        if (playBtn) {
+            playBtn.disabled = !hasSave;
+            playBtn.style.opacity = hasSave ? '1' : '0.55';
+            playBtn.title = hasSave ? 'Play the selected saved world' : 'Select a slot with a saved world';
+        }
+        if (deleteBtn) {
+            deleteBtn.disabled = !hasSave;
+            deleteBtn.style.opacity = hasSave ? '1' : '0.55';
+        }
+        if (createBtn) {
+            createBtn.textContent = hasSave ? 'Overwrite & Create' : 'Create World!';
+        }
+    }
+
+    deleteWorldSlot(slotId = this.selectedWorldSlot) {
+        const summary = this.readWorldSlotSummary(slotId);
+        if (!summary?.exists) {
+            this.setStatus(`No save in ${slotId.toUpperCase()} to delete.`, true);
+            return false;
+        }
+
+        const ok = window.confirm(`Delete ${slotId.toUpperCase()}? This cannot be undone.`);
+        if (!ok) return false;
+
+        localStorage.removeItem(this.getWorldSlotStorageKey(slotId));
+        if (slotId === this.selectedWorldSlot) {
+            this.selectedWorldSlot = slotId;
+            this.settings.selectedWorldSlot = slotId;
+            this.saveSettings();
+        }
+        this.renderWorldList();
+        this.setStatus(`Deleted ${slotId.toUpperCase()}.`);
+        return true;
     }
 
     setStatus(message, isError = false) {
@@ -298,8 +360,8 @@ export class Game {
 
         const btnSurvival = document.getElementById('btn-mode-survival');
         const btnCreative = document.getElementById('btn-mode-creative');
-        if (btnSurvival) btnSurvival.classList.toggle('active', nextMode === 'SURVIVAL');
-        if (btnCreative) btnCreative.classList.toggle('active', nextMode === 'CREATIVE');
+        if (btnSurvival) btnSurvival.classList.toggle('ni-mode-tab-active', nextMode === 'SURVIVAL');
+        if (btnCreative) btnCreative.classList.toggle('ni-mode-tab-active', nextMode === 'CREATIVE');
 
         if (!persist) return;
         this.settings.preferredMode = nextMode;
@@ -552,9 +614,11 @@ export class Game {
         this.hasStarted = true;
         this.isPaused = false;
         this.gameState.setPaused(false);
+        this.idleWorldTick = 0;
 
         this.showTitle(false);
         this.showPause(false);
+        this.showSettings(false);
         this.helpPanel.setState('playing');
         this.input.setPointerLock();
     }
@@ -564,6 +628,7 @@ export class Game {
         this.isPaused = false;
         this.hasStarted = false;
         this.gameState.setPaused(false);
+        this.idleWorldTick = 0;
 
         if (this.gameState.isInventoryOpen) this.gameState.toggleInventory();
         if (document.pointerLockElement) document.exitPointerLock();
@@ -571,6 +636,7 @@ export class Game {
         this.showPause(false);
         this.showSettings(false);
         this.showTitle(true);
+        this.renderWorldList();
         this.helpPanel.setState('title');
     }
 
@@ -578,6 +644,17 @@ export class Game {
         const overlay = document.getElementById('overlay');
         if (!overlay) return;
         overlay.style.display = visible ? 'flex' : 'none';
+        if (visible) {
+            this.renderWorldList();
+            this.setMenuScreen('title');
+
+            if (!this._niClockTick) {
+                this._niClockTick = setInterval(() => {
+                    const el = document.querySelector('.ni-time');
+                    if (el) el.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }, 1000);
+            }
+        }
     }
 
     showPause(visible) {
@@ -586,14 +663,39 @@ export class Game {
         pause.style.display = visible ? 'flex' : 'none';
     }
 
+    setMenuScreen(screen) {
+        // Updated
+        const screenIds = ['screen-title', 'screen-world-select', 'screen-world-create'];
+        const nextId = screen === 'world-select'
+            ? 'screen-world-select'
+            : (screen === 'world-create' ? 'screen-world-create' : 'screen-title');
+        for (const id of screenIds) {
+            const node = document.getElementById(id);
+            if (!node) continue;
+            node.classList.toggle('ni-screen-active', id === nextId);
+        }
+    }
+
+    isSettingsOpen() {
+        const panel = document.getElementById('settings-panel');
+        return Boolean(panel && panel.style.display !== 'none');
+    }
+
     showSettings(visible) {
         const panel = document.getElementById('settings-panel');
         if (!panel) return;
         panel.style.display = visible ? 'block' : 'none';
+        if (visible && this.isPaused) this.showPause(false);
     }
 
     togglePause() {
         if (!this.hasStarted) return;
+
+        if (this.isSettingsOpen()) {
+            this.showSettings(false);
+            if (this.isPaused) this.showPause(true);
+            return;
+        }
 
         if (this.gameState.isInventoryOpen) {
             this.gameState.toggleInventory();
@@ -609,6 +711,7 @@ export class Game {
         this.isPaused = true;
         this.gameState.setPaused(true);
         this.cancelMining();
+        this.showSettings(false);
         this.showPause(true);
         this.helpPanel.setState('paused');
 
@@ -669,9 +772,18 @@ export class Game {
         const btnStart = document.getElementById('btn-start');
         const btnModeSurvival = document.getElementById('btn-mode-survival');
         const btnModeCreative = document.getElementById('btn-mode-creative');
+        const btnRandomSeed = document.getElementById('btn-title-random-seed');
+        const btnToWorlds = document.getElementById('btn-to-worlds');
+        const btnToSettings = document.getElementById('btn-to-settings');
+        const btnPlayWorld = document.getElementById('btn-play-world');
+        const btnNewWorld = document.getElementById('btn-new-world');
+        const btnDeleteWorld = document.getElementById('btn-delete-world');
+        const btnWorldsBack = document.getElementById('btn-worlds-back');
+        const btnCreateBack = document.getElementById('btn-create-back');
+
+        // Backward-compatible IDs kept for legacy templates.
         const btnOptions = document.getElementById('btn-options');
         const btnTitleLoad = document.getElementById('btn-title-load');
-        const btnRandomSeed = document.getElementById('btn-title-random-seed');
 
         const btnClose = document.getElementById('btn-settings-close');
         const sensitivityInput = document.getElementById('setting-sensitivity');
@@ -696,12 +808,45 @@ export class Game {
         const btnPauseLoad = document.getElementById('btn-pause-load');
         const btnBackTitle = document.getElementById('btn-back-title');
 
+        const shadowsInput = document.getElementById('setting-shadows');
+        const fogInput = document.getElementById('setting-fog');
+        const fogLabel = document.getElementById('setting-fog-value');
+        const perfPanelInput = document.getElementById('setting-perf-panel');
+        const btnExportSave = document.getElementById('btn-export-save');
+        const btnResetSettings = document.getElementById('btn-reset-settings');
+        const resolutionInput = document.getElementById('setting-resolution');
+        const resolutionLabel = document.getElementById('setting-resolution-value');
+
         if (seedInput) seedInput.value = this.world.seedString;
+
+        const openWorldSelect = () => {
+            this.renderWorldList();
+            this.setMenuScreen('world-select');
+        };
+        const openWorldCreate = () => {
+            this.renderWorldList();
+            this.setMenuScreen('world-create');
+        };
+        const playSelectedWorld = () => {
+            const loaded = this.loadWorldLocal(this.selectedWorldSlot);
+            if (loaded) {
+                this.startGame({ skipSeedApply: true, preserveCurrentMode: true });
+                return;
+            }
+            this.setStatus(`No save in ${this.selectedWorldSlot.toUpperCase()}.`, true);
+            this.setMenuScreen('world-create');
+        };
 
         if (btnStart) {
             btnStart.addEventListener('click', () => {
-                const loaded = this.loadWorldLocal(this.selectedWorldSlot, { silent: true });
-                this.startGame({ skipSeedApply: loaded, preserveCurrentMode: loaded });
+                const summary = this.readWorldSlotSummary(this.selectedWorldSlot);
+                if (summary?.exists) {
+                    const confirmed = window.confirm(
+                        `${this.selectedWorldSlot.toUpperCase()} already has a world. Create a new one with this seed and overwrite it on next save?`
+                    );
+                    if (!confirmed) return;
+                }
+                this.startGame({ skipSeedApply: false, preserveCurrentMode: false });
             });
         }
 
@@ -716,11 +861,22 @@ export class Game {
             btnRandomSeed.addEventListener('click', () => this.randomizeSeed());
         }
 
-        if (btnTitleLoad) {
-            btnTitleLoad.addEventListener('click', () => {
-                const loaded = this.loadWorldLocal(this.selectedWorldSlot);
-                if (loaded) this.startGame({ skipSeedApply: true, preserveCurrentMode: true });
+        if (btnToWorlds) btnToWorlds.addEventListener('click', openWorldSelect);
+        if (btnWorldsBack) btnWorldsBack.addEventListener('click', () => this.setMenuScreen('title'));
+        if (btnNewWorld) btnNewWorld.addEventListener('click', openWorldCreate);
+        if (btnCreateBack) btnCreateBack.addEventListener('click', openWorldSelect);
+        if (btnPlayWorld) btnPlayWorld.addEventListener('click', playSelectedWorld);
+        if (btnDeleteWorld) btnDeleteWorld.addEventListener('click', () => this.deleteWorldSlot(this.selectedWorldSlot));
+
+        if (btnToSettings) {
+            btnToSettings.addEventListener('click', () => {
+                this.showSettings(true);
+                this.setStatus('Settings opened.');
             });
+        }
+
+        if (btnTitleLoad) {
+            btnTitleLoad.addEventListener('click', playSelectedWorld);
         }
 
         if (sensitivityInput) {
@@ -774,10 +930,11 @@ export class Game {
             renderDistanceInput.addEventListener('input', () => {
                 const value = Math.max(1, Math.min(6, Math.round(Number(renderDistanceInput.value))));
                 this.settings.renderDistance = value;
-                this.world.setRenderDistance(value);
+                const effective = this.getEffectiveRenderDistanceForTier(this.qualityTier);
+                this.world.setRenderDistance(effective);
                 this.saveSettings();
                 if (renderDistanceLabel) renderDistanceLabel.textContent = String(value);
-                this.setStatus(`Render Distance: ${value}`);
+                this.setStatus(`Render Distance: ${value} (effective ${effective})`);
             });
         }
 
@@ -793,7 +950,8 @@ export class Game {
                 this.saveSettings();
                 this.applyQualityTier(tier);
                 syncQualityBtns();
-                this.setStatus(`Quality: ${tier.charAt(0).toUpperCase() + tier.slice(1)}`);
+                const effective = this.getEffectiveRenderDistanceForTier(tier);
+                this.setStatus(`Quality: ${tier.charAt(0).toUpperCase() + tier.slice(1)} (render ${effective})`);
             });
         });
         syncQualityBtns();
@@ -844,6 +1002,82 @@ export class Game {
             });
         }
 
+        // NI Settings Tab Switching
+        const tabLinks = document.querySelectorAll('.ni-tab-link');
+        tabLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                const target = link.dataset.tab;
+                tabLinks.forEach(l => l.classList.remove('active'));
+                link.classList.add('active');
+                
+                document.querySelectorAll('.ni-tab-pane').forEach(pane => {
+                    pane.classList.toggle('active', pane.id === target);
+                });
+            });
+        });
+
+        // --- Shadows ---
+        if (shadowsInput) {
+            shadowsInput.checked = this.settings.shadowsEnabled;
+            shadowsInput.addEventListener('change', () => {
+                this.settings.shadowsEnabled = shadowsInput.checked;
+                this.renderer.toggleShadows(shadowsInput.checked);
+                this.saveSettings();
+                this.setStatus(`Shadows: ${shadowsInput.checked ? 'ON' : 'OFF'}`);
+            });
+        }
+
+        // --- Fog ---
+        if (fogInput) {
+            fogInput.value = String(this.settings.fogDensityScale);
+            if (fogLabel) fogLabel.textContent = Number(this.settings.fogDensityScale).toFixed(1);
+            fogInput.addEventListener('input', () => {
+                const val = Number(fogInput.value);
+                this.settings.fogDensityScale = val;
+                this.renderer.setFogDensityScale(val);
+                this.saveSettings();
+                if (fogLabel) fogLabel.textContent = val.toFixed(1);
+            });
+        }
+
+        // --- Perf Panel ---
+        if (perfPanelInput) {
+            perfPanelInput.checked = this.settings.perfPanelVisible;
+            perfPanelInput.addEventListener('change', () => {
+                this.settings.perfPanelVisible = perfPanelInput.checked;
+                this.debugVisible = perfPanelInput.checked;
+                if (this.framePanel) this.framePanel.dom.style.display = this.debugVisible ? 'block' : 'none';
+                this.saveSettings();
+            });
+        }
+
+        // --- System Buttons ---
+        if (btnExportSave) {
+            btnExportSave.addEventListener('click', () => this.exportWorldFile());
+        }
+        if (btnResetSettings) {
+            btnResetSettings.addEventListener('click', () => {
+                if (window.confirm('Reset all settings to default?')) {
+                    localStorage.removeItem('arlocraft-settings');
+                    window.location.reload();
+                }
+            });
+        }
+
+        // --- Resolution ---
+        if (resolutionInput) {
+            resolutionInput.value = String(this.settings.resolutionScale);
+            if (resolutionLabel) resolutionLabel.textContent = `${Number(this.settings.resolutionScale).toFixed(1)}x`;
+            resolutionInput.addEventListener('input', () => {
+                const val = Number(resolutionInput.value);
+                this.settings.resolutionScale = val;
+                this.renderer.setResolutionScale(val);
+                this.saveSettings();
+                if (resolutionLabel) resolutionLabel.textContent = `${val.toFixed(1)}x`;
+                this.setStatus(`Resolution Scale: ${val.toFixed(1)}x`);
+            });
+        }
+
         const canvas = this.renderer.instance.domElement;
         canvas.addEventListener('click', () => {
             if (!this.hasStarted || this.isPaused || this.gameState.isInventoryOpen || this.input.isLocked) return;
@@ -851,14 +1085,22 @@ export class Game {
         });
 
         this.setMenuMode(this.selectedStartMode, false);
-        this.world.setRenderDistance(this.settings.renderDistance);
+        this.world.setRenderDistance(this.getEffectiveRenderDistanceForTier(this.settings.qualityTierPref ?? this.qualityTier));
         this.renderWorldList();
+        this.setMenuScreen('title');
     }
     async init() {
         await this.physics.init();
         this.applyQualityTier(this.settings.qualityTierPref ?? 'low');
         this.camera.instance.fov = this.settings.fov ?? 75;
         this.camera.instance.updateProjectionMatrix();
+        this.renderer.toggleShadows(this.settings.shadowsEnabled);
+        this.renderer.setFogDensityScale(this.settings.fogDensityScale);
+        this.renderer.setResolutionScale(this.settings.resolutionScale);
+        if (this.settings.perfPanelVisible) {
+            this.debugVisible = true;
+            if (this.framePanel) this.framePanel.dom.style.display = 'block';
+        }
         this.hud.init();
         this.initPerfPanel();
 
@@ -1015,6 +1257,18 @@ export class Game {
         ].join('\n');
     }
 
+    getRenderDistanceCapForTier(tier) {
+        if (tier === 'low') return 2;
+        if (tier === 'high') return 6;
+        return 4;
+    }
+
+    getEffectiveRenderDistanceForTier(tier = this.qualityTier) {
+        const requested = Math.max(1, Math.min(6, Number(this.settings?.renderDistance) || 2));
+        const cap = this.getRenderDistanceCapForTier(tier);
+        return Math.max(1, Math.min(cap, requested));
+    }
+
     applyQualityTier(tier) {
         if (tier === this.qualityTier && this.qualityInitialized) return;
         this.qualityTier = tier;
@@ -1024,17 +1278,15 @@ export class Game {
         const basePixelRatio = Math.min(window.devicePixelRatio || 1, 1);
         if (tier === 'low') {
             this.renderer.instance.setPixelRatio(basePixelRatio * 0.35);
-            this.world.setRenderDistance(1);
             this.camera.instance.far = 72;
         } else if (tier === 'balanced') {
             this.renderer.instance.setPixelRatio(basePixelRatio * 0.48);
-            this.world.setRenderDistance(2);
             this.camera.instance.far = 108;
         } else {
             this.renderer.instance.setPixelRatio(basePixelRatio * 0.6);
-            this.world.setRenderDistance(3);
             this.camera.instance.far = 140;
         }
+        this.world.setRenderDistance(this.getEffectiveRenderDistanceForTier(tier));
         this.camera.instance.updateProjectionMatrix();
         this.onResize();
     }
@@ -1064,7 +1316,7 @@ export class Game {
         if (target === this.qualityTier) return;
         this.applyQualityTier(target);
         this.performanceSampler.lastAdjust = now;
-        this.setStatus(`Auto quality: ${target.toUpperCase()} (${Math.round(fps)} FPS)`);
+        this.setStatus(`Auto quality: ${target.toUpperCase()} (${Math.round(fps)} FPS, render ${this.getEffectiveRenderDistanceForTier(target)})`);
     }
 
     handlePrimaryAction(delta) {
@@ -1126,11 +1378,12 @@ export class Game {
 
         this.renderer.sun.position.set(
             Math.cos(angle) * sunDistance,
-            Math.max(8, sunHeight * 110),
+            sunHeight * sunDistance,
             70
         );
 
         const daylight = Math.max(0.08, Math.min(1, (sunHeight + 0.3)));
+        this.renderer.setDaylightLevel(daylight);
         if (this.features.dynamicLighting) {
             this.renderer.updateEnvironmentLighting(daylight, this.getPlayerPosition());
         }
@@ -1175,6 +1428,9 @@ export class Game {
 
         let playerPos = this.getPlayerPosition();
         const canSimulate = this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen;
+        const shouldRunPassiveWorld = !canSimulate;
+        let worldDelta = delta;
+        let runWorldThisFrame = canSimulate;
 
         if (canSimulate) {
             const physicsStart = performance.now();
@@ -1200,10 +1456,26 @@ export class Game {
             }
         } else {
             this.profiler.physicsMs = 0;
+            this.idleWorldTick = (this.idleWorldTick + 1) % 120;
+            if (!this.hasStarted) {
+                runWorldThisFrame = (this.idleWorldTick % 24) === 0;
+                worldDelta = 1 / 30;
+            } else if (this.isPaused) {
+                runWorldThisFrame = (this.idleWorldTick % 10) === 0;
+                worldDelta = Math.min(1 / 20, delta * 3);
+            } else {
+                runWorldThisFrame = (this.idleWorldTick % 3) === 0;
+                worldDelta = Math.min(1 / 24, delta * 2);
+            }
+            if (this.hasStarted) this.cancelMining();
+        }
+
+        if (runWorldThisFrame || (shouldRunPassiveWorld && this.world.pendingChunkLoads.length > 0)) {
             const worldStart = performance.now();
-            this.world.update(playerPos, delta);
+            this.world.update(playerPos, worldDelta);
             this.profiler.worldMs = performance.now() - worldStart;
-            this.cancelMining();
+        } else if (!canSimulate) {
+            this.profiler.worldMs = 0;
         }
 
         const uiStart = performance.now();
@@ -1337,3 +1609,4 @@ export class Game {
         }
     }
 }
+

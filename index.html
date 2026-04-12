@@ -5,11 +5,21 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ArloCraft</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { corePlugins: { preflight: false } }</script>
 </head>
 <body>
     <div id="app"></div>
 
     <div id="hud">
+        <div id="hud-headline">
+            <div id="mode-pill" class="hud-pill">SURVIVAL</div>
+            <div id="world-time-pill" class="hud-pill">DAWN</div>
+            <div id="biome-pill" class="hud-pill">PLAINS</div>
+        </div>
+
         <div id="selected-item-readout">
             <div id="selected-item-name">STONE x64</div>
             <div id="selected-item-stats">Block | Hardness 2 | XP 5</div>
@@ -43,6 +53,7 @@
     <div id="minimap">
         <canvas id="minimap-canvas" width="180" height="180"></canvas>
         <div id="minimap-caption">Minimap [M]</div>
+        <div id="minimap-context">Seed arlocraft</div>
     </div>
 
     <div id="crosshair"></div>
@@ -89,134 +100,219 @@
         </div>
     </div>
 
-    <div id="overlay" class="screen screen-title">
-        <div class="title-bg-orb title-bg-orb-a"></div>
-        <div class="title-bg-orb title-bg-orb-b"></div>
-        <div id="title-card">
-            <div id="title-art">
-                <img src="icons/items/arlo.png" alt="Arlo" />
-            </div>
-            <div id="title-copy">
-                <h1 id="title-main">ARLOCRAFT</h1>
-                <div id="title-sub">The world has fallen. Mine, build, and restore what was lost.</div>
-                <div id="title-lore">A viral corruption spreads across the land. You are the last builder - uncover ruins, cleanse the blight, and bring light back to a broken world.</div>
+    <!-- ═══════════════════ MENU OVERLAY ═══════════════════ -->
+    <div id="overlay" style="display:none; position:fixed; inset:0; z-index:100;">
+
+        <!-- ── SCREEN: Title ─────────────────────────────────── -->
+        <div id="screen-title" class="mc-screen mc-screen-active">
+            <div class="mc-bg-orb mc-orb-a"></div>
+            <div class="mc-bg-orb mc-orb-b"></div>
+            <div class="mc-bg-orb mc-orb-c"></div>
+
+            <div id="ni-profile-bar">
+                <div class="ni-profile">
+                    <img src="faces/arlo_happy.png" class="ni-avatar" />
+                    <span class="ni-username">Arlo</span>
+                </div>
+                <div class="ni-time" id="ni-menu-time">12:00</div>
             </div>
 
-            <div id="title-seed-row">
-                <label for="seed-input">Seed</label>
-                <input id="seed-input" type="text" value="arlocraft" />
+            <div class="ni-hero">
+                <img src="icons/items/arlo.png" alt="Arlo" class="ni-hero-img" />
+                <h1 class="ni-title">ARLOCRAFT</h1>
+                <p class="ni-subtitle">Ported Beta 1.7.3 Terrain & Modern UI</p>
             </div>
 
-            <div id="gamemode-indicator">SURVIVAL MODE</div>
-            <div id="title-mode-row">
-                <span class="mode-label">Mode</span>
-                <button class="btn btn-mode active" id="btn-mode-survival" type="button">Survival</button>
-                <button class="btn btn-mode" id="btn-mode-creative" type="button">Creative</button>
-            </div>
+            <nav class="ni-main-nav">
+                <div class="ni-tile-row">
+                    <button class="ni-tile ni-tile-blue" id="btn-to-worlds">
+                        <div class="ni-tile-icon">&#128100;</div>
+                        <span>Singleplayer</span>
+                    </button>
+                    <button class="ni-tile ni-tile-red" id="btn-to-settings">
+                        <div class="ni-tile-icon">&#9881;</div>
+                        <span>Options</span>
+                    </button>
+                    <button class="ni-tile ni-tile-muted" disabled>
+                        <div class="ni-tile-icon">&#128274;</div>
+                        <span>Quit</span>
+                    </button>
+                </div>
+            </nav>
 
-            <div id="title-worlds">
-                <div id="title-worlds-head">Worlds</div>
-                <div id="title-world-list" aria-live="polite"></div>
-            </div>
-
-            <div id="title-buttons">
-                <button class="btn btn-hero" id="btn-start">Play Selected World</button>
-                <button class="btn" id="btn-title-load">Load Selected</button>
-                <button class="btn" id="btn-title-random-seed">Random Seed</button>
-                <button class="btn" id="btn-options">Settings / Save</button>
-            </div>
-
-            <div id="title-controls">
-                WASD - Move | Mouse - Look | LMB - Mine/Attack | RMB - Place/Interact<br>
-                E - Inventory | F - Offhand | Q - Dig Down | ESC - Pause
-            </div>
-        </div>
-    </div>
-
-    <div id="pause-overlay" class="screen screen-pause" style="display: none;">
-        <div id="pause-panel">
-            <h2>Paused</h2>
-            <div class="pause-sub">Take a breath. You are safe here.</div>
-            <div class="pause-actions">
-                <button id="btn-resume" class="btn btn-hero">Resume</button>
-                <button id="btn-pause-settings" class="btn">Settings</button>
-                <button id="btn-pause-save" class="btn">Save</button>
-                <button id="btn-pause-load" class="btn">Load</button>
-                <button id="btn-back-title" class="btn">Back To Title</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="settings-panel" style="display: none;">
-        <div class="settings-header">
-            <h2>Settings</h2>
-            <button class="btn settings-close-x" id="btn-settings-close" aria-label="Close">&#x2715;</button>
+            <div class="ni-footer-hint">ArloCraft Alpha · antonretro</div>
         </div>
 
-        <div class="settings-section">
-            <div class="settings-section-title">Controls</div>
-            <div class="setting-row">
-                <label for="setting-sensitivity">Mouse Sensitivity</label>
-                <input id="setting-sensitivity" type="range" min="0.0007" max="0.0030" step="0.0001" value="0.00145" />
-                <span id="setting-sensitivity-value" class="setting-val">0.0015</span>
-            </div>
-            <div class="setting-row setting-row-check">
-                <label for="setting-invert-y">Invert Y-Axis</label>
-                <label class="toggle-switch">
-                    <input id="setting-invert-y" type="checkbox" />
-                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                </label>
-            </div>
-            <div class="setting-row setting-row-check">
-                <label for="setting-auto-jump">Auto Jump</label>
-                <label class="toggle-switch">
-                    <input id="setting-auto-jump" type="checkbox" />
-                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                </label>
-            </div>
-        </div>
+        <!-- ── SCREEN: World Select ──────────────────────────── -->
+        <div id="screen-world-select" class="ni-screen ni-glass">
+            <div class="ni-container">
+                <div class="ni-header">
+                    <h2 class="ni-heading">Select World</h2>
+                </div>
+                
+                <div id="world-list-container" class="ni-grid-worlds" aria-live="polite">
+                    <!-- Cards will be injected by Game.js -->
+                </div>
 
-        <div class="settings-section">
-            <div class="settings-section-title">Graphics</div>
-            <div class="setting-row">
-                <label for="setting-fov">Field of View</label>
-                <input id="setting-fov" type="range" min="60" max="110" step="1" value="75" />
-                <span id="setting-fov-value" class="setting-val">75°</span>
-            </div>
-            <div class="setting-row">
-                <label for="setting-render-distance">Render Distance</label>
-                <input id="setting-render-distance" type="range" min="1" max="6" step="1" value="2" />
-                <span id="setting-render-distance-value" class="setting-val">2</span>
-            </div>
-            <div class="setting-row setting-row-buttons">
-                <label>Quality</label>
-                <div class="btn-group">
-                    <button class="btn btn-quality active" id="btn-quality-low" data-tier="low">Low</button>
-                    <button class="btn btn-quality" id="btn-quality-balanced" data-tier="balanced">Balanced</button>
-                    <button class="btn btn-quality" id="btn-quality-high" data-tier="high">High</button>
+                <div class="ni-footer-actions">
+                    <button class="ni-btn ni-btn-blue" id="btn-play-world">Play Selected</button>
+                    <button class="ni-btn" id="btn-new-world">Create New</button>
+                    <button class="ni-btn ni-btn-red" id="btn-delete-world">Delete</button>
+                    <button class="ni-btn" id="btn-worlds-back">Back</button>
                 </div>
             </div>
-            <div class="setting-row setting-row-check">
-                <label for="setting-auto-quality">Auto Quality</label>
-                <label class="toggle-switch">
-                    <input id="setting-auto-quality" type="checkbox" />
-                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                </label>
+        </div>
+
+        <!-- ── SCREEN: World Create ──────────────────────────── -->
+        <div id="screen-world-create" class="ni-screen ni-glass">
+            <div class="ni-panel-modern">
+                <h2 class="ni-heading">New Adventure</h2>
+
+                <div class="ni-form-group">
+                    <label class="ni-label" for="seed-input">World Seed</label>
+                    <div class="ni-input-row">
+                        <input id="seed-input" type="text" value="arlocraft" class="ni-input-modern" />
+                        <button class="ni-btn ni-btn-sm" id="btn-title-random-seed">Auto</button>
+                    </div>
+                </div>
+
+                <div class="ni-form-group">
+                    <label class="ni-label">Game Mode</label>
+                    <div id="gamemode-indicator" class="ni-mode-label">SURVIVAL</div>
+                    <div class="ni-mode-selection">
+                        <button class="ni-mode-tab ni-mode-tab-active" id="btn-mode-survival">Survival</button>
+                        <button class="ni-mode-tab" id="btn-mode-creative">Creative</button>
+                    </div>
+                </div>
+
+                <div class="ni-creation-footer">
+                    <div class="ni-slot-hint">Location: <span id="create-slot-label">SLOT-1</span></div>
+                    <div class="ni-action-row">
+                        <button class="ni-btn ni-btn-blue" id="btn-start">Create World</button>
+                        <button class="ni-btn" id="btn-create-back">Cancel</button>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="settings-section">
-            <div class="settings-section-title">World</div>
-            <div class="setting-actions">
-                <button class="btn" id="btn-save-world">&#128190; Save</button>
-                <button class="btn" id="btn-load-world">&#128193; Load</button>
-                <button class="btn" id="btn-export-world">&#8599; Export</button>
-                <button class="btn" id="btn-import-world">&#8595; Import</button>
+    </div>
+    <!-- ════════════════ END MENU OVERLAY ════════════════════ -->
+
+    <div id="pause-overlay" class="ni-screen ni-glass" style="display: none;">
+        <div id="ni-pause-container">
+            <div id="ni-pause-sidebar">
+                <div class="ni-pause-user">
+                    <img src="faces/arlo_happy.png" class="ni-avatar" />
+                    <div class="ni-pause-info">
+                        <span class="ni-username">Arlo</span>
+                        <span class="ni-pause-status">Exploring...</span>
+                    </div>
+                </div>
+                <nav class="ni-pause-nav">
+                    <button id="btn-resume" class="ni-pause-btn">
+                        <span class="ni-pause-icon">▶</span> Resume
+                    </button>
+                    <button id="btn-pause-save" class="ni-pause-btn">
+                        <span class="ni-pause-icon">💾</span> Save
+                    </button>
+                    <button id="btn-pause-settings" class="ni-pause-btn">
+                        <span class="ni-pause-icon">⚙</span> Options
+                    </button>
+                    <button id="btn-back-title" class="ni-pause-btn">
+                        <span class="ni-pause-icon">🏠</span> Title
+                    </button>
+                </nav>
+            </div>
+            <div id="ni-pause-details">
+                <div id="ni-pause-clock">12:00 PM</div>
+                <div id="ni-pause-hint">Press [ESC] to resume quickly.</div>
             </div>
         </div>
+    </div>
 
-        <input id="import-world-input" type="file" accept=".json,application/json" style="display: none;" />
-        <div id="settings-status"></div>
+    <div id="settings-panel" class="ni-screen ni-glass" style="display: none;">
+        <div id="ni-settings-container">
+            <div id="ni-settings-sidebar">
+                <div class="ni-settings-header">
+                    <h2 class="ni-settings-title">Options</h2>
+                </div>
+                <div class="ni-settings-tabs">
+                    <button class="ni-tab-link active" data-tab="tab-general">General</button>
+                    <button class="ni-tab-link" data-tab="tab-video">Graphics</button>
+                    <button class="ni-tab-link" data-tab="tab-persistence">System</button>
+                </div>
+                <button class="ni-btn ni-btn-red" id="btn-settings-close">Close</button>
+            </div>
+
+            <div id="ni-settings-content">
+                <div class="ni-tab-pane active" id="tab-general">
+                    <h3 class="ni-tab-heading">Controls</h3>
+                    <div class="ni-settings-grid">
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Sensitivity</label>
+                            <input id="setting-sensitivity" type="range" min="0.0001" max="0.005" step="0.00005" />
+                            <span id="setting-sensitivity-value" class="ni-val">0.00145</span>
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Invert Y Axis</label>
+                            <input id="setting-invert-y" type="checkbox" class="ni-check" />
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Auto Jump</label>
+                            <input id="setting-auto-jump" type="checkbox" class="ni-check" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ni-tab-pane" id="tab-video">
+                    <h3 class="ni-tab-heading">Graphics</h3>
+                    <div class="ni-settings-grid">
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Render Distance</label>
+                            <input id="setting-render-distance" type="range" min="4" max="16" step="1" />
+                            <span id="setting-render-distance-value" class="ni-val">8</span>
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Dynamic Shadows</label>
+                            <input id="setting-shadows" type="checkbox" class="ni-check" />
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Fog Density</label>
+                            <input id="setting-fog" type="range" min="0" max="2" step="0.1" />
+                            <span id="setting-fog-value" class="ni-val">1.0</span>
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Resolution Scale (HD)</label>
+                            <input id="setting-resolution" type="range" min="0.5" max="2.0" step="0.1" />
+                            <span id="setting-resolution-value" class="ni-val">1.0x</span>
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Auto Quality</label>
+                            <input id="setting-auto-quality" type="checkbox" class="ni-check" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ni-tab-pane" id="tab-persistence">
+                    <h3 class="ni-tab-heading">System</h3>
+                    <div class="ni-settings-grid">
+                        <div class="ni-setting-box full-width">
+                            <label class="ni-label">World Management</label>
+                            <div class="ni-btn-group">
+                                <button class="ni-btn ni-btn-sm" id="btn-export-save">Export Save</button>
+                                <button class="ni-btn ni-btn-sm ni-btn-red" id="btn-reset-settings">Reset Settings</button>
+                            </div>
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Perf Overlay</label>
+                            <input id="setting-perf-panel" type="checkbox" class="ni-check" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="settings-status" class="ni-status-bar">Ready</div>
+    </div>
     </div>
 
     <pre id="debug-overlay"></pre>

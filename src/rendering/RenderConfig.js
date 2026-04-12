@@ -25,6 +25,29 @@ export const FOG_SETTINGS = {
     maxDensity: 0.045
 };
 
+export const ATMOSPHERIC_COLORS = {
+    DAY: {
+        top: 0x5ea4ff,
+        bottom: 0xbfe0ff,
+        sun: 0xffffd0
+    },
+    NIGHT: {
+        top: 0x041029,
+        bottom: 0x05070f,
+        sun: 0x334466 // Moon light
+    },
+    DAWN: {
+        top: 0x2b3d68,
+        bottom: 0xff9a5c, // Orange horizon
+        sun: 0xffccaa
+    },
+    DUSK: {
+        top: 0x1a1a3a,
+        bottom: 0xcc6633, // Deep sunset
+        sun: 0xff7733
+    }
+};
+
 export function computeFogDensity(daylight, submerged = false) {
     const clampedDaylight = Math.max(0.05, Math.min(1, Number(daylight) || 1));
     let density = FOG_SETTINGS.nightDensity + ((FOG_SETTINGS.dayDensity - FOG_SETTINGS.nightDensity) * clampedDaylight);

@@ -68,6 +68,11 @@ export class Input {
             if (preventCodes.has(event.code)) event.preventDefault();
 
             if (event.code === 'Escape') {
+                if (this.game.isSettingsOpen?.()) {
+                    this.game.showSettings(false);
+                    if (this.game.isPaused) this.game.showPause(true);
+                    return;
+                }
                 if (this.game.hasStarted) this.game.togglePause();
                 return;
             }

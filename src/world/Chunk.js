@@ -24,6 +24,30 @@ const CIVIC_STRUCTURE_POOL = [
     'windmill_outpost'
 ];
 
+const BIOME_GROUND_LIFE = {
+    plains: ['flower_dandelion', 'flower_rose'],
+    forest: ['mushroom_brown', 'blueberry', 'strawberry', 'flower_rose'],
+    meadow: ['flower_dandelion', 'flower_rose', 'blueberry'],
+    swamp: ['mushroom_brown', 'blueberry'],
+    desert: ['tomato'],
+    badlands: ['carrot'],
+    canyon: ['carrot'],
+    highlands: ['potato'],
+    alpine: ['potato'],
+    tundra: ['potato']
+};
+
+const TREE_PROFILES = {
+    oak: { trunk: 'wood', leaves: 'leaves', height: 5, radius: 2, style: 'round' },
+    birch: { trunk: 'wood_birch', leaves: 'leaves_birch', height: 6, radius: 2, style: 'round' },
+    pine: { trunk: 'wood_pine', leaves: 'leaves_pine', height: 7, radius: 2, style: 'cone' },
+    palm: { trunk: 'wood_palm', leaves: 'leaves_palm', height: 6, radius: 3, style: 'palm' },
+    willow: { trunk: 'wood_willow', leaves: 'leaves_willow', height: 5, radius: 3, style: 'willow' },
+    cherry: { trunk: 'wood_cherry', leaves: 'leaves_cherry', height: 5, radius: 3, style: 'round' },
+    redwood: { trunk: 'wood_redwood', leaves: 'leaves_redwood', height: 11, radius: 2, style: 'spire' },
+    crystal: { trunk: 'wood_crystal', leaves: 'leaves_crystal', height: 7, radius: 2, style: 'crystal' }
+};
+
 export class Chunk {
     constructor(world, cx, cz) {
         this.world = world;
@@ -191,16 +215,16 @@ export class Chunk {
             this.placeTree(wx, terrainHeight + 1, wz, biome);
         }
 
-        // --- DECO & CLOUDS ---
+        // --- DECO & GROUND LIFE ---
         if (!inForcedSpawnZone && !isHighAltitude && terrainHeight > waterLevel && this.world.blockMap.get(this.world.getKey(wx, terrainHeight, wz)) !== 'water') {
             const decoHash = this.world.hash2D(wx * 22, wz * 33);
             if (decoHash < 0.08) {
                 const decoId = decoHash < 0.06 ? 'grass_tall' : (decoHash < 0.07 ? 'flower_rose' : 'flower_dandelion');
                 this.addGeneratedBlock(wx, terrainHeight + 1, wz, decoId);
+            } else {
+                this.placeGroundLife(wx, terrainHeight, wz, biome);
             }
         }
-
-        // Clouds are rendered by the sky system, not as collidable world blocks.
     }
 
     placeRandomStructure(x, y, z, biome) {
@@ -245,47 +269,125 @@ export class Chunk {
         }
     }
 
-    placeTree(x, y, z, biome) {
+    chooseTreeType(x, z, biome) {
         const hash = this.world.hash2D(x, z);
-        let type = 'oak';
-        
-        if (biome.id === 'desert') type = 'palm';
-        else if (biome.id === 'forest') type = hash > 0.6 ? 'birch' : (hash > 0.3 ? 'oak' : 'pine');
-        else if (biome.id === 'swamp') type = 'willow';
-        else if (biome.id === 'plains' || biome.id === 'meadow') type = hash > 0.8 ? 'cherry' : 'oak';
-        else if (biome.id === 'highlands') type = hash > 0.6 ? 'redwood' : 'pine';
-        else if (biome.id === 'alpine' || biome.id === 'tundra') type = 'pine';
-        else if (biome.id === 'badlands' || biome.id === 'canyon') type = 'palm';
-        else if (this.world.isCorruptedAt(x, z)) type = 'crystal';
+        if (this.world.isCorruptedAt(x, z)) return 'crystal';
+        if (biome.id === 'desert') return 'palm';
+        if (biome.id === 'forest') return hash > 0.6 ? 'birch' : (hash > 0.3 ? 'oak' : 'pine');
+        if (biome.id === 'swamp') return 'willow';
+        if (biome.id === 'plains' || biome.id === 'meadow') return hash > 0.8 ? 'cherry' : 'oak';
+        if (biome.id === 'highlands') return hash > 0.6 ? 'redwood' : 'pine';
+        if (biome.id === 'alpine' || biome.id === 'tundra') return 'pine';
+        if (biome.id === 'badlands' || biome.id === 'canyon') return 'palm';
+        return 'oak';
+    }
 
-        const config = {
-            oak: { trunk: 'wood', leaves: 'leaves', height: 5, radius: 2 },
-            birch: { trunk: 'wood_birch', leaves: 'leaves_birch', height: 6, radius: 2 },
-            pine: { trunk: 'wood_pine', leaves: 'leaves_pine', height: 7, radius: 1 },
-            palm: { trunk: 'wood_palm', leaves: 'leaves_palm', height: 5, radius: 2 },
-            willow: { trunk: 'wood_willow', leaves: 'leaves_willow', height: 4, radius: 3 },
-            cherry: { trunk: 'wood_cherry', leaves: 'leaves_cherry', height: 5, radius: 2 },
-            redwood: { trunk: 'wood_redwood', leaves: 'leaves_redwood', height: 10, radius: 2 },
-            crystal: { trunk: 'wood_crystal', leaves: 'leaves_crystal', height: 6, radius: 2 }
-        }[type];
+    placeGroundLife(x, surfaceY, z, biome) {
+        const choices = BIOME_GROUND_LIFE[biome.id];
+        if (!choices || choices.length === 0) return;
 
+        const supportId = this.world.blockMap.get(this.world.getKey(x, surfaceY, z));
+        if (!supportId || supportId === 'water' || supportId === 'path_block' || supportId === 'cobblestone') return;
+
+        const roll = this.world.hash2D((x * 53) + 17, (z * 61) - 29);
+        if (roll > 0.045) return;
+
+        const pick = Math.floor(this.world.hash2D(x - 919, z + 771) * choices.length);
+        this.addGeneratedBlock(x, surfaceY + 1, z, choices[pick]);
+    }
+
+    placeLeafBlob(x, y, z, radius, leafId, yRadius = 1) {
+        const yy = Math.max(1, yRadius);
+        for (let lx = -radius; lx <= radius; lx++) {
+            for (let lz = -radius; lz <= radius; lz++) {
+                for (let ly = -yy; ly <= yy; ly++) {
+                    const dist = (lx * lx) + (lz * lz) + ((ly * ly) * 1.35);
+                    if (dist > (radius * radius) + 0.6) continue;
+                    this.addGeneratedBlock(x + lx, y + ly, z + lz, leafId);
+                }
+            }
+        }
+    }
+
+    placeConeCanopy(x, startY, z, baseRadius, leafId) {
+        for (let layer = 0; layer <= 4; layer++) {
+            const radius = Math.max(1, baseRadius - Math.floor(layer * 0.85));
+            const yRadius = layer >= 3 ? 0 : 1;
+            this.placeLeafBlob(x, startY + layer, z, radius, leafId, yRadius);
+        }
+        this.addGeneratedBlock(x, startY + 5, z, leafId);
+    }
+
+    placePalmCanopy(x, y, z, radius, leafId) {
+        this.addGeneratedBlock(x, y, z, leafId);
+        const directions = [
+            [1, 0], [-1, 0], [0, 1], [0, -1],
+            [1, 1], [1, -1], [-1, 1], [-1, -1]
+        ];
+        for (const [dx, dz] of directions) {
+            const length = Math.max(2, radius + (Math.abs(dx) + Math.abs(dz) > 1 ? -1 : 0));
+            for (let i = 1; i <= length; i++) {
+                const drop = i >= length ? 1 : 0;
+                this.addGeneratedBlock(x + (dx * i), y - drop, z + (dz * i), leafId);
+            }
+        }
+    }
+
+    placeWillowCanopy(x, y, z, radius, leafId) {
+        this.placeLeafBlob(x, y, z, radius, leafId, 1);
+        for (let lx = -radius; lx <= radius; lx++) {
+            for (let lz = -radius; lz <= radius; lz++) {
+                if (Math.max(Math.abs(lx), Math.abs(lz)) < radius) continue;
+                const sway = this.world.hash2D(x + (lx * 17), z + (lz * 23));
+                if (sway < 0.44) continue;
+                const length = 2 + Math.floor(sway * 3);
+                for (let drop = 1; drop <= length; drop++) {
+                    this.addGeneratedBlock(x + lx, y - drop, z + lz, leafId);
+                }
+            }
+        }
+    }
+
+    placeTree(x, y, z, biome) {
+        const type = this.chooseTreeType(x, z, biome);
+        const config = TREE_PROFILES[type] ?? TREE_PROFILES.oak;
         const trunkHeight = config.height + Math.floor(this.world.hash2D(x + 7, z - 19) * 2);
+
         for (let i = 0; i < trunkHeight; i++) {
             this.addGeneratedBlock(x, y + i, z, config.trunk);
         }
 
-        const leafBase = y + trunkHeight - 2;
-        const radius = config.radius;
-        for (let lx = -radius; lx <= radius; lx++) {
-            for (let lz = -radius; lz <= radius; lz++) {
-                for (let ly = 0; ly <= 3; ly++) {
-                    const distSq = lx * lx + lz * lz;
-                    if (distSq > radius * radius) continue;
-                    if (ly === 3 && distSq > 0) continue;
-                    this.addGeneratedBlock(x + lx, leafBase + ly, z + lz, config.leaves);
-                }
-            }
+        const topY = y + trunkHeight - 1;
+        if (config.style === 'cone') {
+            this.placeConeCanopy(x, topY - 2, z, config.radius, config.leaves);
+            return;
         }
+        if (config.style === 'palm') {
+            this.placePalmCanopy(x, topY, z, config.radius, config.leaves);
+            return;
+        }
+        if (config.style === 'willow') {
+            this.placeWillowCanopy(x, topY - 1, z, config.radius, config.leaves);
+            return;
+        }
+        if (config.style === 'spire') {
+            for (let i = 1; i <= 2; i++) this.addGeneratedBlock(x, topY + i, z, config.trunk);
+            this.placeConeCanopy(x, topY - 1, z, config.radius + 1, config.leaves);
+            return;
+        }
+        if (config.style === 'crystal') {
+            this.placeLeafBlob(x, topY - 1, z, config.radius, config.leaves, 1);
+            this.addGeneratedBlock(x, topY + 1, z, config.leaves);
+            this.addGeneratedBlock(x + 1, topY, z, config.leaves);
+            this.addGeneratedBlock(x - 1, topY, z, config.leaves);
+            this.addGeneratedBlock(x, topY, z + 1, config.leaves);
+            this.addGeneratedBlock(x, topY, z - 1, config.leaves);
+            return;
+        }
+
+        this.placeLeafBlob(x, topY - 1, z, config.radius, config.leaves, 1);
+        this.placeLeafBlob(x, topY + 1, z, Math.max(1, config.radius - 1), config.leaves, 0);
+        this.addGeneratedBlock(x, topY + 2, z, config.leaves);
     }
 
     applyPlayerOverrides() {
@@ -360,6 +462,10 @@ export class Chunk {
             // Keep mesh frustum culling off to avoid false-negative culls that create holes.
             im.frustumCulled = false;
             im.renderOrder = this.getRenderOrder(id, material);
+            
+            // Shadows: only cast if it's a solid block (not water/deco) to save performance
+            if (!isWater && !isDeco) im.castShadow = true;
+            im.receiveShadow = true;
 
             let renderCount = 0;
             for (let i = 0; i < count; i++) {
@@ -370,6 +476,22 @@ export class Chunk {
                 if (isWater) {
                     const above = this.world.blockMap.get(this.world.getKey(ax, ay + 1, az));
                     if (above === 'water') continue; // Submerged - skip rendering
+                }
+
+                // Occlusion check: skip rendering if fully surrounded by solid blocks
+                const nx = this.world.blockMap.get(this.world.getKey(ax + 1, ay, az));
+                const px = this.world.blockMap.get(this.world.getKey(ax - 1, ay, az));
+                const ny = this.world.blockMap.get(this.world.getKey(ax, ay + 1, az));
+                const py = this.world.blockMap.get(this.world.getKey(ax, ay - 1, az));
+                const nz = this.world.blockMap.get(this.world.getKey(ax, ay, az + 1));
+                const pz = this.world.blockMap.get(this.world.getKey(ax, ay, az - 1));
+
+                if (nx && px && ny && py && nz && pz) {
+                    if (this.world.isBlockSolid(nx) && this.world.isBlockSolid(px) && 
+                        this.world.isBlockSolid(ny) && this.world.isBlockSolid(py) && 
+                        this.world.isBlockSolid(nz) && this.world.isBlockSolid(pz)) {
+                        continue; 
+                    }
                 }
 
                 const lx = ax - worldX;
@@ -397,10 +519,13 @@ export class Chunk {
 
             im.count = renderCount;
             im.instanceMatrix.needsUpdate = true;
-            im.computeBoundingSphere();
-            
             this.instancedMeshes.set(id, im);
             this.group.add(im);
+        }
+        
+        // 4. Update group bounding for raycasting accuracy
+        for (const mesh of this.instancedMeshes.values()) {
+            mesh.computeBoundingSphere();
         }
     }
 
@@ -412,13 +537,20 @@ export class Chunk {
             try {
                 const results = await this.world.chunkGenerator.generateChunk(this.cx, this.cz);
                 if (this.destroyed) return;
-                if (results) {
-                    for (const block of results) {
-                        const key = this.world.getKey(block.x, block.y, block.z);
+                if (results && results.data) {
+                    const { data, palette } = results;
+                    for (let i = 0; i < data.length; i += 4) {
+                        const x = data[i];
+                        const y = data[i+1];
+                        const z = data[i+2];
+                        const paletteIndex = data[i+3];
+                        const id = palette[paletteIndex];
+                        
+                        const key = this.world.getKey(x, y, z);
                         if (this.world.changedBlocks.get(key) === null) continue;
                         const override = this.world.changedBlocks.get(key);
-                        const finalId = override ?? block.id;
-                        this.world.addBlock(block.x, block.y, block.z, finalId, this.key);
+                        const finalId = override ?? id;
+                        this.world.addBlock(x, y, z, finalId, this.key);
                     }
                     
                     const startX = this.cx * this.world.chunkSize;

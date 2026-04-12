@@ -138,7 +138,7 @@ export class HUD {
             this.renderSelectedItem();
         });
         window.addEventListener('slot-changed', (event) => {
-            this.updateHotbarSelection(event.detail);
+            this.updateHotbarSelection(event.detail); // Slot logic
             this.renderSelectedItem();
         });
         window.addEventListener('inventory-changed', () => {
@@ -234,6 +234,27 @@ export class HUD {
         return 'East';
     }
 
+    getWorldTimeLabel(timeOfDay = 0) {
+        const t = ((Number(timeOfDay) % 1) + 1) % 1;
+        // 0.25 = Noon, 0.75 = Midnight (or vice-versa depending on angle offset)
+        // In Game.js: angle = (timeOfDay * 2PI) - PI/2
+        // timeOfDay 0.25 -> angle = 0 -> sunHeight = 0 (Sunrise)
+        // timeOfDay 0.5 -> angle = PI/2 -> sunHeight = 1 (Noon)
+        // timeOfDay 0.75 -> angle = PI -> sunHeight = 0 (Sunset)
+        // timeOfDay 0 or 1.0 -> angle = -PI/2 -> sunHeight = -1 (Midnight)
+        
+        if (t < 0.20 || t >= 0.85) return 'MIDNIGHT';
+        if (t < 0.32) return 'DAWN';
+        if (t < 0.68) return 'DAY';
+        return 'DUSK';
+    }
+
+    formatBiomeLabel(id) {
+        return String(id || 'plains')
+            .replace(/[_-]+/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+
     updateCoordinates(position, yaw = 0, world = null) {
         const el = document.getElementById('coords-display');
         if (!el || !position) return;
@@ -245,13 +266,27 @@ export class HUD {
         const cz = world?.getChunkCoord?.(position.z) ?? 0;
         const biome = world?.getBiomeIdAt?.(position.x, position.z) ?? 'plains';
         const facing = this.getFacingLabel(yaw);
+        const biomeLabel = this.formatBiomeLabel(biome);
+        const mode = this.gameState?.mode ?? 'SURVIVAL';
+        const worldTime = this.getWorldTimeLabel(this.game?.timeOfDay ?? 0);
+        const seed = world?.seedString ?? 'arlocraft';
 
         el.textContent = [
             `XYZ: ${bx} / ${by} / ${bz}`,
             `Facing: ${facing}`,
             `Chunk: ${cx}, ${cz}`,
-            `Biome: ${biome}`
+            `Biome: ${biome}`,
+            `Time: ${worldTime}`
         ].join('\n');
+
+        const modePill = document.getElementById('mode-pill');
+        if (modePill) modePill.textContent = mode;
+        const timePill = document.getElementById('world-time-pill');
+        if (timePill) timePill.textContent = worldTime;
+        const biomePill = document.getElementById('biome-pill');
+        if (biomePill) biomePill.textContent = biomeLabel.toUpperCase();
+        const miniContext = document.getElementById('minimap-context');
+        if (miniContext) miniContext.textContent = `Seed ${seed} | ${biomeLabel}`;
     }
 
     updateDragGhost() {
@@ -775,21 +810,26 @@ export class HUD {
     updateHP(value) {
         const container = document.getElementById('hp-bar');
         if (!container) return;
-        const full = Math.max(0, Math.min(10, Math.ceil((value ?? 0) / 2)));
-        container.textContent = `HP ${'|'.repeat(full)}${'.'.repeat(10 - full)}`;
+        const maxHp = Math.max(1, this.gameState?.maxHp ?? 20);
+        const hp = Math.max(0, Math.min(maxHp, Number(value) || 0));
+        const ratio = hp / maxHp;
+        container.innerHTML = `<span class="bar-label">HP</span><div class="hud-meter"><div class="hud-meter-fill hp-fill" style="width:${(ratio * 100).toFixed(1)}%"></div></div><span class="bar-value">${Math.round(hp)}/${maxHp}</span>`;
     }
 
     updateFood(value) {
         const container = document.getElementById('food-bar');
         if (!container) return;
-        const full = Math.max(0, Math.min(10, Math.ceil((value ?? 0) / 2)));
-        container.textContent = `FOOD ${'|'.repeat(full)}${'.'.repeat(10 - full)}`;
+        const maxFood = 20;
+        const hunger = Math.max(0, Math.min(maxFood, Number(value) || 0));
+        const ratio = hunger / maxFood;
+        container.innerHTML = `<span class="bar-label">FOOD</span><div class="hud-meter"><div class="hud-meter-fill food-fill" style="width:${(ratio * 100).toFixed(1)}%"></div></div><span class="bar-value">${Math.round(hunger)}/${maxFood}</span>`;
     }
 
     updateMode(mode) {
         const label = document.getElementById('gamemode-indicator');
-        if (!label) return;
-        label.textContent = `${mode} MODE`;
+        if (label) label.textContent = `${mode} MODE`;
+        const modePill = document.getElementById('mode-pill');
+        if (modePill) modePill.textContent = mode;
     }
 
     updateXPBar(xp, max) {

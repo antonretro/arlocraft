@@ -42,6 +42,7 @@ export class ChunkGenerator {
             chunkSize: this.world.chunkSize,
             seedString: this.world.seedString,
             changedEntries: this.getChangedEntriesForChunk(cx, cz),
+            corruptionEnabled: Boolean(this.world.corruptionEnabled),
             cavesEnabled: Boolean(this.world.game?.features?.caves)
         });
     }

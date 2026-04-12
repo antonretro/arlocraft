@@ -179,10 +179,18 @@ export class BlockRegistry {
 
         // Face order: px, nx, py, ny, pz, nz (Right, Left, Top, Bottom, Front, Back)
         if (topTex || bottomTex || sideTex || frontTex || backTex || leftTex || rightTex) {
+            const isTransparent = Boolean(config.transparent);
+            const isCutout = isTransparent && (
+                id === 'grass_tall' ||
+                id === 'mushroom_brown' ||
+                id.startsWith('flower_') ||
+                id.startsWith('leaves')
+            );
             const matConfig = {
-                transparent: Boolean(config.transparent),
-                opacity: config.transparent ? 0.65 : 1,
-                depthWrite: !config.transparent
+                transparent: isTransparent,
+                opacity: isTransparent ? (isCutout ? 1 : 0.82) : 1,
+                alphaTest: isCutout ? 0.24 : 0,
+                depthWrite: isCutout ? true : !isTransparent
             };
 
             const mats = [
@@ -238,14 +246,23 @@ export class BlockRegistry {
                     `,
                     transparent: true,
                     depthTest: true,
-                    depthWrite: false
+                    depthWrite: false,
+                    side: THREE.DoubleSide
                 });
             } else {
+                const isTransparent = Boolean(config.transparent);
+                const isCutout = isTransparent && (
+                    id === 'grass_tall' ||
+                    id === 'mushroom_brown' ||
+                    id.startsWith('flower_') ||
+                    id.startsWith('leaves')
+                );
                 material = new THREE.MeshLambertMaterial({
                     color: config.color ? parseInt(config.color) : 0x9c9c9c,
-                    transparent: Boolean(config.transparent),
-                    opacity: config.transparent ? 0.65 : 1,
-                    depthWrite: !config.transparent
+                    transparent: isTransparent,
+                    opacity: isTransparent ? (isCutout ? 1 : 0.82) : 1,
+                    alphaTest: isCutout ? 0.24 : 0,
+                    depthWrite: isCutout ? true : !isTransparent
                 });
             }
 

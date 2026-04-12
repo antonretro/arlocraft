@@ -38,7 +38,8 @@ export class World {
         this.minTerrainY = -12;
         this.maxTerrainY = 65;
         this.deepMinY = -220;
-        this.seaLevel = 1;
+        this.defaultSeaLevel = 1;
+        this.seaLevel = this.defaultSeaLevel;
         this.seed = 0;
         this.seedString = 'arlocraft';
         this.setSeed(this.seedString);
@@ -54,6 +55,7 @@ export class World {
         this.hoverTick = 0;
         this.gifTick = 0;
         this.chunkVisibilityTick = 0;
+        this.forceVisibilityResetPending = true;
         this.tmpCameraForward = new THREE.Vector3();
         this.tmpCameraRight = new THREE.Vector3();
         this.tmpUp = new THREE.Vector3(0, 1, 0);
@@ -162,7 +164,7 @@ export class World {
         this.router = new NoiseRouter(this.seedString);
         if (this.terrainHeightCache) this.terrainHeightCache.clear();
         if (this.biomeCache) this.biomeCache.clear();
-        this.seaLevel = 64;
+        this.seaLevel = this.defaultSeaLevel;
     }
 
     clearWorld() {
@@ -182,6 +184,7 @@ export class World {
         this.pendingChunkLoads.length = 0;
         this.pendingChunkSet.clear();
         this.lastPlayerChunkKey = null;
+        this.forceVisibilityResetPending = true;
         this.terrainHeightCache.clear();
         this.biomeCache.clear();
         this.resetMiningProgress();
@@ -212,17 +215,15 @@ export class World {
         const seed = data?.seed ?? this.seedString;
         this.setSeed(seed);
         const entries = Array.isArray(data?.changedBlocks) ? data.changedBlocks : [];
-        if (this.corruptionEnabled) {
-            this.changedBlocks = new Map(entries);
-        } else {
-            this.changedBlocks = new Map(
-                entries.filter((entry) => {
-                    if (!Array.isArray(entry) || entry.length < 2) return false;
-                    const id = entry[1];
-                    return id !== 'virus' && id !== 'arlo';
-                })
-            );
+        const migrated = new Map();
+        for (const [oldKey, id] of entries) {
+            if (!this.corruptionEnabled && (id === 'virus' || id === 'arlo')) continue;
+            const coords = this.keyToCoords(oldKey);
+            if (coords.length === 3 && !isNaN(coords[0])) {
+                migrated.set(this.getKey(coords[0], coords[1], coords[2]), id);
+            }
         }
+        this.changedBlocks = migrated;
         this.starterChestClaimed = Boolean(data?.starterChestClaimed);
         this.starterChestKey = typeof data?.starterChestKey === 'string' ? data.starterChestKey : null;
         const restored = Array.isArray(data?.restoredLandmarks) ? data.restoredLandmarks : [];
@@ -232,11 +233,21 @@ export class World {
     }
 
     getKey(x, y, z) {
-        return `${x}|${y}|${z}`;
+        // Safe 53-bit integer packing: X(21 bits) | Z(21 bits) | Y(11 bits)
+        // Range: X/Z ±1,000,000, Y ±1,000.
+        return (Math.round(x) + 1000000) * 4294967296 + (Math.round(z) + 1000000) * 2048 + (Math.round(y) + 512);
     }
 
     keyToCoords(key) {
-        return key.split('|').map(Number);
+        if (typeof key === 'number') {
+            const y = (key % 2048) - 512;
+            const remaining = Math.floor(key / 2048);
+            const z = (remaining % 2097152) - 1000000;
+            const x = Math.floor(remaining / 2097152) - 1000000;
+            return [x, y, z];
+        }
+        // Backward compatibility for old string keys
+        return String(key).split('|').map(Number);
     }
 
     getChunkCoord(worldValue) {
@@ -264,35 +275,72 @@ export class World {
         const origin = camera.position;
         camera.getWorldDirection(this.tmpRayDir).normalize();
 
-        const step = 0.1;
-        let prevX = this.pointToBlockCoord(origin.x);
-        let prevY = this.pointToBlockCoord(origin.y);
-        let prevZ = this.pointToBlockCoord(origin.z);
+        const x = Math.floor(origin.x + 0.5);
+        const y = Math.floor(origin.y + 0.5);
+        const z = Math.floor(origin.z + 0.5);
 
-        for (let t = 0.1; t <= maxDistance; t += step) {
-            const px = origin.x + (this.tmpRayDir.x * t);
-            const py = origin.y + (this.tmpRayDir.y * t);
-            const pz = origin.z + (this.tmpRayDir.z * t);
-            const bx = this.pointToBlockCoord(px);
-            const by = this.pointToBlockCoord(py);
-            const bz = this.pointToBlockCoord(pz);
+        const dx = this.tmpRayDir.x;
+        const dy = this.tmpRayDir.y;
+        const dz = this.tmpRayDir.z;
 
-            if (bx === prevX && by === prevY && bz === prevZ) continue;
+        const stepX = dx > 0 ? 1 : -1;
+        const stepY = dy > 0 ? 1 : -1;
+        const stepZ = dz > 0 ? 1 : -1;
 
-            const id = this.blockMap.get(this.getKey(bx, by, bz));
-            if (id) {
-                if (includeFluids || (id !== 'water' && id !== 'lava')) {
-                    return {
-                        id,
-                        cell: { x: bx, y: by, z: bz },
-                        previous: { x: prevX, y: prevY, z: prevZ }
-                    };
-                }
+        const deltaX = Math.abs(1 / dx);
+        const deltaY = Math.abs(1 / dy);
+        const deltaZ = Math.abs(1 / dz);
+
+        let maxX = deltaX * (dx > 0 ? (Math.floor(origin.x + 0.5) + 0.5 - origin.x) : (origin.x - (Math.floor(origin.x + 0.5) - 0.5)));
+        let maxY = deltaY * (dy > 0 ? (Math.floor(origin.y + 0.5) + 0.5 - origin.y) : (origin.y - (Math.floor(origin.y + 0.5) - 0.5)));
+        let maxZ = deltaZ * (dz > 0 ? (Math.floor(origin.z + 0.5) + 0.5 - origin.z) : (origin.z - (Math.floor(origin.z + 0.5) - 0.5)));
+
+        let bx = x;
+        let by = y;
+        let bz = z;
+
+        let prevX = bx;
+        let prevY = by;
+        let prevZ = bz;
+
+        let distance = 0;
+        while (distance <= maxDistance) {
+            const key = this.getKey(bx, by, bz);
+            const id = this.blockMap.get(key);
+            
+            if (id && (includeFluids || (id !== 'water' && id !== 'lava'))) {
+                return {
+                    id,
+                    cell: { x: bx, y: by, z: bz },
+                    previous: { x: prevX, y: prevY, z: prevZ }
+                };
             }
 
             prevX = bx;
             prevY = by;
             prevZ = bz;
+
+            if (maxX < maxY) {
+                if (maxX < maxZ) {
+                    bx += stepX;
+                    distance = maxX;
+                    maxX += deltaX;
+                } else {
+                    bz += stepZ;
+                    distance = maxZ;
+                    maxZ += deltaZ;
+                }
+            } else {
+                if (maxY < maxZ) {
+                    by += stepY;
+                    distance = maxY;
+                    maxY += deltaY;
+                } else {
+                    bz += stepZ;
+                    distance = maxZ;
+                    maxZ += deltaZ;
+                }
+            }
         }
         return false;
     }
@@ -337,7 +385,8 @@ export class World {
     getBiomeAt(x, z) {
         const gx = Math.round(x);
         const gz = Math.round(z);
-        const key = `${gx}|${gz}`;
+        // Use numeric key for 2D cache: (gx + 1,000,000) << 21 | (gz + 1,000,000)
+        const key = (gx + 1000000) * 2097152 + (gz + 1000000);
         let id = this.biomeCache.get(key);
         if (!id) {
             id = this.router.getBiomeID(gx, gz);
@@ -350,7 +399,7 @@ export class World {
     getTerrainHeight(x, z) {
         const gx = Math.round(x);
         const gz = Math.round(z);
-        const key = `${gx}|${gz}`;
+        const key = (gx + 1000000) * 2097152 + (gz + 1000000);
         const cached = this.terrainHeightCache.get(key);
         if (cached !== undefined) return cached;
 
@@ -1291,6 +1340,7 @@ export class World {
         if (next === this.renderDistance) return;
         this.renderDistance = next;
         this.lastPlayerChunkKey = null;
+        this.forceVisibilityResetPending = true;
     }
 
     loadChunk(cx, cz) {
@@ -1362,20 +1412,18 @@ export class World {
         }
 
         budget = Math.max(1, Math.floor(budget));
-        while (budget > 0 && this.pendingChunkLoads.length > 0) {
-            let bestIndex = 0;
-            let bestDist = Infinity;
-            for (let i = 0; i < this.pendingChunkLoads.length; i++) {
-                const p = this.pendingChunkLoads[i];
-                const dx = p.cx - centerCx;
-                const dz = p.cz - centerCz;
-                const dist = (dx * dx) + (dz * dz);
-                if (dist >= bestDist) continue;
-                bestDist = dist;
-                bestIndex = i;
-            }
+        const refCx = Number.isFinite(centerCx) ? centerCx : 0;
+        const refCz = Number.isFinite(centerCz) ? centerCz : 0;
+        this.pendingChunkLoads.sort((a, b) => {
+            const adx = a.cx - refCx;
+            const adz = a.cz - refCz;
+            const bdx = b.cx - refCx;
+            const bdz = b.cz - refCz;
+            return (adx * adx) + (adz * adz) - ((bdx * bdx) + (bdz * bdz));
+        });
 
-            const next = this.pendingChunkLoads.splice(bestIndex, 1)[0];
+        while (budget > 0 && this.pendingChunkLoads.length > 0) {
+            const next = this.pendingChunkLoads.shift();
             if (!next) break;
             this.loadChunk(next.cx, next.cz);
             budget -= 1;
@@ -1390,7 +1438,7 @@ export class World {
         if (total === 0) return;
 
         const tier = this.game?.qualityTier ?? 'balanced';
-        const rebuildBudget = tier === 'low' ? 2 : (tier === 'high' ? 5 : 3);
+        const rebuildBudget = tier === 'low' ? 3 : (tier === 'high' ? 8 : 5);
         let rebuilt = 0;
         let scanned = 0;
         let cursor = this.chunkMeshRebuildCursor % total;
@@ -1771,9 +1819,12 @@ export class World {
 
         const cam = this.game?.camera?.instance;
         // Directional culling disabled for stability.
-        // Ensure no chunk remains hidden from older visibility states.
-        for (const chunk of this.chunks.values()) {
-            if (!chunk.visible) chunk.setVisible(true);
+        // Reset any stale hidden chunks once instead of scanning every frame.
+        if (this.forceVisibilityResetPending) {
+            for (const chunk of this.chunks.values()) {
+                if (!chunk.visible) chunk.setVisible(true);
+            }
+            this.forceVisibilityResetPending = false;
         }
         if (cam) {
             this.hoverTick = (this.hoverTick + 1) % 6;
