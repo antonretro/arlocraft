@@ -112,56 +112,53 @@ export class Renderer {
                     vec3 sphereDir = normalize(vLocalPos);
                     float h = sphereDir.y;
 
-                    // Equirectangular mapping logic
-                    vec2 skyUv = vUv;
-                    vec4 noon = texture2D(texNoon, skyUv);
-                    vec4 night = texture2D(texNight, skyUv);
+                    // ── Fully procedural sky — no baked textures ─────────
+                    // (sky_noon.png contained a fixed sun at a UV position
+                    //  which appeared in the terrain regardless of time of day)
 
                     // Atmospheric gradient — richer zenith, warm horizon
                     float gradT = max(pow(max(h, 0.0), exponent), 0.0);
                     vec3 grad = mix(bottomColor, topColor, gradT);
 
-                    // Subtle Rayleigh brightening near horizon
+                    // Rayleigh brightening near horizon
                     float horizonGlow = pow(max(1.0 - abs(h), 0.0), 4.0);
                     grad += bottomColor * horizonGlow * 0.25;
 
-                    // AI Texture blend
-                    vec3 texColor = mix(noon.rgb, night.rgb, mixFactor);
+                    // Night darkening (mixFactor goes 0→1 as sun sets)
+                    vec3 nightTint = vec3(0.02, 0.04, 0.10);
+                    vec3 color = mix(grad, nightTint, mixFactor * 0.75);
 
-                    // 35% texture, 65% procedural so dawn/dusk colours show clearly
-                    vec3 color = mix(grad, texColor, 0.35);
-
-                    // Horizon tint blend
-                    float horizon = 1.0 - abs(h);
-                    horizon = pow(max(horizon, 0.0), 10.0);
+                    // Horizon tint
+                    float horizon = pow(max(1.0 - abs(h), 0.0), 10.0);
                     color = mix(color, horizonColor, horizon * 0.55);
 
-                    // ── Sun in skybox shader ──────────────────────────────
+                    // ── Sun ──────────────────────────────────────────────
                     vec3 sunDir = normalize(sunPos);
                     float sunHeight = sunDir.y;
-
-                    float sunDot = dot(sphereDir, sunDir);
-
-                    // Combined visibility: sun above world horizon AND sky pixel above ground plane.
-                    // This prevents any sun rendering from bleeding through terrain.
-                    float sunAbove  = smoothstep(-0.08, 0.04, sunHeight); // sun elevation
-                    float skyAbove  = smoothstep(-0.04, 0.03, h);         // sky pixel elevation
+                    float skyAbove  = smoothstep(-0.04, 0.03, h);
+                    float sunAbove  = smoothstep(-0.08, 0.04, sunHeight);
                     float sunVisible = sunAbove * skyAbove;
 
-                    // Wide atmospheric glow
-                    float sunAtmos = pow(max(0.0, sunDot), 6.0);
+                    float sunDot    = dot(sphereDir, sunDir);
+                    float sunAtmos  = pow(max(0.0, sunDot), 6.0);
                     color += horizonColor * sunAtmos * 0.18 * sunVisible;
 
-                    // Tight corona ring
                     float sunCorona = smoothstep(0.9920, 0.9975, sunDot) * (1.0 - smoothstep(0.9975, 1.0, sunDot));
                     color += mix(horizonColor, vec3(1.0, 0.92, 0.70), 0.5) * sunCorona * 0.9 * sunVisible;
 
-                    // Hard sun disc
-                    float sunDisc = smoothstep(0.9975, 0.9990, sunDot);
+                    float sunDisc   = smoothstep(0.9975, 0.9990, sunDot);
                     color = mix(color, vec3(1.0, 0.97, 0.88), sunDisc * sunVisible);
 
-                    // Fade the entire bottom hemisphere to the fog/horizon colour so the
-                    // sky sphere never clips through terrain or shows below the ground.
+                    // ── Moon (opposite the sun) ───────────────────────────
+                    vec3 moonDir    = -sunDir;
+                    float moonAbove = smoothstep(-0.08, 0.04, moonDir.y) * skyAbove;
+                    float moonDot   = dot(sphereDir, moonDir);
+                    float moonDisc  = smoothstep(0.9980, 0.9993, moonDot);
+                    float moonGlow  = pow(max(0.0, moonDot), 12.0);
+                    color += vec3(0.5, 0.6, 0.8) * moonGlow * 0.08 * moonAbove;
+                    color = mix(color, vec3(0.92, 0.94, 1.0), moonDisc * moonAbove * (1.0 - sunVisible));
+
+                    // ── Clamp bottom hemisphere to fog colour ─────────────
                     color = mix(bottomColor, color, smoothstep(-0.12, 0.0, h));
 
                     gl_FragColor = vec4(color, 1.0);
@@ -228,11 +225,10 @@ export class Renderer {
             side: THREE.BackSide,
             depthWrite: false
         });
+        // Moon is now rendered in the sky shader — not as a world-space mesh.
         this.moonMesh = new THREE.Mesh(geo, mat);
         this.moonMesh.renderOrder = 5;
-        this.scene.add(this.moonMesh);
 
-        // Moon Glow
         const glowGeo = new THREE.CircleGeometry(48, 32);
         const glowMat = new THREE.MeshBasicMaterial({
             color: 0x88ccff,
@@ -244,7 +240,6 @@ export class Renderer {
         });
         this.moonGlow = new THREE.Mesh(glowGeo, glowMat);
         this.moonGlow.renderOrder = 4;
-        this.scene.add(this.moonGlow);
     }
 
     setupClouds() {
