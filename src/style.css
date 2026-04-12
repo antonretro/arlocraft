@@ -135,18 +135,7 @@ canvas {
     z-index: 20;
     pointer-events: none;
 }
-    width: 364px;
-    height: 46px;
-    display: flex;
-    gap: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    border-radius: 10px;
-    background: linear-gradient(180deg, rgba(10, 15, 24, 0.88) 0%, rgba(6, 10, 18, 0.92) 100%);
-    box-shadow: 0 2px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
-    padding: 3px;
-    pointer-events: auto;
-    backdrop-filter: blur(8px);
-}
+
 
 .slot {
     width: 37px;
