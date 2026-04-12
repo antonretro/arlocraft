@@ -396,7 +396,6 @@ const api = {
         }
         return String(key).split('|').map(Number);
     }
-    }
 };
 
 expose(api);
