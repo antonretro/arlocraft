@@ -212,23 +212,39 @@ export class ChunkManager {
     }
 
     processDirtyChunkRebuilds(playerPosition) {
-        // 1. Emergency Rebuilds: Chunks immediately touching the player ignore the budget
-        if (playerPosition) {
-            const pcx = this.world.getChunkCoord(playerPosition.x);
-            const pcz = this.world.getChunkCoord(playerPosition.z);
-            // Expanded emergency radius (9x9 chunks) to ensure clear vision even at high speed
-            for (let dx = -2; dx <= 2; dx++) {
-                for (let dz = -2; dz <= 2; dz++) {
-                    const key = this.world.getChunkKey(pcx + dx, pcz + dz);
-                    const chunk = this.chunks.get(key);
-                    if (chunk?.dirty && !chunk.destroyed) {
-                        chunk.update();
+        if (!playerPosition) return;
+        
+        const pcx = this.world.getChunkCoord(playerPosition.x);
+        const pcz = this.world.getChunkCoord(playerPosition.z);
+
+        // 1. Emergency Rebuilds: Immediate 5x5 chunks ignore budget
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dz = -2; dz <= 2; dz++) {
+                const key = this.world.getChunkKey(pcx + dx, pcz + dz);
+                const chunk = this.chunks.get(key);
+                if (chunk?.dirty && !chunk.destroyed) {
+                    chunk.update();
+                }
+            }
+        }
+
+        // 2. Mesh Watchdog: Catch 'Ghost Chunks' (loaded data but no meshes)
+        this.meshSanityTick = (this.meshSanityTick + 1) % 5;
+        if (this.meshSanityTick === 0) {
+            for (let dx = -3; dx <= 3; dx++) {
+                for (let dz = -3; dz <= 3; dz++) {
+                    const ck = this.world.getChunkKey(pcx + dx, pcz + dz);
+                    const c = this.chunks.get(ck);
+                    // If chunk is supposed to be loaded but has zero meshes, force it to be dirty
+                    if (c && !c.destroyed && c.blockKeys.size > 0 && c.instancedMeshes.size === 0) {
+                        c.dirty = true;
+                        this.priorityDirtyChunkKeys.add(ck);
                     }
                 }
             }
         }
 
-        this.flushPriorityChunkRebuilds(32); // More aggressive priority flushing
+        this.flushPriorityChunkRebuilds(32); 
 
         const chunks = Array.from(this.chunks.values())
             .filter(c => c.dirty && !c.destroyed);
@@ -236,18 +252,15 @@ export class ChunkManager {
         const total = chunks.length;
         if (total === 0) return;
 
-        // Prioritize rebuilding chunks closest to the player
-        if (playerPosition) {
-            const cs = this.world.chunkSize;
-            chunks.sort((a, b) => {
-                const distA = (a.cx * cs - playerPosition.x) ** 2 + (a.cz * cs - playerPosition.z) ** 2;
-                const distB = (b.cx * cs - playerPosition.x) ** 2 + (b.cz * cs - playerPosition.z) ** 2;
-                return distA - distB;
-            });
-        }
+        // Prioritize by distance
+        const cs = this.world.chunkSize;
+        chunks.sort((a, b) => {
+            const distA = (a.cx * cs - playerPosition.x) ** 2 + (a.cz * cs - playerPosition.z) ** 2;
+            const distB = (b.cx * cs - playerPosition.x) ** 2 + (b.cz * cs - playerPosition.z) ** 2;
+            return distA - distB;
+        });
 
         const tier = this.world.game?.qualityTier ?? 'balanced';
-        // Increased budgets to eliminate rendering lag on modern hardware
         const rebuildBudget = tier === 'low' ? 12 : (tier === 'high' ? 64 : 32);
         let rebuilt = 0;
 
@@ -330,20 +343,6 @@ export class ChunkManager {
         }
 
         this.ensureChunkMeshColorSanity();
-        
-        // --- Mesh Sanity Check ---
-        // If nearby chunks have blocks but zero meshes, they are 'ghosts' and need a forced rebuild.
-        for (let dx = -2; dx <= 2; dx++) {
-            for (let dz = -2; dz <= 2; dz++) {
-                const ck = this.world.getChunkKey(playerCx + dx, playerCz + dz);
-                const chunk = this.chunks.get(ck);
-                if (chunk && !chunk.destroyed && chunk.blockKeys.size > 0 && chunk.instancedMeshes.size === 0) {
-                    chunk.dirty = true;
-                    this.priorityDirtyChunkKeys.add(ck);
-                }
-            }
-        }
-
         this.processDirtyChunkRebuilds(playerPosition);
 
         // Always ensure current chunk is loaded and meshed
