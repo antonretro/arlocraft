@@ -17,6 +17,14 @@ import { TouchControls } from '../ui/TouchControls.js';
 import { FEATURES } from '../data/features.js';
 import { PlayerHand } from '../entities/PlayerHand.js';
 
+const FOOD_VALUES = {
+    apple: 4, tomato: 4, carrot: 3, potato: 3, corn: 3,
+    blueberry: 2, strawberry: 2, melon_slice: 2, honey_bottle: 3,
+    bread: 5, pumpkin_pie: 6, cookie: 2,
+    mushroom_brown: 2,
+    steak: 8, cooked_fish: 6,
+};
+
 export class Game {
     constructor() {
         this.settings = this.loadSettings();
@@ -627,6 +635,8 @@ export class Game {
         } else {
             this.input.setPointerLock();
         }
+
+        document.getElementById('crosshair')?.classList.add('active');
     }
 
     returnToTitle() {
@@ -640,6 +650,7 @@ export class Game {
         if (document.pointerLockElement) document.exitPointerLock();
 
         this.touchControls?.show(false);
+        document.getElementById('crosshair')?.classList.remove('active');
         this.showPause(false);
         this.showSettings(false);
         this.showTitle(true);
@@ -1360,11 +1371,34 @@ export class Game {
         this.world.digDownFrom(pos, this.gameState.mode);
     }
 
+    tryEatFood() {
+        const selectedSlot = this.gameState.selectedSlot;
+        const selected = this.gameState.getSelectedItem();
+        if (!selected) return false;
+        const foodValue = FOOD_VALUES[selected.id];
+        if (!foodValue) return false;
+        if (this.gameState.hunger >= 20) return false; // already full
+
+        this.gameState.modifyHunger(foodValue);
+        selected.count = Math.max(0, (selected.count ?? 1) - 1);
+        if (selected.count === 0) this.gameState.inventory[selectedSlot] = null;
+        window.dispatchEvent(new CustomEvent('inventory-changed'));
+        this.hud?.setFace('happy', 800);
+        this.hud?.flashPrompt?.(`+${foodValue} FOOD`, '#aaff88');
+        return true;
+    }
+
     handleSecondaryAction() {
+        // Try eating food first
+        const selected = this.gameState.getSelectedItem();
+        if (selected && FOOD_VALUES[selected.id]) {
+            this.tryEatFood();
+            return;
+        }
+
         if (this.world.interactBlock(this.camera.instance)) return;
 
         const selectedSlot = this.gameState.selectedSlot;
-        const selected = this.gameState.getSelectedItem();
         const placed = this.world.placeBlock(this.camera.instance, selectedSlot);
         if (!placed) return;
         if (this.gameState.mode === 'CREATIVE') return;

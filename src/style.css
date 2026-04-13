@@ -63,6 +63,41 @@ canvas { display: block; }
     inset: 0;
 }
 
+/* ── CROSSHAIR ─────────────────────────────────────────────── */
+#crosshair {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 50;
+    display: none;
+}
+#crosshair::before,
+#crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.7);
+}
+#crosshair::before {
+    width: 2px;
+    height: 100%;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+#crosshair::after {
+    height: 2px;
+    width: 100%;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+}
+#crosshair.active { display: block; }
+
 #hud {
     position: absolute;
     left: 50%;

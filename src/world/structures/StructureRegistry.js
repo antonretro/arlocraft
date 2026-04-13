@@ -700,7 +700,145 @@ export const STRUCTURES = {
                 }
             }
             blocks.push({ x: x + 2, y: y + 1, z: z + 2, id: 'uranium' });
-            blocks.push({ x: x - 2, y: y + 1, z: z - 2, id: 'starter_chest' });
+        }
+    },
+    village_manor: {
+        name: 'Grand Manor',
+        biomes: ['plains', 'forest', 'meadow'],
+        width: 8, height: 8, depth: 8,
+        blueprints: (x, y, z) => {
+            const blocks = [];
+            // Foundation
+            for (let dx = -4; dx <= 4; dx++) {
+                for (let dz = -3; dz <= 3; dz++) {
+                    blocks.push({ x: x + dx, y: y, z: z + dz, id: 'cobblestone' });
+                }
+            }
+            // Walls
+            for (let dy = 1; dy <= 4; dy++) {
+                for (let dx = -4; dx <= 4; dx++) {
+                    for (let dz = -3; dz <= 3; dz++) {
+                        const isWall = Math.abs(dx) === 4 || Math.abs(dz) === 3;
+                        if (isWall) {
+                            const isWindow = dy >= 2 && dy <= 3 && (Math.abs(dx) === 2 || Math.abs(dz) === 1);
+                            blocks.push({ x: x + dx, y: y + dy, z: z + dz, id: isWindow ? 'glass' : 'wood_planks' });
+                        }
+                    }
+                }
+            }
+            // Flooring & Interior
+            for (let dx = -3; dx <= 3; dx++) {
+                for (let dz = -2; dz <= 2; dz++) {
+                    blocks.push({ x: x + dx, y: y + 1, z: z + dz, id: 'wool_white' });
+                }
+            }
+            blocks.push({ x: x - 3, y: y + 1, z: z + 2, id: 'crafting_table' });
+            blocks.push({ x: x + 3, y: y + 1, z: z + 2, id: 'furnace' });
+            
+            // Second Floor Roof/Floor
+            for (let dx = -5; dx <= 5; dx++) {
+                for (let dz = -4; dz <= 4; dz++) {
+                    blocks.push({ x: x + dx, y: y + 5, z: z + dz, id: 'wood' });
+                }
+            }
+            // Peak Roof
+            for (let h = 0; h <= 2; h++) {
+                for (let dx = -5 + h; dx <= 5 - h; dx++) {
+                    for (let dz = -4 + h; dz <= 4 - h; dz++) {
+                        blocks.push({ x: x + dx, y: y + 6 + h, z: z + dz, id: 'wood_planks' });
+                    }
+                }
+            }
+            return blocks;
+        }
+    },
+    castle: {
+        name: 'Arlo Castle',
+        biomes: ['highlands', 'alpine', 'canyon'],
+        width: 15, height: 20, depth: 15,
+        blueprints: (x, y, z) => {
+            const blocks = [];
+            // Base platform
+            for (let dx = -7; dx <= 7; dx++) {
+                for (let dz = -7; dz <= 7; dz++) {
+                    blocks.push({ x: x + dx, y: y, z: z + dz, id: 'stone' });
+                }
+            }
+            // Corner Towers
+            const corners = [[-6, -6], [6, -6], [-6, 6], [6, 6]];
+            for (const [cx, cz] of corners) {
+                for (let dy = 1; dy <= 12; dy++) {
+                    for (let dx = -2; dx <= 2; dx++) {
+                        for (let dz = -2; dz <= 2; dz++) {
+                            const dist = Math.sqrt(dx*dx + dz*dz);
+                            if (dist > 1.2 && dist < 2.2) {
+                                blocks.push({ x: x + cx + dx, y: y + dy, z: z + cz + dz, id: 'stone' });
+                            }
+                        }
+                    }
+                }
+                // Battlements
+                for (let dx = -2; dx <= 2; dx++) {
+                    for (let dz = -2; dz <= 2; dz++) {
+                        if ((dx + dz) % 2 === 0) {
+                            blocks.push({ x: x + cx + dx, y: y + 13, z: z + cz + dz, id: 'stone' });
+                        }
+                    }
+                }
+            }
+            // Main Keep
+            for (let dy = 1; dy <= 16; dy++) {
+                for (let dx = -4; dx <= 4; dx++) {
+                    for (let dz = -4; dz <= 4; dz++) {
+                        const isWall = Math.abs(dx) === 4 || Math.abs(dz) === 4;
+                        if (isWall) {
+                            blocks.push({ x: x + dx, y: y + dy, z: z + dz, id: 'stone' });
+                        }
+                    }
+                }
+            }
+            // Keep Roof & Flag
+            for (let dx = -5; dx <= 5; dx++) {
+                for (let dz = -5; dz <= 5; dz++) {
+                    blocks.push({ x: x + dx, y: y + 17, z: z + dz, id: 'obsidian' });
+                }
+            }
+            for (let dy = 18; dy <= 22; dy++) {
+                blocks.push({ x, y: y + dy, z, id: 'wood' });
+            }
+            blocks.push({ x: x + 1, y: y + 22, z, id: 'wool_red' });
+            blocks.push({ x: x + 2, y: y + 22, z, id: 'wool_red' });
+
+            return blocks;
+        }
+    },
+    dungeon_chamber: {
+        name: 'Ancient Dungeon',
+        biomes: ['any'],
+        width: 9, height: 6, depth: 9,
+        blueprints: (x, y, z) => {
+            const blocks = [];
+            // Hollow out the room (floor, walls, ceiling)
+            for (let dy = -1; dy <= 5; dy++) {
+                for (let dx = -4; dx <= 4; dx++) {
+                    for (let dz = -4; dz <= 4; dz++) {
+                        const isBoundary = dy === -1 || dy === 5 || Math.abs(dx) === 4 || Math.abs(dz) === 4;
+                        if (isBoundary) {
+                            const isMossy = Math.random() < 0.3;
+                            blocks.push({ x: x + dx, y: y + dy, z: z + dz, id: isMossy ? 'cobblestone' : 'stone' });
+                        }
+                    }
+                }
+            }
+            // Center spawner (mockup)
+            blocks.push({ x, y: y + 1, z, id: 'obsidian' });
+            blocks.push({ x, y: y + 2, z, id: 'virus' });
+            // Loot chests
+            blocks.push({ x: x - 3, y: y, z: z - 3, id: 'starter_chest' });
+            blocks.push({ x: x + 3, y: y, z: z + 3, id: 'starter_chest' });
+            // Lighting
+            blocks.push({ x: x - 3, y: y + 3, z: z - 3, id: 'lantern' });
+            blocks.push({ x: x + 3, y: y + 3, z: z + 3, id: 'lantern' });
             return blocks;
         }
     }

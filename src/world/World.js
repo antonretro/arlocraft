@@ -907,6 +907,37 @@ export class World {
         return Math.max(0.12, (hardness * 0.9) / efficiency);
     }
 
+    // Blocks that fall when their support is removed (tree trunks, leaves, deco)
+    _isGravityBlock(id) {
+        if (!id) return false;
+        if (id.startsWith('wood_') || id === 'wood') return true;
+        if (id.startsWith('leaves_') || id === 'leaves') return true;
+        if (id.startsWith('flower_') || id === 'grass_tall') return true;
+        if (id === 'mushroom_brown' || id === 'cactus') return true;
+        return false;
+    }
+
+    _applyGravityAbove(x, y, z) {
+        const playerPos = this.game?.getPlayerPosition?.();
+        const toBreak = [];
+        for (let dy = 1; dy <= 28; dy++) {
+            const ay = y + dy;
+            const aboveId = this.blockMap.get(this.getKey(x, ay, z));
+            if (!aboveId) break; // hit air — nothing above
+            if (!this._isGravityBlock(aboveId)) break; // hit solid ground — stop
+            toBreak.push({ ay, id: aboveId });
+        }
+        for (const { ay, id } of toBreak) {
+            const bkey = this.getKey(x, ay, z);
+            this.changedBlocks.set(bkey, null);
+            this.removeBlockByKey(bkey, { skipChangeTracking: true });
+            this.spawnBreakParticles(x, ay, z, id);
+            this.spawnPickupEffect(x, ay, z, id, playerPos);
+            window.dispatchEvent(new CustomEvent('block-mined', { detail: { id, x, y: ay, z } }));
+        }
+        if (toBreak.length > 0) this.flushPriorityChunkRebuilds(20);
+    }
+
     breakBlockAt(x, y, z) {
         const key = this.getKey(x, y, z);
         const id = this.blockMap.get(key);
@@ -918,9 +949,13 @@ export class World {
         this.ensureSubsurfaceBelow(x, y - 1, z);
         this.spawnBreakParticles(x, y, z, id);
         this.spawnPickupEffect(x, y, z, id, this.game?.getPlayerPosition?.());
-
-
         window.dispatchEvent(new CustomEvent('block-mined', { detail: { id, x, y, z } }));
+
+        // Gravity: if breaking a trunk/support, collapse blocks above
+        if (this._isGravityBlock(id) || id === 'stone' || id === 'dirt' || id === 'grass' || id === 'sand') {
+            this._applyGravityAbove(x, y, z);
+        }
+
         return true;
     }
 
@@ -1343,7 +1378,7 @@ export class World {
         this.forceVisibilityResetPending = true;
     }
 
-    loadChunk(cx, cz) {
+    loadChunk(cx, cz, forceSync = false) {
         const key = this.getChunkKey(cx, cz);
         if (this.chunks.has(key)) {
             this.pendingChunkSet.delete(key);
@@ -1352,7 +1387,12 @@ export class World {
         const chunk = new Chunk(this, cx, cz);
         this.chunks.set(key, chunk);
         try {
-            chunk.generate();
+            if (forceSync) {
+                // Sync-generate near-player chunks so they're immediately visible.
+                chunk.generateSync();
+            } else {
+                chunk.generate(); // async via worker
+            }
             // Build mesh immediately so newly loaded chunks don't appear as holes.
             if (chunk.dirty && !chunk.destroyed) chunk.update();
         } catch (error) {
@@ -1383,7 +1423,9 @@ export class World {
                 const key = this.getChunkKey(cx, cz);
                 const chunk = this.chunks.get(key);
                 if (!chunk) {
-                    this.loadChunk(cx, cz);
+                    // Use sync for inner ring (radius 1) to avoid invisible gaps.
+                    const isInner = Math.abs(dx) <= 1 && Math.abs(dz) <= 1;
+                    this.loadChunk(cx, cz, isInner);
                     continue;
                 }
                 if (chunk.dirty && !chunk.destroyed) {
@@ -1438,7 +1480,7 @@ export class World {
         if (total === 0) return;
 
         const tier = this.game?.qualityTier ?? 'balanced';
-        const rebuildBudget = tier === 'low' ? 3 : (tier === 'high' ? 8 : 5);
+        const rebuildBudget = tier === 'low' ? 6 : (tier === 'high' ? 12 : 8);
         let rebuilt = 0;
         let scanned = 0;
         let cursor = this.chunkMeshRebuildCursor % total;
@@ -1796,7 +1838,8 @@ export class World {
         const playerCx = this.getChunkCoord(playerPosition.x);
         const playerCz = this.getChunkCoord(playerPosition.z);
         const key = this.getChunkKey(playerCx, playerCz);
-        if (!this.chunks.has(key)) this.loadChunk(playerCx, playerCz);
+        // Always sync-generate the player's current chunk so it's immediately visible.
+        if (!this.chunks.has(key)) this.loadChunk(playerCx, playerCz, true);
 
         if (this.lastPlayerChunkKey !== key) {
             this.unloadFarChunks(playerCx, playerCz);
@@ -1815,9 +1858,10 @@ export class World {
         this.processChunkLoadQueue(playerCx, playerCz);
 
         const cam = this.game?.camera?.instance;
-        // Directional culling disabled for stability.
-        // Reset any stale hidden chunks once instead of scanning every frame.
-        if (this.forceVisibilityResetPending) {
+        // Ensure all chunks are visible when directional culling is disabled.
+        // We scan periodically to catch any chunks stuck in a hidden state.
+        this.visibilityScanTick = (this.visibilityScanTick || 0) + 1;
+        if (this.visibilityScanTick % 30 === 0 || this.forceVisibilityResetPending) {
             for (const chunk of this.chunks.values()) {
                 if (!chunk.visible) chunk.setVisible(true);
             }

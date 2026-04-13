@@ -671,13 +671,60 @@ export class HUD {
         return data;
     }
 
+    _buildAbbrevMap() {
+        const allIds = [
+            ...Array.from(this.blockById.keys()),
+            ...Array.from(this.toolById.keys()),
+        ];
+        const map = new Map();
+        const used = new Set();
+
+        const candidate = (id) => {
+            const parts = id.split(/[_-]+/).filter(Boolean);
+            const initials = parts.map((p) => p[0].toUpperCase());
+            // Two-letter: first letters of first two parts, or first two chars of single word
+            const two = parts.length >= 2
+                ? initials.slice(0, 2).join('')
+                : parts[0].slice(0, 2).toUpperCase();
+            if (!used.has(two)) return two;
+
+            // Three-letter: first letters of up to 3 parts, or first 3 chars
+            const three = parts.length >= 3
+                ? initials.slice(0, 3).join('')
+                : (parts.length === 2
+                    ? (initials[0] + parts[1].slice(0, 2).toUpperCase())
+                    : parts[0].slice(0, 3).toUpperCase());
+            if (!used.has(three)) return three;
+
+            // Fallback: first + third char of first part
+            const alt = (parts[0][0] + (parts[0][2] || parts[0][1] || 'X')).toUpperCase();
+            if (!used.has(alt)) return alt;
+
+            // Last resort: first char + numeric index
+            for (let i = 1; i <= 9; i++) {
+                const indexed = parts[0][0].toUpperCase() + i;
+                if (!used.has(indexed)) return indexed;
+            }
+            return parts[0][0].toUpperCase() + '?';
+        };
+
+        for (const id of allIds) {
+            const abbrev = candidate(id);
+            map.set(id, abbrev);
+            used.add(abbrev);
+        }
+        return map;
+    }
+
     getIconMonogram(itemId) {
-        const parts = String(itemId || 'it')
-            .split(/[_-]+/)
-            .filter(Boolean);
+        if (!this._abbrevMap) this._abbrevMap = this._buildAbbrevMap();
+        const id = String(itemId || 'it').toLowerCase();
+        if (this._abbrevMap.has(id)) return this._abbrevMap.get(id);
+
+        // Fallback for unknown/dynamic IDs
+        const parts = id.split(/[_-]+/).filter(Boolean);
         if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-        const compact = parts[0] || 'it';
-        return compact.slice(0, 2).toUpperCase();
+        return (parts[0] || 'it').slice(0, 2).toUpperCase();
     }
 
     getIconAccentColor(itemId) {

@@ -8,6 +8,9 @@ const CORRUPTION_STRUCTURE_KEYS = new Set([
     'restoration_shrine'
 ]);
 
+// These structures have dedicated placement logic and should not appear in the random pool
+const EXCLUDED_FROM_RANDOM_POOL = new Set(['dungeon_chamber', 'village_manor', 'village_hut']);
+
 const CIVIC_STRUCTURE_POOL = [
     'village_hut',
     'market_stall',
@@ -60,9 +63,9 @@ export class Chunk {
         this.group.position.set(cx * world.chunkSize, 0, cz * world.chunkSize);
         this.group.updateMatrix();
         this.group.matrixAutoUpdate = false;
-        // Disable THREE.js automatic frustum culling on the group — the bounding
-        // sphere it computes for large instanced chunks is often wrong, causing
-        // entire chunks to vanish. Visibility is controlled manually via setVisible().
+        // Disable THREE.js frustum culling on the group — bounding sphere is often
+        // wrong for large instanced chunks, causing entire chunks to vanish.
+        // Visibility is managed manually via setVisible().
         this.group.frustumCulled = false;
         this.world.scene.add(this.group);
         
@@ -229,10 +232,33 @@ export class Chunk {
                 this.placeGroundLife(wx, terrainHeight, wz, biome);
             }
         }
+
+        // --- CACTUS GENERATION (Desert only) ---
+        if (!inForcedSpawnZone && biome.id === 'desert' && terrainHeight > waterLevel) {
+            const cactusRoll = this.world.hash2D(wx - 211, wz + 419);
+            if (cactusRoll > 0.985) {
+                const cactusHeight = 2 + Math.floor(this.world.hash2D(wx + 13, wz - 17) * 3);
+                for (let ch = 1; ch <= cactusHeight; ch++) {
+                    this.addGeneratedBlock(wx, terrainHeight + ch, wz, 'cactus');
+                }
+            }
+        }
+
+        // --- DUNGEON GENERATION (Underground) ---
+        if (terrainHeight > 20) {
+            const dungeonRoll = this.world.hash3D(Math.floor(wx/16), 0, Math.floor(wz/16));
+            if (dungeonRoll > 0.994 && (wx % 16 === 8) && (wz % 16 === 8)) {
+                const dy = -15 - Math.floor(this.world.hash2D(wx, wz) * 40);
+                const struct = STRUCTURES.dungeon_chamber;
+                const blocks = struct.blueprints(wx, dy, wz);
+                for (const b of blocks) this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
+                this.world.registerLandmark(wx, dy, 'Ancient Dungeon');
+            }
+        }
     }
 
     placeRandomStructure(x, y, z, biome) {
-        const allKeys = Object.keys(STRUCTURES);
+        const allKeys = Object.keys(STRUCTURES).filter((k) => !EXCLUDED_FROM_RANDOM_POOL.has(k));
         const virusRoll = this.world.hash2D(x + 811, z - 204);
         let keys = allKeys;
         if (!this.world.corruptionEnabled) {
@@ -459,12 +485,9 @@ export class Chunk {
                 : (isDeco ? this.world.sharedChunkGeometries.deco : this.world.sharedChunkGeometries.solid);
             
             const im = new THREE.InstancedMesh(geometry, material, count);
+            im.frustumCulled = false; // Never cull chunks; handled by World visibility
+            im.matrixAutoUpdate = false; 
             im.instanceMatrix.setUsage(THREE.StaticDrawUsage);
-            im.userData.id = id;
-            im.userData.ownedMaterial = false;
-            // Chunk-level culling is already handled by world chunk visibility.
-            // Keep mesh frustum culling off to avoid false-negative culls that create holes.
-            im.frustumCulled = false;
             im.renderOrder = this.getRenderOrder(id, material);
             
             // Shadows: only cast if it's a solid block (not water/deco) to save performance
@@ -642,8 +665,12 @@ export class Chunk {
             const hx = centerX + dx;
             const hz = centerZ + dz;
             const hy = this.world.getColumnHeight(hx, hz) + 1;
-            const hut = STRUCTURES.village_hut;
-            const blocks = hut.blueprints(hx, hy, hz);
+            
+            // Randomly choose between a hut and a manor for variety
+            const isManor = this.world.hash2D(hx + 77, hz - 33) > 0.7;
+            const houseType = isManor ? STRUCTURES.village_manor : STRUCTURES.village_hut;
+            
+            const blocks = houseType.blueprints(hx, hy, hz);
             for (const block of blocks) this.addGeneratedBlock(block.x, block.y, block.z, block.id);
             this.placeLampPost(hx + 2, hy, hz + 2);
             if (this.world.game?.entities && this.world.game.entities.entities.length < this.world.game.entities.maxEntities) {
