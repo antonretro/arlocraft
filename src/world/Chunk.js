@@ -551,8 +551,14 @@ export class Chunk {
         }
         
         // 4. Update group bounding for raycasting accuracy
+        const camPos = this.world.game.camera.instance.position;
+        const isNear = Math.abs(this.cx - this.world.getChunkCoord(camPos.x)) <= 1 &&
+                       Math.abs(this.cz - this.world.getChunkCoord(camPos.z)) <= 1;
+
         for (const mesh of this.instancedMeshes.values()) {
             mesh.computeBoundingSphere();
+            // Critical Fix: Disable culling on immediate neighbors to prevent 'invisible holes' from math errors
+            if (isNear) mesh.frustumCulled = false;
         }
     }
 

@@ -319,6 +319,20 @@ export class ChunkManager {
         }
 
         this.ensureChunkMeshColorSanity();
+        
+        // --- Mesh Sanity Check ---
+        // If nearby chunks have blocks but zero meshes, they are 'ghosts' and need a forced rebuild.
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dz = -2; dz <= 2; dz++) {
+                const key = this.world.getChunkKey(playerCx + dx, playerCz + dz);
+                const chunk = this.chunks.get(key);
+                if (chunk && !chunk.destroyed && chunk.blockKeys.size > 0 && chunk.instancedMeshes.size === 0) {
+                    chunk.dirty = true;
+                    this.priorityDirtyChunkKeys.add(key);
+                }
+            }
+        }
+
         this.processDirtyChunkRebuilds(playerPosition);
 
         const playerCx = this.world.getChunkCoord(playerPosition.x);
@@ -333,6 +347,16 @@ export class ChunkManager {
         if (this.lastPlayerChunkKey !== key) {
             this.unloadFarChunks(playerCx, playerCz);
             this.ensureChunksAround(playerCx, playerCz);
+            
+            // Boundary Flush: Force remesh 5x5 area to prevent voids during movement
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dz = -2; dz <= 2; dz++) {
+                    const ck = this.world.getChunkKey(playerCx + dx, playerCz + dz);
+                    const c = this.chunks.get(ck);
+                    if (c) c.dirty = true;
+                }
+            }
+
             this.lastPlayerChunkKey = key;
             this.chunkRefreshTick = 0;
         }
