@@ -472,6 +472,11 @@ export class Chunk {
         const temp = new THREE.Object3D();
         const worldX = this.cx * this.world.chunkSize;
         const worldZ = this.cz * this.world.chunkSize;
+        
+        // Stability Fix: Determine if chunk is 'Near' for occlusion bypass and culling
+        const camPos = this.world.game.camera.instance.position;
+        const isNear = Math.abs(this.cx - this.world.getChunkCoord(camPos.x)) <= 2 &&
+                       Math.abs(this.cz - this.world.getChunkCoord(camPos.z)) <= 2;
 
         for (const [id, keys] of byType.entries()) {
             const count = keys.length;
