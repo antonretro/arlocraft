@@ -211,8 +211,9 @@ export class ChunkManager {
         if (playerPosition) {
             const pcx = this.world.getChunkCoord(playerPosition.x);
             const pcz = this.world.getChunkCoord(playerPosition.z);
-            for (let dx = -1; dx <= 1; dx++) {
-                for (let dz = -1; dz <= 1; dz++) {
+            // Expanded emergency radius (9x9 chunks) to ensure clear vision even at high speed
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dz = -2; dz <= 2; dz++) {
                     const key = this.world.getChunkKey(pcx + dx, pcz + dz);
                     const chunk = this.chunks.get(key);
                     if (chunk?.dirty && !chunk.destroyed) {
@@ -222,7 +223,7 @@ export class ChunkManager {
             }
         }
 
-        this.flushPriorityChunkRebuilds(12);
+        this.flushPriorityChunkRebuilds(32); // More aggressive priority flushing
 
         const chunks = Array.from(this.chunks.values())
             .filter(c => c.dirty && !c.destroyed);
@@ -241,7 +242,8 @@ export class ChunkManager {
         }
 
         const tier = this.world.game?.qualityTier ?? 'balanced';
-        const rebuildBudget = tier === 'low' ? 8 : (tier === 'high' ? 24 : 12);
+        // Increased budgets to eliminate rendering lag on modern hardware
+        const rebuildBudget = tier === 'low' ? 12 : (tier === 'high' ? 64 : 32);
         let rebuilt = 0;
 
         for (let i = 0; i < chunks.length && rebuilt < rebuildBudget; i++) {

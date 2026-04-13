@@ -1113,10 +1113,18 @@ export class World {
 
         this.miningState.progress += Math.max(0, delta);
         const ratio = Math.max(0, Math.min(1, this.miningState.progress / Math.max(0.01, this.miningState.required)));
+        
+        // Visual mining feedback
         this.miningCracks.visible = true;
         this.miningCracks.position.set(hit.cell.x, hit.cell.y, hit.cell.z);
-        this.miningCracks.material.opacity = 0.15 + (ratio * 0.45);
-        this.miningCracks.scale.set(1, 1, 1).multiplyScalar(1 - (ratio * 0.05));
+        this.miningCracks.material.opacity = 0.15 + (ratio * 0.55);
+        
+        // Block shrinks by up to 15% as it breaks, with a subtle high-frequency wobble (stress)
+        const wobble = 1.0 + (Math.sin(performance.now() * 0.06) * 0.015 * ratio);
+        const shrink = 1.0 - (ratio * 0.15);
+        const finalScale = shrink * wobble;
+        this.miningCracks.scale.set(finalScale, finalScale, finalScale);
+        
         window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio, id: blockId, done: false } }));
 
         if (this.miningState.progress < this.miningState.required) return false;
