@@ -261,6 +261,11 @@ export class Physics {
         this.moveDir.addScaledVector(this.right, inputX);
         if (this.moveDir.lengthSq() > 0) this.moveDir.normalize();
 
+        // Safety check to prevent NaN movement from corrupted inputs or look yaw
+        if (!Number.isFinite(this.moveDir.x) || !Number.isFinite(this.moveDir.z)) {
+            this.moveDir.set(0, 0, 0);
+        }
+
         const inWater = this.world.isPositionInWater(this.position.x, this.position.y, this.position.z);
         const moveSpeed = inWater ? this.swimSpeed : speed;
         const targetX = this.moveDir.x * moveSpeed;
@@ -397,6 +402,14 @@ export class Physics {
                     this.position.y = floorY;
                     if (this.velocity.y < 0) this.velocity.y = 0;
                 }
+            }
+
+            // --- FINAL SAFETY GUARD ---
+            // If position becomes invalid (NaN/Infinity), rescue immediately to last safe spot.
+            if (!Number.isFinite(this.position.x) || !Number.isFinite(this.position.y) || !Number.isFinite(this.position.z)) {
+                console.warn('[ArloCraft] Physics NaN detected! Rescuing player...');
+                this.position.copy(this.lastSafePosition);
+                this.velocity.set(0, 0, 0);
             }
         }
 

@@ -6,6 +6,8 @@ import { BLOCKS } from '../data/blocks.js';
 import { TOOLS } from '../data/tools.js';
 import { Chunk } from './Chunk.js';
 import { ChunkGenerator } from './ChunkGenerator.js';
+import { ChunkManager } from './ChunkManager.js';
+import { ExplosionSystem } from './ExplosionSystem.js';
 import { generateSettlementName, SETTLEMENT_LIBRARY_SIZE } from './naming/SettlementNameGenerator.js';
 import { getRestorationSiteByLandmarkName } from './restoration/RestorationRegistry.js';
 import { Noise } from './Noise.js';
@@ -28,7 +30,6 @@ export class World {
         this.waterMeshes = new Set();
         this.virusMeshes = new Set();
         this.virusBlockCount = 0;
-        this.chunks = new Map();
         this.changedBlocks = new Map();
 
         this.chunkSize = 12;
@@ -44,7 +45,6 @@ export class World {
         this.seedString = 'arlocraft';
         this.setSeed(this.seedString);
         this.corruptionEnabled = false;
-        this.lastPlayerChunkKey = null;
         this.animationTick = 0;
         this.blockXpById = new Map(BLOCKS.map((block) => [block.id, block.xp ?? 0]));
         this.blockHardnessById = new Map(BLOCKS.map((block) => [block.id, block.hardness ?? 1]));
@@ -54,15 +54,9 @@ export class World {
         this.subsurfaceTick = 0;
         this.hoverTick = 0;
         this.gifTick = 0;
-        this.chunkVisibilityTick = 0;
-        this.forceVisibilityResetPending = true;
         this.tmpCameraForward = new THREE.Vector3();
         this.tmpCameraRight = new THREE.Vector3();
         this.tmpUp = new THREE.Vector3(0, 1, 0);
-        this.breakParticles = [];
-        this.breakParticleGeometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-        this.pickupEffects = [];
-        this.pickupGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
         this.visibilityDeferDepth = 0;
         this.visibilityUpdateQueue = new Set();
         this.visibilityNeighborOffsets = [
@@ -74,21 +68,9 @@ export class World {
             [0, 0, 1],
             [0, 0, -1]
         ];
-        this.pendingChunkLoads = [];
-        this.pendingChunkSet = new Set();
         this.chunkGenerator = this.game?.features?.workerChunkGeneration ? new ChunkGenerator(this) : null;
-        this.chunkRefreshTick = 0;
         this.starterChestClaimed = false;
         this.starterChestKey = null;
-        this.chunkMeshRebuildCursor = 0;
-        this.forceFullRemeshPending = true;
-        this.priorityDirtyChunkKeys = new Set();
-        this.meshSanityTick = 0;
-        this.criticalChunkTick = 0;
-        this.auraSampleTick = 0;
-        this.areaInfluenceSample = { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
-        this.restoredLandmarks = new Set();
-        this.structureVirusInfluenceEnabled = true;
         this.settlementNameLibrarySize = SETTLEMENT_LIBRARY_SIZE;
         this.landmarks = new Map(); // key → { x, z, name }
         this.terrainHeightCache = new Map();
@@ -137,12 +119,28 @@ export class World {
         );
         this.scene.add(this.miningCracks);
         this.miningCracks.visible = false;
+
+        this.auraSampleTick = 0;
+        this.areaInfluenceSample = { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+        this.restoredLandmarks = new Set();
+        this.structureVirusInfluenceEnabled = true;
+
+        // ─── Sub-systems ──────────────────────────────────────────────
+        this.chunkManager = new ChunkManager(this);
+        this.explosions = new ExplosionSystem(this);
+
+        // Backward-compat: expose chunks via property delegation
+        // so Chunk.js and other consumers can still do `this.world.chunks`
     }
 
+    // ─── Chunk delegation (backward compatibility) ────────────────────
+    get chunks() { return this.chunkManager.chunks; }
+    get priorityDirtyChunkKeys() { return this.chunkManager.priorityDirtyChunkKeys; }
+    get pendingChunkLoads() { return this.chunkManager.pendingChunkLoads; }
+    get pendingChunkSet() { return this.chunkManager.pendingChunkSet; }
+
     init() {
-        this.ensureChunksAround(0, 0);
-        this.processChunkLoadQueue(0, 0, 16);
-        this.ensureStarterChest();
+        // Placeholder for any one-time setup
     }
 
     setSeed(seedValue) {
@@ -168,10 +166,7 @@ export class World {
     }
 
     clearWorld() {
-        for (const chunk of this.chunks.values()) {
-            chunk.destroy();
-        }
-        this.chunks.clear();
+        this.chunkManager.clearAll();
         this.objects = [];
         this.waterMeshes.clear();
         this.virusMeshes.clear();
@@ -181,25 +176,31 @@ export class World {
         this.landmarks.clear();
         this.visibilityDeferDepth = 0;
         this.visibilityUpdateQueue.clear();
-        this.pendingChunkLoads.length = 0;
-        this.pendingChunkSet.clear();
-        this.lastPlayerChunkKey = null;
-        this.forceVisibilityResetPending = true;
         this.terrainHeightCache.clear();
         this.biomeCache.clear();
         this.resetMiningProgress();
-        for (const particle of this.breakParticles) {
-            this.scene.remove(particle.mesh);
-            particle.mesh.material.dispose();
-        }
-        this.breakParticles = [];
-        for (const pickup of this.pickupEffects) {
-            this.scene.remove(pickup.mesh);
-            pickup.mesh.material.dispose();
-        }
-        this.pickupEffects = [];
+        this.explosions.clearAll();
         if (this.hoverOutline) this.hoverOutline.visible = false;
     }
+
+    processSmelting() {
+        // Handled in Game.js
+    }
+
+    // ─── Explosion delegation ─────────────────────────────────────────
+    explode(x, y, z, radius) { this.explosions.explode(x, y, z, radius); }
+    spawnBreakParticles(x, y, z, blockId) { this.explosions.spawnBreakParticles(x, y, z, blockId); }
+    spawnPickupEffect(x, y, z, blockId, playerPosition) { this.explosions.spawnPickupEffect(x, y, z, blockId, playerPosition); }
+    getBlockColor(id) { return this.explosions.getBlockColor(id); }
+
+    // ─── Chunk Manager delegation ─────────────────────────────────────
+    loadChunk(cx, cz, forceSync) { this.chunkManager.loadChunk(cx, cz, forceSync); }
+    queueChunkLoad(cx, cz) { this.chunkManager.queueChunkLoad(cx, cz); }
+    ensureChunksAround(cx, cz) { this.chunkManager.ensureChunksAround(cx, cz); }
+    ensureCriticalChunks(cx, cz, r) { this.chunkManager.ensureCriticalChunks(cx, cz, r); }
+    flushPriorityChunkRebuilds(limit) { this.chunkManager.flushPriorityChunkRebuilds(limit); }
+
+    // ─── Serialization ────────────────────────────────────────────────
 
     serialize() {
         return {
@@ -231,6 +232,8 @@ export class World {
         this.clearWorld();
         this.init();
     }
+
+    // ─── Key / Coordinate Utilities ───────────────────────────────────
 
     getKey(x, y, z) {
         // Safe 53-bit integer packing: X(21 bits) | Z(21 bits) | Y(11 bits)
@@ -269,6 +272,8 @@ export class World {
     pointToBlockCoord(value) {
         return Math.floor(value + 0.5);
     }
+
+    // ─── Raycasting ───────────────────────────────────────────────────
 
     raycastBlocks(camera, maxDistance = 6, includeFluids = false) {
         if (!camera) return null;
@@ -345,6 +350,8 @@ export class World {
         return false;
     }
 
+    // ─── Noise / Hash Utilities ───────────────────────────────────────
+
     hash2D(x, z) {
         const value = Math.sin((x * 127.1) + (z * 311.7) + this.seed) * 43758.5453;
         return value - Math.floor(value);
@@ -382,10 +389,11 @@ export class World {
         return this.lerp(nx0, nx1, tz);
     }
 
+    // ─── Biome / Terrain Queries ──────────────────────────────────────
+
     getBiomeAt(x, z) {
         const gx = Math.round(x);
         const gz = Math.round(z);
-        // Use numeric key for 2D cache: (gx + 1,000,000) << 21 | (gz + 1,000,000)
         const key = (gx + 1000000) * 2097152 + (gz + 1000000);
         let id = this.biomeCache.get(key);
         if (!id) {
@@ -403,8 +411,6 @@ export class World {
         const cached = this.terrainHeightCache.get(key);
         if (cached !== undefined) return cached;
 
-        // Router works in MC coordinate space (sea level ≈ 64).
-        // Subtract 63 to map sea level → our seaLevel=1.
         const routed = this.router.getTerrainHeight(gx, gz) - 63;
         const height = Math.max(this.minTerrainY, Math.min(this.maxTerrainY, Math.round(routed)));
 
@@ -415,7 +421,6 @@ export class World {
 
     getColumnHeight(x, z) {
         let h = this.getTerrainHeight(x, z);
-        // Flatten a safe spawn area around origin so the player isn't in a pit
         const dist = Math.max(Math.abs(x), Math.abs(z));
         if (dist <= 20) {
             const flatHeight = this.seaLevel + 4;
@@ -446,7 +451,6 @@ export class World {
     shouldPlaceVirus(x, z, height) {
         if (!this.corruptionEnabled) return false;
         if (height < this.seaLevel + 1) return false;
-        // Rarer virus spikes so corruption feels special, not everywhere.
         return this.hash2D(x - 991, z + 417) > 0.9992;
     }
 
@@ -472,6 +476,8 @@ export class World {
         const corridorB = Math.abs(this.noise.simplex2D(x * 0.007 - 1841, z * 0.007 + 221));
         return corridorA < 0.015 || corridorB < 0.018;
     }
+
+    // ─── Landmarks ────────────────────────────────────────────────────
 
     getLandmarkStorageKey(x, z) {
         return `${Math.round(x)},${Math.round(z)}`;
@@ -729,6 +735,8 @@ export class World {
         return true;
     }
 
+    // ─── Structure Placement Queries ──────────────────────────────────
+
     shouldPlaceVillageChunk(cx, cz) {
         if (Math.abs(cx) <= 1 && Math.abs(cz) <= 1) return false;
         const hash = this.hash2D((cx * 31) + 71, (cz * 31) - 19);
@@ -763,6 +771,7 @@ export class World {
         return this.isStructureChunkAnchor(cx, cz, 2);
     }
 
+    // ─── Deep Underground / Ores ──────────────────────────────────────
 
     getDeepBlockId(x, y, z) {
         const r = this.hash3D((x * 17) + 13, y * 7, (z * 19) - 5);
@@ -853,6 +862,8 @@ export class World {
         this.ensureSubsurfacePocket(x, y, z, 1, 24);
     }
 
+    // ─── Block Queries ────────────────────────────────────────────────
+
     isBlockSolid(blockId) {
         if (!blockId) return false;
         if (blockId === 'water' || blockId === 'lava') return false;
@@ -867,7 +878,6 @@ export class World {
     getBlockData(id) {
         return this.blockDataById.get(id) ?? null;
     }
-
 
     isSolidAt(x, y, z) {
         const id = this.blockMap.get(this.getKey(Math.round(x), Math.round(y), Math.round(z)));
@@ -886,7 +896,6 @@ export class World {
         const pz = fromObject ? Number(positionOrX.z) : Number(z);
         if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) return false;
 
-        // Check both head and feet for better swimming feel.
         const samples = [py + 0.15, py - 0.2, py - 0.8];
         for (let i = 0; i < samples.length; i++) {
             const cy = Math.floor(samples[i] + 0.5);
@@ -894,6 +903,8 @@ export class World {
         }
         return false;
     }
+
+    // ─── Mining ───────────────────────────────────────────────────────
 
     computeMineDuration(blockId, selectedItem, mode) {
         if (mode === 'CREATIVE') return 0;
@@ -923,8 +934,8 @@ export class World {
         for (let dy = 1; dy <= 28; dy++) {
             const ay = y + dy;
             const aboveId = this.blockMap.get(this.getKey(x, ay, z));
-            if (!aboveId) break; // hit air — nothing above
-            if (!this._isGravityBlock(aboveId)) break; // hit solid ground — stop
+            if (!aboveId) break;
+            if (!this._isGravityBlock(aboveId)) break;
             toBreak.push({ ay, id: aboveId });
         }
         for (const { ay, id } of toBreak) {
@@ -969,143 +980,7 @@ export class World {
         window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio: 0, id: null, done: true } }));
     }
 
-    getBlockColor(id) {
-        const palette = {
-            grass: 0x7cc56a,
-            dirt: 0x8a6442,
-            stone: 0x8c969f,
-            sand: 0xd2c48d,
-            wood: 0x926d49,
-            leaves: 0x4e9a57,
-            water: 0x4a76df,
-            iron: 0xbec0c4,
-            gold: 0xf1cc4e,
-            diamond: 0x6de5da,
-            coal: 0x4a4d53,
-            copper: 0xc57a44,
-            tin: 0xbac2cb,
-            silver: 0xdce2e8,
-            ruby: 0xe2446a,
-            sapphire: 0x4c7fff,
-            amethyst: 0x9e72ef,
-            uranium: 0x7dff5d,
-            platinum: 0xd8e8f8,
-            mythril: 0x62f1ff,
-            arlo: 0xffaac9,
-            obsidian: 0x3b3054
-        };
-        return palette[id] ?? 0xb8c0ca;
-    }
-
-    spawnBreakParticles(x, y, z, blockId) {
-        const color = this.getBlockColor(blockId);
-        for (let i = 0; i < 6; i++) {
-            const material = new THREE.MeshBasicMaterial({
-                color,
-                transparent: true,
-                opacity: 0.9
-            });
-            const mesh = new THREE.Mesh(this.breakParticleGeometry, material);
-            mesh.position.set(
-                x + ((Math.random() - 0.5) * 0.4),
-                y + ((Math.random() - 0.5) * 0.35),
-                z + ((Math.random() - 0.5) * 0.4)
-            );
-            this.scene.add(mesh);
-            this.breakParticles.push({
-                mesh,
-                vx: (Math.random() - 0.5) * 2.0,
-                vy: 1.2 + (Math.random() * 1.5),
-                vz: (Math.random() - 0.5) * 2.0,
-                life: 0.42
-            });
-        }
-    }
-
-    updateBreakParticles(delta) {
-        for (let i = this.breakParticles.length - 1; i >= 0; i--) {
-            const p = this.breakParticles[i];
-            p.life -= delta;
-            p.vy -= 10.5 * delta;
-            p.mesh.position.x += p.vx * delta;
-            p.mesh.position.y += p.vy * delta;
-            p.mesh.position.z += p.vz * delta;
-
-            p.mesh.material.opacity = Math.max(0, p.life / 0.42);
-            if (p.life > 0) continue;
-
-            this.scene.remove(p.mesh);
-            p.mesh.material.dispose();
-            this.breakParticles.splice(i, 1);
-        }
-    }
-
-    spawnPickupEffect(x, y, z, blockId, playerPosition) {
-        if (!this.game?.features?.blockBreakPickupMagnet) return;
-        const distanceSq = playerPosition
-            ? ((x - playerPosition.x) ** 2) + ((y - playerPosition.y) ** 2) + ((z - playerPosition.z) ** 2)
-            : Infinity;
-        const attract = distanceSq <= (7 * 7);
-
-        const material = new THREE.MeshBasicMaterial({
-            color: this.getBlockColor(blockId),
-            transparent: true,
-            opacity: 0.95
-        });
-        const mesh = new THREE.Mesh(this.pickupGeometry, material);
-        mesh.position.set(x, y, z);
-        mesh.scale.set(1, 1, 1);
-        this.scene.add(mesh);
-
-        this.pickupEffects.push({
-            mesh,
-            age: 0,
-            life: attract ? 0.55 : 0.24,
-            attract
-        });
-    }
-
-    updatePickupEffects(delta, playerPosition) {
-        for (let i = this.pickupEffects.length - 1; i >= 0; i--) {
-            const fx = this.pickupEffects[i];
-            fx.age += delta;
-            fx.life -= delta;
-
-            if (fx.age < 0.12) {
-                const shrink = 1 - (fx.age / 0.12) * 0.4;
-                fx.mesh.scale.set(shrink, shrink, shrink);
-            }
-
-            if (fx.attract && playerPosition && fx.age >= 0.12) {
-                const tx = playerPosition.x;
-                const ty = playerPosition.y + 0.65;
-                const tz = playerPosition.z;
-                const dx = tx - fx.mesh.position.x;
-                const dy = ty - fx.mesh.position.y;
-                const dz = tz - fx.mesh.position.z;
-                const dist = Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
-                if (dist > 0.0001) {
-                    const speed = 8.5;
-                    const step = Math.min(dist, speed * delta);
-                    fx.mesh.position.x += (dx / dist) * step;
-                    fx.mesh.position.y += (dy / dist) * step;
-                    fx.mesh.position.z += (dz / dist) * step;
-                }
-
-                const pullScale = Math.max(0.25, fx.mesh.scale.x * 0.92);
-                fx.mesh.scale.set(pullScale, pullScale, pullScale);
-
-                if (dist < 0.35) fx.life = 0;
-            }
-
-            fx.mesh.material.opacity = Math.max(0, fx.life / (fx.attract ? 0.55 : 0.24));
-            if (fx.life > 0) continue;
-
-            this.scene.remove(fx.mesh);
-            fx.mesh.material.dispose();
-            this.pickupEffects.splice(i, 1);
-        }
-    }
+    // ─── Block Add / Remove ───────────────────────────────────────────
 
     addBlock(x, y, z, id, ownerKey = null, replace = false, options = {}) {
         const gx = Math.round(x);
@@ -1200,23 +1075,7 @@ export class World {
         }
     }
 
-    flushPriorityChunkRebuilds(limit = 12) {
-        if (this.priorityDirtyChunkKeys.size === 0) return;
-        let rebuilt = 0;
-        const keys = Array.from(this.priorityDirtyChunkKeys);
-        for (let i = 0; i < keys.length; i++) {
-            if (rebuilt >= limit) break;
-            const key = keys[i];
-            const chunk = this.chunks.get(key);
-            if (!chunk || chunk.destroyed || !chunk.dirty) {
-                this.priorityDirtyChunkKeys.delete(key);
-                continue;
-            }
-            chunk.update();
-            rebuilt += 1;
-            this.priorityDirtyChunkKeys.delete(key);
-        }
-    }
+    // ─── Mining Progress ──────────────────────────────────────────────
 
     mineBlock(camera) {
         const hit = this.raycastBlocks(camera, 6, false);
@@ -1282,11 +1141,12 @@ export class World {
         return broken;
     }
 
+    // ─── Block Placement / Interaction ────────────────────────────────
+
     resolveBlockPlacementId(slotItem) {
         if (!slotItem || !slotItem.id) return null;
         if (slotItem.kind === 'tool') return null;
 
-        // Backward compatible with older saves that did not store `kind`.
         const blockData = this.blockDataById.get(slotItem.id);
         if (!blockData) return null;
         if (!this.corruptionEnabled && (slotItem.id === 'virus' || slotItem.id === 'arlo')) return null;
@@ -1333,6 +1193,16 @@ export class World {
             return true;
         }
 
+        if (blockId === 'tnt') {
+            this.explode(hit.cell.x, hit.cell.y, hit.cell.z, 5);
+            return true;
+        }
+
+        if (blockId === 'nuke') {
+            this.explode(hit.cell.x, hit.cell.y, hit.cell.z, 16);
+            return true;
+        }
+
         const holdingBlock = Boolean(this.resolveBlockPlacementId(this.getSelectedInventoryItem()));
         if (!holdingBlock && this.tryRestoreNearbyLandmark(camera.position)) return true;
         if (!holdingBlock) {
@@ -1374,193 +1244,11 @@ export class World {
         const next = Math.max(this.minRenderDistance, Math.min(this.maxRenderDistance, value));
         if (next === this.renderDistance) return;
         this.renderDistance = next;
-        this.lastPlayerChunkKey = null;
-        this.forceVisibilityResetPending = true;
+        this.chunkManager.lastPlayerChunkKey = null;
+        this.chunkManager.forceVisibilityResetPending = true;
     }
 
-    loadChunk(cx, cz, forceSync = false) {
-        const key = this.getChunkKey(cx, cz);
-        if (this.chunks.has(key)) {
-            this.pendingChunkSet.delete(key);
-            return;
-        }
-        const chunk = new Chunk(this, cx, cz);
-        this.chunks.set(key, chunk);
-        try {
-            if (forceSync) {
-                // Sync-generate near-player chunks so they're immediately visible.
-                chunk.generateSync();
-            } else {
-                chunk.generate(); // async via worker
-            }
-            // Build mesh immediately so newly loaded chunks don't appear as holes.
-            if (chunk.dirty && !chunk.destroyed) chunk.update();
-        } catch (error) {
-            console.warn('[ArloCraft] Chunk generation failed:', key, error);
-            chunk.destroy();
-            this.chunks.delete(key);
-        } finally {
-            this.pendingChunkSet.delete(key);
-        }
-
-        if (
-            this.corruptionEnabled
-            && this.hash2D(cx + 411, cz - 108) > 0.93
-            && this.game.entities.entities.length < this.game.entities.maxEntities
-        ) {
-            const wx = (cx * this.chunkSize) + Math.floor(this.chunkSize / 2);
-            const wz = (cz * this.chunkSize) + Math.floor(this.chunkSize / 2);
-            const wy = this.getTerrainHeight(wx, wz) + 2;
-            this.game.entities.spawn('virus_grunt', wx + 0.5, wy, wz + 0.5);
-        }
-    }
-
-    ensureCriticalChunks(centerCx, centerCz, radius = 1) {
-        for (let dx = -radius; dx <= radius; dx++) {
-            for (let dz = -radius; dz <= radius; dz++) {
-                const cx = centerCx + dx;
-                const cz = centerCz + dz;
-                const key = this.getChunkKey(cx, cz);
-                const chunk = this.chunks.get(key);
-                if (!chunk) {
-                    // Use sync for inner ring (radius 1) to avoid invisible gaps.
-                    const isInner = Math.abs(dx) <= 1 && Math.abs(dz) <= 1;
-                    this.loadChunk(cx, cz, isInner);
-                    continue;
-                }
-                if (chunk.dirty && !chunk.destroyed) {
-                    chunk.update();
-                }
-            }
-        }
-    }
-
-    queueChunkLoad(cx, cz) {
-        const key = this.getChunkKey(cx, cz);
-        if (this.chunks.has(key) || this.pendingChunkSet.has(key)) return;
-        this.pendingChunkSet.add(key);
-        this.pendingChunkLoads.push({ cx, cz, key });
-    }
-
-    processChunkLoadQueue(centerCx, centerCz, explicitBudget = null) {
-        if (this.pendingChunkLoads.length === 0) return;
-
-        let budget = explicitBudget;
-        if (!Number.isFinite(budget)) {
-            const tier = this.game?.qualityTier ?? 'balanced';
-            if (tier === 'low') budget = 6;
-            else if (tier === 'high') budget = 14;
-            else budget = 10;
-        }
-
-        budget = Math.max(1, Math.floor(budget));
-        const refCx = Number.isFinite(centerCx) ? centerCx : 0;
-        const refCz = Number.isFinite(centerCz) ? centerCz : 0;
-        this.pendingChunkLoads.sort((a, b) => {
-            const adx = a.cx - refCx;
-            const adz = a.cz - refCz;
-            const bdx = b.cx - refCx;
-            const bdz = b.cz - refCz;
-            return (adx * adx) + (adz * adz) - ((bdx * bdx) + (bdz * bdz));
-        });
-
-        while (budget > 0 && this.pendingChunkLoads.length > 0) {
-            const next = this.pendingChunkLoads.shift();
-            if (!next) break;
-            this.loadChunk(next.cx, next.cz);
-            budget -= 1;
-        }
-    }
-
-    processDirtyChunkRebuilds() {
-        this.flushPriorityChunkRebuilds(8);
-
-        const chunks = Array.from(this.chunks.values());
-        const total = chunks.length;
-        if (total === 0) return;
-
-        const tier = this.game?.qualityTier ?? 'balanced';
-        const rebuildBudget = tier === 'low' ? 6 : (tier === 'high' ? 12 : 8);
-        let rebuilt = 0;
-        let scanned = 0;
-        let cursor = this.chunkMeshRebuildCursor % total;
-
-        while (scanned < total && rebuilt < rebuildBudget) {
-            const chunk = chunks[cursor];
-            if (chunk?.dirty && !chunk.destroyed) {
-                chunk.update();
-                rebuilt += 1;
-            }
-
-            scanned += 1;
-            cursor = (cursor + 1) % total;
-        }
-
-        this.chunkMeshRebuildCursor = cursor;
-    }
-
-    ensureChunkMeshColorSanity(limit = 10) {
-        this.meshSanityTick = (this.meshSanityTick + 1) % 30;
-        if (this.meshSanityTick !== 0) return;
-
-        let flagged = 0;
-        for (const [key, chunk] of this.chunks.entries()) {
-            if (flagged >= limit) break;
-            if (!chunk || chunk.destroyed || chunk.dirty) continue;
-
-            let needsRebuild = false;
-            for (const mesh of chunk.instancedMeshes.values()) {
-                if (!mesh) continue;
-                const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-                let hasVertexColors = false;
-                for (let i = 0; i < materials.length; i++) {
-                    if (materials[i]?.vertexColors) {
-                        hasVertexColors = true;
-                        break;
-                    }
-                }
-                if (hasVertexColors && !mesh.instanceColor) {
-                    needsRebuild = true;
-                    break;
-                }
-            }
-
-            if (!needsRebuild) continue;
-            chunk.dirty = true;
-            this.priorityDirtyChunkKeys.add(key);
-            flagged += 1;
-        }
-    }
-
-    unloadFarChunks(centerCx, centerCz) {
-        const unloadRadius = this.renderDistance + 3;
-        for (const [key, chunk] of this.chunks.entries()) {
-            const dx = Math.abs(chunk.cx - centerCx);
-            const dz = Math.abs(chunk.cz - centerCz);
-            if (dx <= unloadRadius && dz <= unloadRadius) continue;
-            chunk.destroy();
-            this.chunks.delete(key);
-        }
-
-        if (this.pendingChunkLoads.length > 0) {
-            this.pendingChunkLoads = this.pendingChunkLoads.filter((pending) => {
-                const dx = Math.abs(pending.cx - centerCx);
-                const dz = Math.abs(pending.cz - centerCz);
-                const keep = dx <= unloadRadius && dz <= unloadRadius;
-                if (!keep) this.pendingChunkSet.delete(pending.key);
-                return keep;
-            });
-        }
-    }
-
-    ensureChunksAround(centerCx, centerCz) {
-        const preloadRadius = this.renderDistance + 1;
-        for (let dx = -preloadRadius; dx <= preloadRadius; dx++) {
-            for (let dz = -preloadRadius; dz <= preloadRadius; dz++) {
-                this.queueChunkLoad(centerCx + dx, centerCz + dz);
-            }
-        }
-    }
+    // ─── Height / Surface Queries ─────────────────────────────────────
 
     getSurfaceHeightAt(x, z) {
         const gx = Math.floor(x + 0.5);
@@ -1568,11 +1256,13 @@ export class World {
         const chunkKey = this.getChunkKey(this.getChunkCoord(gx), this.getChunkCoord(gz));
         const chunkLoaded = this.chunks.has(chunkKey);
 
-        for (let y = this.maxTerrainY + 8; y >= this.minTerrainY - 2; y--) {
-            const id = this.blockMap.get(this.getKey(gx, y, gz));
-            if (!id) continue;
-            if (id === 'water') continue;
-            return y + 0.5;
+        if (chunkLoaded) {
+            for (let y = this.maxTerrainY + 10; y >= this.minTerrainY - 2; y--) {
+                const id = this.blockMap.get(this.getKey(gx, y, gz));
+                if (!id) continue;
+                if (!this.isBlockSolid(id)) continue;
+                return y + 0.5;
+            }
         }
 
         if (chunkLoaded) return this.deepMinY;
@@ -1662,6 +1352,8 @@ export class World {
         return this.getBiomeAt(x, z)?.id ?? 'plains';
     }
 
+    // ─── Area Influence ───────────────────────────────────────────────
+
     getAreaInfluence(position) {
         if (!this.corruptionEnabled && !this.structureVirusInfluenceEnabled) {
             this.areaInfluenceSample = { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
@@ -1736,6 +1428,8 @@ export class World {
         return { x: ox, y: fallbackY, z: oz };
     }
 
+    // ─── Starter Chest ────────────────────────────────────────────────
+
     ensureStarterChest() {
         if (this.starterChestClaimed) return;
         if (this.starterChestKey && this.blockMap.get(this.starterChestKey) === 'starter_chest') return;
@@ -1773,13 +1467,15 @@ export class World {
         return this.removeBlockByKey(this.getKey(x, y, z));
     }
 
+    // ─── Directional Chunk Visibility (optional) ──────────────────────
+
     updateDirectionalChunkVisibility(playerPosition, camera) {
         if (!this.game?.features?.directionalChunkCulling) return;
         if (this.renderDistance <= 0) return;
         if (!camera) return;
 
-        this.chunkVisibilityTick = (this.chunkVisibilityTick + 1) % 8;
-        if (this.chunkVisibilityTick !== 0) return;
+        const chunkVisibilityTick = (this.chunkManager.visibilityScanTick + 1) % 8;
+        if (chunkVisibilityTick !== 0) return;
 
         camera.getWorldDirection(this.tmpCameraForward);
         this.tmpCameraForward.y = 0;
@@ -1788,7 +1484,6 @@ export class World {
         this.tmpCameraRight.crossVectors(this.tmpCameraForward, this.tmpUp).normalize();
 
         const nearDistSq = (this.chunkSize * 1.35) ** 2;
-        const maxCullDistance = Math.max(this.chunkSize * (this.renderDistance + 0.5), this.chunkSize * 2);
         for (const chunk of this.chunks.values()) {
             const centerX = (chunk.cx * this.chunkSize) + (this.chunkSize * 0.5);
             const centerZ = (chunk.cz * this.chunkSize) + (this.chunkSize * 0.5);
@@ -1803,9 +1498,6 @@ export class World {
                 const dirX = dx * invDist;
                 const dirZ = dz * invDist;
                 const forwardDot = (dirX * this.tmpCameraForward.x) + (dirZ * this.tmpCameraForward.z);
-                // Only hide chunks that are clearly and firmly behind the player.
-                // The old side-threshold check was too aggressive and caused random
-                // chunks to pop in/out; removed it entirely.
                 if (forwardDot < -0.55) visible = false;
             }
 
@@ -1813,60 +1505,24 @@ export class World {
         }
     }
 
+    // ─── Main Update Loop ─────────────────────────────────────────────
+
     update(playerPosition, delta = (1 / 60)) {
-        if (this.forceFullRemeshPending) {
-            for (const chunk of this.chunks.values()) chunk.dirty = true;
-            this.forceFullRemeshPending = false;
-        }
+        // 1. Chunk lifecycle (load/unload/rebuild/visibility)
+        this.chunkManager.update(playerPosition, delta);
 
-        this.ensureChunkMeshColorSanity();
-
-        // 1. Process Chunk Updates (dirty rebuilds) with per-frame budget to reduce frame spikes.
-        this.processDirtyChunkRebuilds();
-
-        // ... existing visual updates ...
+        // 2. Animated block textures
         if (this.game?.features?.animatedVirusBlocks && this.virusBlockCount > 0) {
             this.gifTick = (this.gifTick + 1) % 4;
             if (this.gifTick === 0) this.registry.updateAnimatedTextures();
         }
         this.registry.updateShaderMaterials(performance.now() * 0.001);
 
-        const dt = Math.max(1 / 120, Math.min(1 / 24, delta));
-        this.updateBreakParticles(dt);
-        this.updatePickupEffects(dt, playerPosition);
+        // 3. Particle systems (explosion debris, break particles, pickups)
+        this.explosions.update(delta, playerPosition);
 
-        const playerCx = this.getChunkCoord(playerPosition.x);
-        const playerCz = this.getChunkCoord(playerPosition.z);
-        const key = this.getChunkKey(playerCx, playerCz);
-        // Always sync-generate the player's current chunk so it's immediately visible.
-        if (!this.chunks.has(key)) this.loadChunk(playerCx, playerCz, true);
-
-        if (this.lastPlayerChunkKey !== key) {
-            this.unloadFarChunks(playerCx, playerCz);
-            this.ensureChunksAround(playerCx, playerCz);
-            this.lastPlayerChunkKey = key;
-        }
-        this.chunkRefreshTick = (this.chunkRefreshTick + 1) % 20;
-        if (this.chunkRefreshTick === 0) {
-            this.ensureChunksAround(playerCx, playerCz);
-        }
-
-        this.criticalChunkTick = (this.criticalChunkTick + 1) % 4;
-        if (this.criticalChunkTick === 0) {
-            this.ensureCriticalChunks(playerCx, playerCz, 2);
-        }
-        this.processChunkLoadQueue(playerCx, playerCz);
-
+        // 4. Hover outline
         const cam = this.game?.camera?.instance;
-        // Ensure all chunks are visible when directional culling is disabled.
-        // We scan periodically to catch any chunks stuck in a hidden state.
-        this.visibilityScanTick = (this.visibilityScanTick || 0) + 1;
-        if (this.visibilityScanTick % 30 === 0 || this.forceVisibilityResetPending) {
-            for (const chunk of this.chunks.values()) {
-                if (!chunk.visible) chunk.setVisible(true);
-            }
-            this.forceVisibilityResetPending = false;
-        }
         if (cam) {
             this.hoverTick = (this.hoverTick + 1) % 6;
             if (this.hoverTick === 0) {
@@ -1880,12 +1536,13 @@ export class World {
             }
         }
 
+        // 5. Subsurface generation
         this.subsurfaceTick = (this.subsurfaceTick + 1) % 18;
         if (this.subsurfaceTick === 0 && playerPosition.y < (this.minTerrainY + 3)) {
             this.ensureSubsurfacePocket(playerPosition.x, playerPosition.y - 1, playerPosition.z, 0, 8);
         }
 
-        // --- DYNAMIC MOB SPAWNING ---
+        // 6. Dynamic mob spawning
         this.spawnTick = (this.spawnTick || 0) + 1;
         if (this.spawnTick % 60 === 0 && this.game?.entities) {
             this.trySpawnNaturalMob(playerPosition);
@@ -1929,4 +1586,3 @@ export class World {
         this.game.entities.spawn(mob.id, sx, spawnY, sz);
     }
 }
-    
