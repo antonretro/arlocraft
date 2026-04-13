@@ -640,6 +640,7 @@ export class Chunk {
             this.placeVillageCluster(vx, vy, vz);
         }
         this.applyPlayerOverrides();
+        this.dirty = true;
     }
 
     registerRoadLandmark(startX, startZ) {

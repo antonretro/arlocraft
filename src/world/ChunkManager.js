@@ -74,7 +74,12 @@ export class ChunkManager {
             } else {
                 chunk.generate();
             }
-            if (chunk.dirty && !chunk.destroyed) chunk.update();
+            // Ensure any generated chunk is marked dirty so it rebuilds meshes on the next update
+            if (!chunk.destroyed) {
+                chunk.dirty = true;
+                this.priorityDirtyChunkKeys.add(key);
+                if (forceSync) chunk.update();
+            }
         } catch (error) {
             console.warn('[ArloCraft] Chunk generation failed:', key, error);
             chunk.destroy();
