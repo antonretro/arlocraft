@@ -561,16 +561,11 @@ export class Chunk {
             this.group.add(im);
         }
         
-        // 4. Update group bounding for raycasting accuracy
-        const camPos = this.world.game.camera.instance.position;
-        const isNear = Math.abs(this.cx - this.world.getChunkCoord(camPos.x)) <= 1 &&
-                       Math.abs(this.cz - this.world.getChunkCoord(camPos.z)) <= 1;
-
+        // 4. Update group bounding for raycasting and final visibility pass
         for (const mesh of this.instancedMeshes.values()) {
             mesh.computeBoundingSphere();
-            // Critical Fix: Disable culling on 5x5 area to prevent 'invisible holes' from math errors
-            if (isNear) mesh.frustumCulled = false;
-            else mesh.frustumCulled = true;
+            // Force all chunk meshes to stay visible to prevent camera-math gaps
+            mesh.frustumCulled = false;
         }
         } catch (e) {
             console.error('[ArloCraft] rebuildMeshes failed:', this.key, e);

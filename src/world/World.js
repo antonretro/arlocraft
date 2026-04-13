@@ -238,11 +238,7 @@ export class World {
     getKey(x, y, z) {
         // Safe 53-bit integer packing: X(21 bits) | Z(21 bits) | Y(11 bits)
         // Range: X/Z ±1,000,000, Y ±1,000.
-        // Using floor ensures consistent grid mapping across boundaries.
-        const ix = Math.floor(x) + 1000000;
-        const iz = Math.floor(z) + 1000000;
-        const iy = Math.floor(y) + 512;
-        return ix * 4294967296 + iz * 2048 + iy;
+        return (Math.round(x) + 1000000) * 4294967296 + (Math.round(z) + 1000000) * 2048 + (Math.round(y) + 512);
     }
 
     keyToCoords(key) {
