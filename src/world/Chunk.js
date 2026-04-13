@@ -441,7 +441,10 @@ export class Chunk {
     }
 
     rebuildMeshes() {
-        // 1. Clear old instances
+        if (this.destroyed) return;
+        
+        try {
+            // 1. Clear old instances
         for (const mesh of this.instancedMeshes.values()) {
             this.group.remove(mesh);
             if (mesh.userData?.ownedMaterial) {
@@ -506,18 +509,21 @@ export class Chunk {
                 }
 
                 // Occlusion check: skip rendering if fully surrounded by solid blocks
-                const nx = this.world.blockMap.get(this.world.getKey(ax + 1, ay, az));
-                const px = this.world.blockMap.get(this.world.getKey(ax - 1, ay, az));
-                const ny = this.world.blockMap.get(this.world.getKey(ax, ay + 1, az));
-                const py = this.world.blockMap.get(this.world.getKey(ax, ay - 1, az));
-                const nz = this.world.blockMap.get(this.world.getKey(ax, ay, az + 1));
-                const pz = this.world.blockMap.get(this.world.getKey(ax, ay, az - 1));
+                // Stability Fix: Bypass occlusion for nearby chunks to prevent 'void lines' at boundaries
+                if (!isNear) {
+                    const nx = this.world.blockMap.get(this.world.getKey(ax + 1, ay, az));
+                    const px = this.world.blockMap.get(this.world.getKey(ax - 1, ay, az));
+                    const ny = this.world.blockMap.get(this.world.getKey(ax, ay + 1, az));
+                    const py = this.world.blockMap.get(this.world.getKey(ax, ay - 1, az));
+                    const nz = this.world.blockMap.get(this.world.getKey(ax, ay, az + 1));
+                    const pz = this.world.blockMap.get(this.world.getKey(ax, ay, az - 1));
 
-                if (nx && px && ny && py && nz && pz) {
-                    if (this.world.isBlockSolid(nx) && this.world.isBlockSolid(px) && 
-                        this.world.isBlockSolid(ny) && this.world.isBlockSolid(py) && 
-                        this.world.isBlockSolid(nz) && this.world.isBlockSolid(pz)) {
-                        continue; 
+                    if (nx && px && ny && py && nz && pz) {
+                        if (this.world.isBlockSolid(nx) && this.world.isBlockSolid(px) && 
+                            this.world.isBlockSolid(ny) && this.world.isBlockSolid(py) && 
+                            this.world.isBlockSolid(nz) && this.world.isBlockSolid(pz)) {
+                            continue; 
+                        }
                     }
                 }
 
@@ -557,8 +563,12 @@ export class Chunk {
 
         for (const mesh of this.instancedMeshes.values()) {
             mesh.computeBoundingSphere();
-            // Critical Fix: Disable culling on immediate neighbors to prevent 'invisible holes' from math errors
+            // Critical Fix: Disable culling on 5x5 area to prevent 'invisible holes' from math errors
             if (isNear) mesh.frustumCulled = false;
+            else mesh.frustumCulled = true;
+        }
+        } catch (e) {
+            console.error('[ArloCraft] rebuildMeshes failed:', this.key, e);
         }
     }
 
