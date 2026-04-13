@@ -313,6 +313,12 @@ export class ChunkManager {
     // ─── Per-frame update ─────────────────────────────────────────────
 
     update(playerPosition, delta) {
+        if (!playerPosition) return;
+
+        const playerCx = this.world.getChunkCoord(playerPosition.x);
+        const playerCz = this.world.getChunkCoord(playerPosition.z);
+        const key = this.world.getChunkKey(playerCx, playerCz);
+
         if (this.forceFullRemeshPending) {
             for (const chunk of this.chunks.values()) chunk.dirty = true;
             this.forceFullRemeshPending = false;
@@ -324,20 +330,16 @@ export class ChunkManager {
         // If nearby chunks have blocks but zero meshes, they are 'ghosts' and need a forced rebuild.
         for (let dx = -2; dx <= 2; dx++) {
             for (let dz = -2; dz <= 2; dz++) {
-                const key = this.world.getChunkKey(playerCx + dx, playerCz + dz);
-                const chunk = this.chunks.get(key);
+                const ck = this.world.getChunkKey(playerCx + dx, playerCz + dz);
+                const chunk = this.chunks.get(ck);
                 if (chunk && !chunk.destroyed && chunk.blockKeys.size > 0 && chunk.instancedMeshes.size === 0) {
                     chunk.dirty = true;
-                    this.priorityDirtyChunkKeys.add(key);
+                    this.priorityDirtyChunkKeys.add(ck);
                 }
             }
         }
 
         this.processDirtyChunkRebuilds(playerPosition);
-
-        const playerCx = this.world.getChunkCoord(playerPosition.x);
-        const playerCz = this.world.getChunkCoord(playerPosition.z);
-        const key = this.world.getChunkKey(playerCx, playerCz);
 
         // Always ensure current chunk is loaded and meshed
         if (!this.chunks.has(key)) {
