@@ -1036,7 +1036,7 @@ export class World {
             this.priorityDirtyChunkKeys.add(ownerChunk.key);
         }
 
-        const [x, y, z] = this.keyToCoords(key);
+
         this.updateNeighborsDirty(x, y, z);
         if (id === 'virus' || id === 'arlo') {
             this.markChunksWithinBlockRadiusDirty(x, z, this.virusInfluenceRadiusBlocks, true);
