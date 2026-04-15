@@ -1003,7 +1003,7 @@ export class World {
         if (ownerChunk) {
             ownerChunk.blockKeys.add(key);
             ownerChunk.dirty = true;
-            this.priorityDirtyChunkKeys.add(owner);
+            this.priorityDirtyChunkKeys.add(ownerChunk.key);
         }
 
         this.updateNeighborsDirty(gx, gy, gz);
@@ -1028,11 +1028,12 @@ export class World {
         
         if (id === 'virus' && this.virusBlockCount > 0) this.virusBlockCount--;
         
-        const ownerChunk = this.chunks.get(owner);
+        const [x, y, z] = this.keyToCoords(key);
+        const ownerChunk = this.getChunk(this.getChunkCoord(x), this.getChunkCoord(z));
         if (ownerChunk) {
             ownerChunk.blockKeys.delete(key);
             ownerChunk.dirty = true;
-            this.priorityDirtyChunkKeys.add(owner);
+            this.priorityDirtyChunkKeys.add(ownerChunk.key);
         }
 
         const [x, y, z] = this.keyToCoords(key);
@@ -1478,39 +1479,7 @@ export class World {
     // ─── Directional Chunk Visibility (optional) ──────────────────────
 
     updateDirectionalChunkVisibility(playerPosition, camera) {
-        if (!this.game?.features?.directionalChunkCulling) return;
-        if (this.renderDistance <= 0) return;
-        if (!camera) return;
-
-        const chunkVisibilityTick = (this.chunkManager.visibilityScanTick + 1) % 8;
-        if (chunkVisibilityTick !== 0) return;
-
-        camera.getWorldDirection(this.tmpCameraForward);
-        this.tmpCameraForward.y = 0;
-        if (this.tmpCameraForward.lengthSq() < 0.0001) return;
-        this.tmpCameraForward.normalize();
-        this.tmpCameraRight.crossVectors(this.tmpCameraForward, this.tmpUp).normalize();
-
-        const nearDistSq = (this.chunkSize * 1.35) ** 2;
-        for (const chunk of this.chunks.values()) {
-            const centerX = (chunk.cx * this.chunkSize) + (this.chunkSize * 0.5);
-            const centerZ = (chunk.cz * this.chunkSize) + (this.chunkSize * 0.5);
-            const dx = centerX - playerPosition.x;
-            const dz = centerZ - playerPosition.z;
-            const distSq = (dx * dx) + (dz * dz);
-
-            let visible = true;
-            if (distSq > nearDistSq) {
-                const dist = Math.sqrt(distSq);
-                const invDist = dist > 0 ? (1 / dist) : 0;
-                const dirX = dx * invDist;
-                const dirZ = dz * invDist;
-                const forwardDot = (dirX * this.tmpCameraForward.x) + (dirZ * this.tmpCameraForward.z);
-                if (forwardDot < -0.55) visible = false;
-            }
-
-            chunk.setVisible(visible);
-        }
+        return;
     }
 
     // ─── Main Update Loop ─────────────────────────────────────────────

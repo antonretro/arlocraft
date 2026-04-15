@@ -456,6 +456,7 @@ export class Chunk {
                     mesh.material.dispose();
                 }
             }
+            if (typeof mesh.dispose === 'function') mesh.dispose();
         }
         this.instancedMeshes.clear();
 
@@ -752,6 +753,7 @@ export class Chunk {
                     mesh.material.dispose();
                 }
             }
+            if (typeof mesh.dispose === 'function') mesh.dispose();
         }
         this.instancedMeshes.clear();
         if (this.group?.parent) this.group.parent.remove(this.group);

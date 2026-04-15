@@ -18,6 +18,7 @@ export class Physics {
         this.walkSpeed = 6.2;
         this.sprintSpeed = 8.4;
         this.creativeSpeed = 11;
+        this.crouchSpeed = 2.8;
         this.jumpSpeed = 7.2;
         this.groundFriction = 18;
         this.airFriction = 3.5;
@@ -31,6 +32,8 @@ export class Physics {
         this.playerRadius = 0.32;
         this.bodyHeight = 1.75;
         this.eyeHeight = 1.32;
+        this.currentEyeHeight = 1.32;
+        this.isCrouching = false;
         this.voidFallTimer = 0;
         this.autoJumpEnabled = true;
         this.jumpBufferWindow = 0.14;
@@ -189,9 +192,10 @@ export class Physics {
         }
     }
 
-    canOccupyAt(x, y, z) {
+    canOccupyAt(x, y, z, overrideHeight = null) {
+        const height = overrideHeight ?? this.bodyHeight;
         const minY = y - this.feetOffset;
-        const maxY = minY + this.bodyHeight;
+        const maxY = minY + height;
         const minBlockY = Math.floor(minY);
         const maxBlockY = Math.floor(maxY);
         const minX = Math.floor(x - this.playerRadius - 0.5);
@@ -242,8 +246,30 @@ export class Physics {
         if (!this.isReady) return;
 
         const keys = input.keys;
-        const sprinting = this.mode === 'SURVIVAL' && (keys['ShiftLeft'] || keys['ShiftRight']);
-        const speed = this.mode === 'CREATIVE' ? this.creativeSpeed : (sprinting ? this.sprintSpeed : this.walkSpeed);
+        const inWater = this.world.isPositionInWater(this.position.x, this.position.y, this.position.z);
+        const grounded = !inWater && this.mode === 'SURVIVAL' && this.isGrounded();
+
+        let wantsToCrouch = this.mode === 'SURVIVAL' && (keys['ShiftLeft'] || keys['ShiftRight']);
+        
+        // Ceiling Check (if releasing crouch under a low ceiling, force crouch)
+        if (!wantsToCrouch && this.isCrouching) {
+            if (!this.canOccupyAt(this.position.x, this.position.y, this.position.z, 1.75)) {
+                wantsToCrouch = true;
+            }
+        }
+        
+        this.isCrouching = wantsToCrouch;
+        
+        // Eye Height Interpolation
+        const targetEyeHeight = this.isCrouching ? 1.05 : 1.32;
+        this.currentEyeHeight = THREE.MathUtils.lerp(this.currentEyeHeight ?? 1.32, targetEyeHeight, delta * 14);
+        this.eyeHeight = this.currentEyeHeight;
+
+        // Body Height for collisions
+        this.bodyHeight = this.isCrouching ? 1.45 : 1.75;
+
+        const sprinting = this.mode === 'SURVIVAL' && !this.isCrouching && (keys['ControlLeft'] || keys['ControlRight']);
+        const speed = this.mode === 'CREATIVE' ? this.creativeSpeed : (this.isCrouching ? this.crouchSpeed : (sprinting ? this.sprintSpeed : this.walkSpeed));
 
         let inputX = 0;
         let inputZ = 0;
@@ -266,11 +292,10 @@ export class Physics {
             this.moveDir.set(0, 0, 0);
         }
 
-        const inWater = this.world.isPositionInWater(this.position.x, this.position.y, this.position.z);
         const moveSpeed = inWater ? this.swimSpeed : speed;
         const targetX = this.moveDir.x * moveSpeed;
         const targetZ = this.moveDir.z * moveSpeed;
-        const grounded = !inWater && this.mode === 'SURVIVAL' && this.isGrounded();
+
         if (input.consumeKeyPress('Space')) {
             this.jumpBufferTimer = this.jumpBufferWindow;
         } else {
@@ -301,11 +326,11 @@ export class Physics {
             } else if (grounded) {
                 if (this.velocity.y < 0) this.velocity.y = 0;
                 const bufferedJump = this.jumpBufferTimer > 0 && this.coyoteTimer > 0;
-                if (bufferedJump) {
+                if (bufferedJump && !this.isCrouching) {
                     this.velocity.y = this.jumpSpeed;
                     this.jumpBufferTimer = 0;
                     this.coyoteTimer = 0;
-                } else if (this.autoJumpEnabled && this.autoJumpCooldown <= 0 && this.shouldAutoJump()) {
+                } else if (!this.isCrouching && this.autoJumpEnabled && this.autoJumpCooldown <= 0 && this.shouldAutoJump()) {
                     this.velocity.y = this.jumpSpeed;
                     this.autoJumpCooldown = 0.2;
                 }
@@ -370,6 +395,12 @@ export class Physics {
                         this.position.x = preStepX;
                         this.velocity.x = 0;
                     }
+                } else if (this.isCrouching && grounded && this.velocity.y <= 0) {
+                    const groundNext = this.getGroundYAt(this.position.x, oldZ, this.position.y);
+                    if (groundNext < this.position.y - 0.3) {
+                        this.position.x = preStepX;
+                        this.velocity.x = 0;
+                    }
                 }
             }
 
@@ -388,6 +419,12 @@ export class Physics {
                         this.position.y = stepCandidateY;
                     } else {
                         // Can't step, so block Z
+                        this.position.z = preStepZ;
+                        this.velocity.z = 0;
+                    }
+                } else if (this.isCrouching && grounded && this.velocity.y <= 0) {
+                    const groundNext = this.getGroundYAt(this.position.x, this.position.z, this.position.y);
+                    if (groundNext < this.position.y - 0.3) {
                         this.position.z = preStepZ;
                         this.velocity.z = 0;
                     }

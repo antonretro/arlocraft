@@ -55,6 +55,8 @@ export class Game {
 
         this.hasStarted = false;
         this.isPaused = false;
+        this.lastKnownPosition = new THREE.Vector3(0, 70, 0);
+        this.resumeGraceFrames = 0;
 
         this.gameState = new GameState();
         this.stats = new Stats();
@@ -1154,9 +1156,19 @@ export class Game {
     }
 
     getPlayerPosition() {
-        if (!this.physics?.playerBody) return new THREE.Vector3();
+        if (!this.physics?.playerBody) return this.lastKnownPosition.clone();
+        
         const pos = this.physics.playerBody.translation();
-        return new THREE.Vector3(pos.x, pos.y, pos.z);
+        
+        // Safety: If physics returns exactly (0,0,0) after game start, 
+        // it's likely a stale/uninitialized state on resume. 
+        // We use our last known good position instead.
+        if (this.hasStarted && pos.x === 0 && pos.y === 0 && pos.z === 0) {
+            return this.lastKnownPosition.clone();
+        }
+
+        this.lastKnownPosition.set(pos.x, pos.y, pos.z);
+        return this.lastKnownPosition.clone();
     }
 
     adjustLook(deltaYaw, deltaPitch) {
@@ -1433,7 +1445,14 @@ export class Game {
         const daylight = Math.max(0.08, Math.min(1, (sunHeight + 0.3)));
         this.renderer.setDaylightLevel(daylight);
         if (this.features.dynamicLighting) {
-            this.renderer.updateEnvironmentLighting(daylight, this.getPlayerPosition());
+            const pos = this.getPlayerPosition();
+            let depthBlend = 0;
+            if (pos) {
+                const surfaceY = this.world.getColumnHeight(pos.x, pos.z);
+                const relativeDepth = surfaceY - pos.y;
+                depthBlend = Math.max(0, Math.min(1, relativeDepth / 16));
+            }
+            this.renderer.updateEnvironmentLighting(daylight, pos, depthBlend);
         }
     }
 
@@ -1473,6 +1492,16 @@ export class Game {
         if (this.framePanel) this.framePanel.begin();
         const delta = Math.min(this.clock.getDelta(), 0.1);
         const frameStart = performance.now();
+
+        // Resume Safety: If we just came back from a long pause, 
+        // skip world/chunk logic for 3 frames to let physics and positions settle.
+        if (delta > 0.08) this.resumeGraceFrames = 3;
+        if (this.resumeGraceFrames > 0) {
+            this.resumeGraceFrames--;
+            this.renderer.render(this.camera.instance);
+            if (this.framePanel) this.framePanel.end();
+            return;
+        }
 
         let playerPos = this.getPlayerPosition();
         const canSimulate = this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen;

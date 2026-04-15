@@ -392,7 +392,7 @@ export class Renderer {
         this.daylight = Math.max(0.05, Math.min(1, Number(daylight) || 1));
     }
 
-    updateEnvironmentLighting(daylight, playerPosition) {
+    updateEnvironmentLighting(daylight, playerPosition, depthBlend = 0) {
         const clamped = Math.max(0.05, Math.min(1, daylight));
         this.setDaylightLevel(clamped);
 
@@ -443,6 +443,14 @@ export class Renderer {
             bottom = nightColBot;
             horizon = nightColBot;
             sunIntensity = 0.15;
+        }
+
+        if (depthBlend > 0) {
+            const caveTint = new THREE.Color(0x020205);
+            top = top.clone().lerp(caveTint, depthBlend);
+            bottom = bottom.clone().lerp(caveTint, depthBlend);
+            horizon = horizon.clone().lerp(caveTint, depthBlend);
+            sunIntensity *= (1 - depthBlend);
         }
 
         const mixFactor = Math.max(0, Math.min(1, (0.4 - sunHeight) / 0.8));

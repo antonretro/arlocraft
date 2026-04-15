@@ -351,7 +351,23 @@ export class ChunkManager {
         }
 
         if (this.lastPlayerChunkKey !== key) {
-            this.unloadFarChunks(playerCx, playerCz);
+            // Safety: If this is the first move detected (lastPlayerChunkKey is null),
+            // or if we detection a massive teleport (more than 128 blocks jump),
+            // we should be cautious about purging. Massive jumps on resume 
+            // often mean stale data.
+            let shouldPurge = true;
+            if (this.lastPlayerChunkKey !== null) {
+                const [lastCx, lastCz] = this.lastPlayerChunkKey.split(',').map(Number);
+                const jumpDist = Math.max(Math.abs(playerCx - lastCx), Math.abs(playerCz - lastCz));
+                if (jumpDist > 8) {
+                    console.warn('[ArloCraft] Massive position jump detected in ChunkManager. Skipping purge to prevent voiding.');
+                    shouldPurge = false;
+                }
+            }
+
+            if (shouldPurge) {
+                this.unloadFarChunks(playerCx, playerCz);
+            }
             this.ensureChunksAround(playerCx, playerCz);
             
             // Boundary Flush: Force remesh 5x5 area to prevent voids during movement

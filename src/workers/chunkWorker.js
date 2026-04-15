@@ -169,19 +169,23 @@ function shouldPlaceTree(x, z, height, biome) {
 
 function shouldCarveCave(x, y, z, terrainHeight, cavesEnabled) {
     if (!cavesEnabled) return false;
-    if (y >= terrainHeight - 2) return false;
+    if (y > terrainHeight) return false;
     if (y <= DEEP_MIN_Y + 2) return false;
 
     const nA = (workerNoise.simplex3D(x * 0.04, y * 0.03, z * 0.04) * 0.5) + 0.5;
     const nB = (workerNoise.simplex3D((x * 0.01) + 17, (y * 0.015) - 9, (z * 0.01) + 4) * 0.5) + 0.5;
     const nC = (workerNoise.simplex3D((x * 0.005) - 41, (y * 0.05) + 12, (z * 0.005) + 63) * 0.5) + 0.5;
     const caveValue = (nA * 0.5) + (nB * 0.35) + (nC * 0.15);
-    const depthRatio = Math.max(0, Math.min(1, (terrainHeight - y) / 96));
+    const depthRatio = Math.max(0, Math.min(1, (terrainHeight - y) / 40));
 
-    const chamber = caveValue > (0.865 - (depthRatio * 0.08));
-    const tunnelBand = Math.abs(nC - 0.5) < 0.04 && nA > 0.44;
+    const surfacePenalty = Math.max(0, 0.08 * (1 - depthRatio));
+    const chamber = caveValue > (0.84 - (depthRatio * 0.06) + surfacePenalty);
+    
+    // Tunnels are great for surface access
+    const tunnelBand = Math.abs(nC - 0.5) < 0.045 && nA > 0.4;
     const fissureNoise = (workerNoise.simplex3D((x * 0.002) + 9, (y * 0.02) - 31, (z * 0.002) - 21) * 0.5) + 0.5;
-    const fissure = Math.abs(fissureNoise - 0.5) < 0.03 && y < terrainHeight - 8;
+    const fissure = Math.abs(fissureNoise - 0.5) < 0.03 && y < terrainHeight - 3;
+    
     return chamber || tunnelBand || fissure;
 }
 
@@ -282,7 +286,11 @@ const api = {
                 if (!inForcedSpawnZone && terrainHeight > 58 && surfaceId !== 'path_block') {
                     surfaceId = 'snow_block';
                 }
-                setPlannedBlock(planMap, changedMap, wx, terrainHeight, wz, surfaceId);
+                
+                const surfaceCarved = shouldCarveCave(wx, terrainHeight, wz, terrainHeight, cavesEnabled);
+                if (!surfaceCarved) {
+                    setPlannedBlock(planMap, changedMap, wx, terrainHeight, wz, surfaceId);
+                }
 
                 const nx = getColumnHeight(router, wx + 1, wz);
                 const px = getColumnHeight(router, wx - 1, wz);
@@ -294,10 +302,12 @@ const api = {
                 for (let d = 1; d <= 3; d++) {
                     const y = terrainHeight - d;
                     if (y < MIN_TERRAIN_Y) break;
+                    if (shouldCarveCave(wx, y, wz, terrainHeight, cavesEnabled)) continue;
                     setPlannedBlock(planMap, changedMap, wx, y, wz, biome.fillerBlock);
                 }
 
-                const cliffFill = Math.min(exposedDepth, 50);
+                const minCrust = Math.max(exposedDepth, 24);
+                const cliffFill = Math.min(minCrust, 80);
                 for (let d = 4; d <= cliffFill; d++) {
                     const y = terrainHeight - d;
                     if (y < MIN_TERRAIN_Y) break;
@@ -328,12 +338,13 @@ const api = {
                     }
                 }
 
+                // Trees & Deco shouldn't float if the surface block was carved into a cave
                 const isHighAltitude = terrainHeight > 46;
-                if (!inForcedSpawnZone && !isHighAltitude && shouldPlaceTree(wx, wz, terrainHeight, biome)) {
+                if (!surfaceCarved && !inForcedSpawnZone && !isHighAltitude && shouldPlaceTree(wx, wz, terrainHeight, biome)) {
                     addTree(planMap, changedMap, wx, terrainHeight + 1, wz, biome, corruptionEnabled);
                 }
 
-                if (!inForcedSpawnZone && !isHighAltitude && terrainHeight > waterLevel) {
+                if (!surfaceCarved && !inForcedSpawnZone && !isHighAltitude && terrainHeight > waterLevel) {
                     const decoHash = hash2D(wx * 22, wz * 33, currentSeed);
                     if (decoHash < 0.08) {
                         const decoId = decoHash < 0.06 ? 'grass_tall' : (decoHash < 0.07 ? 'flower_rose' : 'flower_dandelion');
