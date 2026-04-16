@@ -262,6 +262,33 @@
                             <input id="setting-auto-jump" type="checkbox" class="ni-check" />
                         </div>
                     </div>
+                    <h3 class="ni-tab-heading" style="margin-top: 18px;">Audio</h3>
+                    <div class="ni-settings-grid">
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Mute Audio</label>
+                            <input id="setting-audio-muted" type="checkbox" class="ni-check" />
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">Master Volume</label>
+                            <input id="setting-audio-master" type="range" min="0" max="1" step="0.01" />
+                            <span id="setting-audio-master-value" class="ni-val">82%</span>
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">SFX Volume</label>
+                            <input id="setting-audio-sfx" type="range" min="0" max="1" step="0.01" />
+                            <span id="setting-audio-sfx-value" class="ni-val">90%</span>
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">UI Volume</label>
+                            <input id="setting-audio-ui" type="range" min="0" max="1" step="0.01" />
+                            <span id="setting-audio-ui-value" class="ni-val">78%</span>
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">World Volume</label>
+                            <input id="setting-audio-world" type="range" min="0" max="1" step="0.01" />
+                            <span id="setting-audio-world-value" class="ni-val">85%</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="ni-tab-pane" id="tab-video">
@@ -269,8 +296,8 @@
                     <div class="ni-settings-grid">
                         <div class="ni-setting-box">
                             <label class="ni-label">Render Distance</label>
-                            <input id="setting-render-distance" type="range" min="4" max="16" step="1" />
-                            <span id="setting-render-distance-value" class="ni-val">8</span>
+                            <input id="setting-render-distance" type="range" min="2" max="6" step="1" />
+                            <span id="setting-render-distance-value" class="ni-val">2</span>
                         </div>
                         <div class="ni-setting-box">
                             <label class="ni-label">Dynamic Shadows</label>

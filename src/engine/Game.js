@@ -16,6 +16,7 @@ import { MiniMap } from '../ui/MiniMap.js';
 import { TouchControls } from '../ui/TouchControls.js';
 import { FEATURES } from '../data/features.js';
 import { PlayerHand } from '../entities/PlayerHand.js';
+import { AudioSystem } from './AudioSystem.js';
 
 const FOOD_VALUES = {
     apple: 4, tomato: 4, carrot: 3, potato: 3, corn: 3,
@@ -78,6 +79,9 @@ export class Game {
         this.hud = new HUD(this.gameState, this);
         this.helpPanel = new HelpPanel();
         this.minimap = new MiniMap(this);
+        this.audio = new AudioSystem();
+        this.audio.applyFromSettings(this.settings);
+        this.audio.installAutoUnlock(document);
 
         this.clock = new THREE.Clock();
         this.bindEvents();
@@ -134,6 +138,7 @@ export class Game {
     bindEvents() {
         window.addEventListener('player-respawn', () => {
             this.physics.resetPlayer();
+            this.audio.play('respawn');
         });
 
         window.addEventListener('block-mined', (event) => {
@@ -141,25 +146,46 @@ export class Game {
             if (minedId) this.gameState.addBlockToInventory(minedId, 1);
             this.stats.addXP(this.world.getBlockXP(minedId));
             this.screenShake = Math.max(this.screenShake, minedId === 'virus' ? 0.09 : 0.05);
+            this.audio.play('block-mined', { id: minedId });
         });
 
         window.addEventListener('enemy-defeated', (event) => {
             const xp = event.detail?.xp ?? 0;
             this.stats.addXP(xp);
+            this.audio.play('enemy-defeated');
         });
 
         window.addEventListener('mode-changed', (event) => {
             this.setMenuMode(event.detail, false);
+            this.audio.play('mode-changed');
         });
 
         window.addEventListener('inventory-toggle', (event) => {
             if (event.detail) this.helpPanel.setState('inventory');
             else if (!this.isPaused && this.hasStarted) this.helpPanel.setState('playing');
+            this.audio.play(event.detail ? 'inventory-open' : 'inventory-close');
         });
 
         window.addEventListener('interact-crafting-table', () => {
             if (!this.hasStarted || this.isPaused) return;
             if (!this.gameState.isInventoryOpen) this.gameState.toggleInventory();
+            this.audio.play('crafting-open');
+        });
+
+        window.addEventListener('block-placed', (event) => {
+            this.audio.play('block-placed', { id: event.detail?.id });
+        });
+        window.addEventListener('player-damaged', () => {
+            this.audio.play('player-damaged');
+        });
+        window.addEventListener('action-success', () => {
+            this.audio.play('action-success');
+        });
+        window.addEventListener('action-fail', () => {
+            this.audio.play('action-fail');
+        });
+        window.addEventListener('level-up', () => {
+            this.audio.play('level-up');
         });
     }
 
@@ -177,7 +203,12 @@ export class Game {
             shadowsEnabled: true,
             fogDensityScale: 1.0,
             perfPanelVisible: false,
-            resolutionScale: 1.0
+            resolutionScale: 1.0,
+            audioMuted: false,
+            audioMaster: 0.82,
+            audioSfx: 0.9,
+            audioUi: 0.78,
+            audioWorld: 0.85
         };
 
         try {
@@ -194,13 +225,18 @@ export class Game {
                 autoJump: parsed.autoJump !== undefined ? Boolean(parsed.autoJump) : defaults.autoJump,
                 autoQuality: parsed.autoQuality !== undefined ? Boolean(parsed.autoQuality) : defaults.autoQuality,
                 renderDistance: Number.isFinite(parsed.renderDistance)
-                    ? Math.max(1, Math.min(6, Math.round(parsed.renderDistance)))
+                    ? Math.max(2, Math.min(6, Math.round(parsed.renderDistance)))
                     : defaults.renderDistance,
                 selectedWorldSlot: typeof parsed.selectedWorldSlot === 'string' ? parsed.selectedWorldSlot : defaults.selectedWorldSlot,
                 shadowsEnabled: parsed.shadowsEnabled !== undefined ? Boolean(parsed.shadowsEnabled) : defaults.shadowsEnabled,
                 fogDensityScale: Number.isFinite(parsed.fogDensityScale) ? parsed.fogDensityScale : defaults.fogDensityScale,
                 perfPanelVisible: parsed.perfPanelVisible !== undefined ? Boolean(parsed.perfPanelVisible) : defaults.perfPanelVisible,
-                resolutionScale: Number.isFinite(parsed.resolutionScale) ? parsed.resolutionScale : defaults.resolutionScale
+                resolutionScale: Number.isFinite(parsed.resolutionScale) ? parsed.resolutionScale : defaults.resolutionScale,
+                audioMuted: parsed.audioMuted !== undefined ? Boolean(parsed.audioMuted) : defaults.audioMuted,
+                audioMaster: Number.isFinite(parsed.audioMaster) ? Math.max(0, Math.min(1, parsed.audioMaster)) : defaults.audioMaster,
+                audioSfx: Number.isFinite(parsed.audioSfx) ? Math.max(0, Math.min(1, parsed.audioSfx)) : defaults.audioSfx,
+                audioUi: Number.isFinite(parsed.audioUi) ? Math.max(0, Math.min(1, parsed.audioUi)) : defaults.audioUi,
+                audioWorld: Number.isFinite(parsed.audioWorld) ? Math.max(0, Math.min(1, parsed.audioWorld)) : defaults.audioWorld
             };
         } catch {
             return defaults;
@@ -839,6 +875,15 @@ export class Game {
         const btnResetSettings = document.getElementById('btn-reset-settings');
         const resolutionInput = document.getElementById('setting-resolution');
         const resolutionLabel = document.getElementById('setting-resolution-value');
+        const audioMuteInput = document.getElementById('setting-audio-muted');
+        const audioMasterInput = document.getElementById('setting-audio-master');
+        const audioMasterLabel = document.getElementById('setting-audio-master-value');
+        const audioSfxInput = document.getElementById('setting-audio-sfx');
+        const audioSfxLabel = document.getElementById('setting-audio-sfx-value');
+        const audioUiInput = document.getElementById('setting-audio-ui');
+        const audioUiLabel = document.getElementById('setting-audio-ui-value');
+        const audioWorldInput = document.getElementById('setting-audio-world');
+        const audioWorldLabel = document.getElementById('setting-audio-world-value');
 
         if (seedInput) seedInput.value = this.world.seedString;
 
@@ -951,7 +996,7 @@ export class Game {
             renderDistanceInput.value = String(this.settings.renderDistance);
             if (renderDistanceLabel) renderDistanceLabel.textContent = String(this.settings.renderDistance);
             renderDistanceInput.addEventListener('input', () => {
-                const value = Math.max(1, Math.min(6, Math.round(Number(renderDistanceInput.value))));
+                const value = Math.max(2, Math.min(6, Math.round(Number(renderDistanceInput.value))));
                 this.settings.renderDistance = value;
                 const effective = this.getEffectiveRenderDistanceForTier(this.qualityTier);
                 this.world.setRenderDistance(effective);
@@ -1101,6 +1146,64 @@ export class Game {
             });
         }
 
+        const syncAudioLabel = (el, value) => {
+            if (!el) return;
+            el.textContent = `${Math.round(value * 100)}%`;
+        };
+        const applyAudioSettings = (statusText = null) => {
+            this.audio.applyFromSettings(this.settings);
+            this.saveSettings();
+            if (statusText) this.setStatus(statusText);
+        };
+
+        if (audioMuteInput) {
+            audioMuteInput.checked = this.settings.audioMuted;
+            audioMuteInput.addEventListener('change', () => {
+                this.settings.audioMuted = audioMuteInput.checked;
+                applyAudioSettings(`Audio: ${audioMuteInput.checked ? 'MUTED' : 'ON'}`);
+            });
+        }
+        if (audioMasterInput) {
+            audioMasterInput.value = String(this.settings.audioMaster);
+            syncAudioLabel(audioMasterLabel, this.settings.audioMaster);
+            audioMasterInput.addEventListener('input', () => {
+                const val = Math.max(0, Math.min(1, Number(audioMasterInput.value)));
+                this.settings.audioMaster = val;
+                syncAudioLabel(audioMasterLabel, val);
+                applyAudioSettings(`Master Volume: ${Math.round(val * 100)}%`);
+            });
+        }
+        if (audioSfxInput) {
+            audioSfxInput.value = String(this.settings.audioSfx);
+            syncAudioLabel(audioSfxLabel, this.settings.audioSfx);
+            audioSfxInput.addEventListener('input', () => {
+                const val = Math.max(0, Math.min(1, Number(audioSfxInput.value)));
+                this.settings.audioSfx = val;
+                syncAudioLabel(audioSfxLabel, val);
+                applyAudioSettings(`SFX Volume: ${Math.round(val * 100)}%`);
+            });
+        }
+        if (audioUiInput) {
+            audioUiInput.value = String(this.settings.audioUi);
+            syncAudioLabel(audioUiLabel, this.settings.audioUi);
+            audioUiInput.addEventListener('input', () => {
+                const val = Math.max(0, Math.min(1, Number(audioUiInput.value)));
+                this.settings.audioUi = val;
+                syncAudioLabel(audioUiLabel, val);
+                applyAudioSettings(`UI Volume: ${Math.round(val * 100)}%`);
+            });
+        }
+        if (audioWorldInput) {
+            audioWorldInput.value = String(this.settings.audioWorld);
+            syncAudioLabel(audioWorldLabel, this.settings.audioWorld);
+            audioWorldInput.addEventListener('input', () => {
+                const val = Math.max(0, Math.min(1, Number(audioWorldInput.value)));
+                this.settings.audioWorld = val;
+                syncAudioLabel(audioWorldLabel, val);
+                applyAudioSettings(`World Volume: ${Math.round(val * 100)}%`);
+            });
+        }
+
         const canvas = this.renderer.instance.domElement;
         canvas.addEventListener('click', () => {
             if (!this.hasStarted || this.isPaused || this.gameState.isInventoryOpen || this.input.isLocked) return;
@@ -1120,6 +1223,7 @@ export class Game {
         this.renderer.toggleShadows(this.settings.shadowsEnabled);
         this.renderer.setFogDensityScale(this.settings.fogDensityScale);
         this.renderer.setResolutionScale(this.settings.resolutionScale);
+        this.audio.applyFromSettings(this.settings);
         if (this.settings.perfPanelVisible) {
             this.debugVisible = true;
             if (this.framePanel) this.framePanel.dom.style.display = 'block';
@@ -1301,9 +1405,9 @@ export class Game {
     }
 
     getEffectiveRenderDistanceForTier(tier = this.qualityTier) {
-        const requested = Math.max(1, Math.min(6, Number(this.settings?.renderDistance) || 2));
+        const requested = Math.max(2, Math.min(6, Number(this.settings?.renderDistance) || 2));
         const cap = this.getRenderDistanceCapForTier(tier);
-        return Math.max(1, Math.min(cap, requested));
+        return Math.max(2, Math.min(cap, requested));
     }
 
     applyQualityTier(tier) {
