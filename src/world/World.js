@@ -989,11 +989,22 @@ export class World {
         const allowCorruption = Boolean(options?.allowCorruption);
         if (!allowCorruption && !this.corruptionEnabled && (id === 'virus' || id === 'arlo')) return null;
         const key = this.getKey(gx, gy, gz);
+        const owner = ownerKey ?? this.getChunkKey(this.getChunkCoord(gx), this.getChunkCoord(gz));
         const existing = this.blockMap.get(key);
-        if (existing && !replace) return existing;
+        if (existing && !replace) {
+            const ownerChunk = this.getChunk(this.getChunkCoord(gx), this.getChunkCoord(gz));
+            if (ownerChunk && !ownerChunk.blockKeys.has(key)) {
+                ownerChunk.blockKeys.add(key);
+                ownerChunk.dirty = true;
+                this.priorityDirtyChunkKeys.add(ownerChunk.key);
+            }
+            if (this.blockOwners.get(key) !== owner) {
+                this.blockOwners.set(key, owner);
+            }
+            return existing;
+        }
         if (existing && replace) this.removeBlockByKey(key, { skipChangeTracking: true });
 
-        const owner = ownerKey ?? this.getChunkKey(this.getChunkCoord(gx), this.getChunkCoord(gz));
         this.blockMap.set(key, id);
         this.blockOwners.set(key, owner);
         

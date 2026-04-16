@@ -37,7 +37,6 @@ export class Game {
         this.qualityTier = 'balanced';
         this.qualityInitialized = false;
         this.qualityOrder = ['low', 'balanced', 'high'];
-        this.dayNightTick = 0;
         this.viewYaw = 0;
         this.viewPitch = 0;
         this.pitchLimit = Math.PI / 2 - 0.02;
@@ -1428,10 +1427,7 @@ export class Game {
     }
 
     updateDayNight(delta) {
-        this.dayNightTick = (this.dayNightTick + 1) % 6;
-        if (this.dayNightTick !== 0) return;
-
-        this.timeOfDay = (this.timeOfDay + ((delta * 6) / this.dayDurationSeconds)) % 1;
+        this.timeOfDay = (this.timeOfDay + (delta / this.dayDurationSeconds)) % 1;
         const angle = (this.timeOfDay * Math.PI * 2) - (Math.PI / 2);
         const sunHeight = Math.sin(angle);
         const sunDistance = 110;

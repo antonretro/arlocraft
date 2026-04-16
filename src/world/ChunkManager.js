@@ -30,6 +30,7 @@ export class ChunkManager {
         this.criticalChunkTick = 0;
         this.visibilityScanTick = 0;
         this.meshSanityTick = 0;
+        this.colorSanityTick = 0;
     }
 
     // ─── Chunk accessors ──────────────────────────────────────────────
@@ -69,13 +70,14 @@ export class ChunkManager {
         const chunk = new Chunk(this.world, cx, cz);
         this.chunks.set(key, chunk);
         try {
+            chunk.resyncBlockKeysFromWorld?.();
             if (forceSync) {
                 chunk.generateSync();
             } else {
                 chunk.generate();
             }
             // Ensure any generated chunk is marked dirty so it rebuilds meshes on the next update
-            if (!chunk.destroyed) {
+            if (!chunk.destroyed && (forceSync || chunk.blockKeys.size > 0)) {
                 chunk.dirty = true;
                 this.priorityDirtyChunkKeys.add(key);
                 if (forceSync) chunk.update();
@@ -229,14 +231,20 @@ export class ChunkManager {
         }
 
         // 2. Mesh Watchdog: Catch 'Ghost Chunks' (loaded data but no meshes)
-        this.meshSanityTick = (this.meshSanityTick + 1) % 5;
+        // Sweep the full render distance every 8 frames to revive invisible chunks
+        this.meshSanityTick = (this.meshSanityTick + 1) % 8;
         if (this.meshSanityTick === 0) {
-            for (let dx = -3; dx <= 3; dx++) {
-                for (let dz = -3; dz <= 3; dz++) {
+            const rd = this.world.renderDistance + 1;
+            for (let dx = -rd; dx <= rd; dx++) {
+                for (let dz = -rd; dz <= rd; dz++) {
                     const ck = this.world.getChunkKey(pcx + dx, pcz + dz);
                     const c = this.chunks.get(ck);
-                    // If chunk is supposed to be loaded but has zero meshes, force it to be dirty
-                    if (c && !c.destroyed && c.blockKeys.size > 0 && c.instancedMeshes.size === 0) {
+                    if (!c || c.destroyed || c.generating) continue;
+                    const hasMeshGap = c.blockKeys.size > 0 && c.instancedMeshes.size === 0;
+                    const isDesyncedEmpty = c.blockKeys.size === 0 && c.instancedMeshes.size === 0;
+                    if (isDesyncedEmpty) c.resyncBlockKeysFromWorld?.();
+                    const needsMeshRebuild = hasMeshGap || (isDesyncedEmpty && c.blockKeys.size > 0);
+                    if (needsMeshRebuild) {
                         c.dirty = true;
                         this.priorityDirtyChunkKeys.add(ck);
                     }
@@ -273,8 +281,8 @@ export class ChunkManager {
     // ─── Mesh-color sanity audit ──────────────────────────────────────
 
     ensureChunkMeshColorSanity(limit = 10) {
-        this.meshSanityTick = (this.meshSanityTick + 1) % 30;
-        if (this.meshSanityTick !== 0) return;
+        this.colorSanityTick = (this.colorSanityTick + 1) % 30;
+        if (this.colorSanityTick !== 0) return;
 
         let flagged = 0;
         for (const [key, chunk] of this.chunks.entries()) {
@@ -336,6 +344,11 @@ export class ChunkManager {
         const playerCx = this.world.getChunkCoord(playerPosition.x);
         const playerCz = this.world.getChunkCoord(playerPosition.z);
         const key = this.world.getChunkKey(playerCx, playerCz);
+        
+        // Force visibility re-sync during resume grace period
+        if (this.world.game?.resumeGraceFrames > 0) {
+            this.forceVisibilityResetPending = true;
+        }
 
         if (this.forceFullRemeshPending) {
             for (const chunk of this.chunks.values()) chunk.dirty = true;

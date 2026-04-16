@@ -434,6 +434,32 @@ export class Chunk {
         this.dirty = true;
     }
 
+    resyncBlockKeysFromWorld() {
+        if (this.destroyed || this.blockKeys.size > 0) return 0;
+        const startX = this.cx * this.world.chunkSize;
+        const startZ = this.cz * this.world.chunkSize;
+        const minY = this.world.deepMinY;
+        const maxY = this.world.maxTerrainY + 12;
+        let recovered = 0;
+
+        for (let lx = 0; lx < this.world.chunkSize; lx++) {
+            for (let lz = 0; lz < this.world.chunkSize; lz++) {
+                const wx = startX + lx;
+                const wz = startZ + lz;
+                for (let y = minY; y <= maxY; y++) {
+                    const key = this.world.getKey(wx, y, wz);
+                    if (!this.world.blockMap.has(key)) continue;
+                    this.blockKeys.add(key);
+                    this.world.blockOwners.set(key, this.key);
+                    recovered++;
+                }
+            }
+        }
+
+        if (recovered > 0) this.dirty = true;
+        return recovered;
+    }
+
     update() {
         if (!this.dirty || this.destroyed) return;
         this.rebuildMeshes();
@@ -444,6 +470,8 @@ export class Chunk {
         if (this.destroyed) return;
         
         try {
+            this.resyncBlockKeysFromWorld();
+
             // 1. Clear old instances
         for (const mesh of this.instancedMeshes.values()) {
             this.group.remove(mesh);
@@ -576,55 +604,56 @@ export class Chunk {
     async generate() {
         if (this.generating || this.destroyed) return;
         this.generating = true;
-
-        if (this.world.chunkGenerator && this.world.chunkGenerator.available) {
-            try {
-                const results = await this.world.chunkGenerator.generateChunk(this.cx, this.cz);
-                if (this.destroyed) return;
-                if (results && results.data) {
-                    const { data, palette } = results;
-                    for (let i = 0; i < data.length; i += 4) {
-                        const x = data[i];
-                        const y = data[i+1];
-                        const z = data[i+2];
-                        const paletteIndex = data[i+3];
-                        const id = palette[paletteIndex];
+        try {
+            if (this.world.chunkGenerator && this.world.chunkGenerator.available) {
+                try {
+                    const results = await this.world.chunkGenerator.generateChunk(this.cx, this.cz);
+                    if (this.destroyed) return;
+                    if (results && results.data) {
+                        const { data, palette } = results;
+                        for (let i = 0; i < data.length; i += 4) {
+                            const x = data[i];
+                            const y = data[i+1];
+                            const z = data[i+2];
+                            const paletteIndex = data[i+3];
+                            const id = palette[paletteIndex];
+                            
+                            const key = this.world.getKey(x, y, z);
+                            if (this.world.changedBlocks.get(key) === null) continue;
+                            const override = this.world.changedBlocks.get(key);
+                            const finalId = override ?? id;
+                            this.world.addBlock(x, y, z, finalId, this.key);
+                        }
                         
-                        const key = this.world.getKey(x, y, z);
-                        if (this.world.changedBlocks.get(key) === null) continue;
-                        const override = this.world.changedBlocks.get(key);
-                        const finalId = override ?? id;
-                        this.world.addBlock(x, y, z, finalId, this.key);
-                    }
-                    
-                    const startX = this.cx * this.world.chunkSize;
-                    const startZ = this.cz * this.world.chunkSize;
-                    const centerX = startX + Math.floor(this.world.chunkSize * 0.5);
-                    const centerZ = startZ + Math.floor(this.world.chunkSize * 0.5);
+                        const startX = this.cx * this.world.chunkSize;
+                        const startZ = this.cz * this.world.chunkSize;
+                        const centerX = startX + Math.floor(this.world.chunkSize * 0.5);
+                        const centerZ = startZ + Math.floor(this.world.chunkSize * 0.5);
 
-                    this.registerRoadLandmark(startX, startZ);
-                    if (this.world.shouldPlaceStructureChunk(this.cx, this.cz)) {
-                        const sy = this.world.getColumnHeight(centerX, centerZ) + 1;
-                        const biome = this.world.getBiomeAt(centerX, centerZ);
-                        this.placeRandomStructure(centerX, sy, centerZ, biome);
+                        this.registerRoadLandmark(startX, startZ);
+                        if (this.world.shouldPlaceStructureChunk(this.cx, this.cz)) {
+                            const sy = this.world.getColumnHeight(centerX, centerZ) + 1;
+                            const biome = this.world.getBiomeAt(centerX, centerZ);
+                            this.placeRandomStructure(centerX, sy, centerZ, biome);
+                        }
+                        if (this.world.shouldPlaceVillageChunk(this.cx, this.cz)) {
+                            const vx = centerX;
+                            const vz = centerZ;
+                            const vy = this.world.getColumnHeight(vx, vz) + 1;
+                            this.placeVillageCluster(vx, vy, vz);
+                        }
+                        this.applyPlayerOverrides();
+                        return;
                     }
-                    if (this.world.shouldPlaceVillageChunk(this.cx, this.cz)) {
-                        const vx = centerX;
-                        const vz = centerZ;
-                        const vy = this.world.getColumnHeight(vx, vz) + 1;
-                        this.placeVillageCluster(vx, vy, vz);
-                    }
-                    this.applyPlayerOverrides();
-                    this.generating = false;
-                    return;
+                } catch (error) {
+                    console.warn('[ArloCraft] Chunk Worker failed, falling back to sync', error);
                 }
-            } catch (error) {
-                console.warn('[ArloCraft] Chunk Worker failed, falling back to sync', error);
             }
-        }
 
-        this.generateSync();
-        this.generating = false;
+            this.generateSync();
+        } finally {
+            this.generating = false;
+        }
     }
 
     generateSync() {
