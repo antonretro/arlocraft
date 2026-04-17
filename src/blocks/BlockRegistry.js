@@ -89,8 +89,8 @@ export class BlockRegistry {
         }
 
         // Legacy content uses `grass_tall` as the ID for the one-block decorative grass plant.
-        // In this pack that plant art lives under the normal `grass` texture, not Minecraft's
-        // separate two-block `tall_grass_*` textures.
+        // In modern Minecraft terms this is short grass, and in this pack that art lives under
+        // the normal `grass` texture rather than the separate two-block `tall_grass_*` textures.
         if (!this.blockTextures.has('grass_tall') && this.blockTextures.has('grass')) {
             this.blockTextures.set('grass_tall', { ...this.blockTextures.get('grass') });
         }
