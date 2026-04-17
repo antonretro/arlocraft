@@ -88,9 +88,11 @@ export class BlockRegistry {
             this.blockTextures.get(blockId)[fileName] = module.default || module;
         }
 
-        // Bridge legacy content IDs to the texture-pack naming used by Igneous.
-        if (!this.blockTextures.has('grass_tall') && this.blockTextures.has('tall_grass')) {
-            this.blockTextures.set('grass_tall', { ...this.blockTextures.get('tall_grass') });
+        // Legacy content uses `grass_tall` as the ID for the one-block decorative grass plant.
+        // In this pack that plant art lives under the normal `grass` texture, not Minecraft's
+        // separate two-block `tall_grass_*` textures.
+        if (!this.blockTextures.has('grass_tall') && this.blockTextures.has('grass')) {
+            this.blockTextures.set('grass_tall', { ...this.blockTextures.get('grass') });
         }
 
         BLOCKS.forEach((config) => {
