@@ -4,6 +4,7 @@ import { CraftingSystem } from '../engine/CraftingSystem.js';
 
 const itemTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/item/*.png', { eager: true, query: '?url' });
 const blockTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/block/*.png', { eager: true, query: '?url' });
+const GRASS_PREVIEW_TINT_CLASS = 'tint-grass-face';
 
 export class HUD {
     constructor(gameState, game = null) {
@@ -370,6 +371,8 @@ export class HUD {
     createItemElement(item) {
         const element = document.createElement('div');
         element.className = 'item-icon';
+        const shouldTintGrassFace = item.id === 'grass';
+        const shouldTintFoliageIcon = item.id === 'grass_tall' || item.id === 'leaves' || item.id === 'oak_leaves';
 
         const block = this.blockById.get(item.id);
         const isBlockItem = (block && !block.deco) || 
@@ -390,6 +393,9 @@ export class HUD {
                  const topFace = document.createElement('div');
                  topFace.className = 'iso-face top';
                  topFace.style.backgroundImage = `url('${topTex}')`;
+                 if (shouldTintGrassFace) {
+                     topFace.classList.add(GRASS_PREVIEW_TINT_CLASS);
+                 }
                  
                  const leftFace = document.createElement('div');
                  leftFace.className = 'iso-face left';
@@ -403,7 +409,7 @@ export class HUD {
                  isoContainer.appendChild(leftFace);
                  isoContainer.appendChild(rightFace);
 
-                 if (item.id === 'grass' || item.id === 'grass_tall' || item.id === 'leaves' || item.id === 'oak_leaves') {
+                 if (shouldTintFoliageIcon) {
                      isoContainer.classList.add('tint-grass');
                  }
 
@@ -415,7 +421,7 @@ export class HUD {
              const icon = this.getIconPath(item.id);
              if (icon) {
                  element.style.backgroundImage = `url('${icon}')`;
-                 if (item.id === 'grass' || item.id === 'grass_tall' || item.id === 'leaves' || item.id === 'oak_leaves') {
+                 if (shouldTintFoliageIcon) {
                      element.classList.add('tint-grass');
                  }
                  if (icon.startsWith('data:image/svg+xml')) {

@@ -15,6 +15,7 @@ const TOOL_MAP = {
     'shovel': 'wooden_shovel',
     'hoe': 'wooden_hoe'
 };
+const GRASS_PREVIEW_TINT = 0x79c05a;
 
 /**
  * Animated First-Person Viewmodel (Player Hand).
@@ -232,6 +233,9 @@ export class PlayerHand {
         const material = Array.isArray(sourceMaterial)
             ? sourceMaterial.map((mat) => (mat?.clone ? mat.clone() : mat))
             : (sourceMaterial?.clone ? sourceMaterial.clone() : sourceMaterial);
+        if (Array.isArray(material) && itemId === 'grass' && material[2]?.color) {
+            material[2].color.setHex(GRASS_PREVIEW_TINT);
+        }
         const geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
         const mesh = new THREE.Mesh(geometry, material);
         mesh.userData.ownedGeometry = true;
