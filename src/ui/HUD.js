@@ -376,7 +376,7 @@ export class HUD {
         const isDeco = Boolean(block?.deco);
         const shouldTintGrassFace = item.id === 'grass_block';
         const shouldTintFoliageIcon = ((isDeco && (textureKey === 'grass' || textureKey.includes('grass') || textureKey === 'fern')) || textureKey.includes('leaves'));
-        const shouldUseGrassSpriteTint = isDeco && textureKey === 'grass';
+        const shouldUseGrassSpriteTint = isDeco && (textureKey === 'grass' || item.id === 'short_grass' || item.id === 'tall_grass');
         const isBlockItem = (block && !block.deco) || 
                            item.id === 'wood' || item.id === 'leaves' || 
                            item.id.startsWith('wood_') || item.id.startsWith('leaves_') ||

@@ -32,7 +32,11 @@ export class BlockRegistry {
             'wood_palm': 'jungle_log',
             'leaves_palm': 'jungle_leaves',
             'wood_willow': 'mangrove_log',
-            'leaves_willow': 'mangrove_leaves'
+            'leaves_willow': 'mangrove_leaves',
+            'short_grass': 'grass',
+            'tall_grass': 'tall_grass_bottom',
+            'mushroom_red': 'red_mushroom',
+            'mushroom_brown': 'brown_mushroom'
         };
         this.init();
     }
@@ -343,10 +347,17 @@ export class BlockRegistry {
         const sideTex = load('side.png') || allTex;
         const topTex = load('top.png') || allTex;
         const bottomTex = load('bottom.png') || allTex;
-        const frontTex = load('front.png') || sideTex;
-        const backTex = load('back.png') || sideTex;
-        const leftTex = load('left.png') || sideTex;
-        const rightTex = load('right.png') || sideTex;
+        // For decals/sprites in texture packs, they often only provide one of these fileName patterns.
+        // If we still have no textures but found one specific one, use that as the master sprite.
+        const masterTex = topTex || bottomTex || sideTex || allTex;
+        
+        const frontTex = load('front.png') || masterTex;
+        const backTex = load('back.png') || masterTex;
+        const leftTex = load('left.png') || masterTex;
+        const rightTex = load('right.png') || masterTex;
+        
+        const finalTopTex = topTex || masterTex;
+        const finalBottomTex = bottomTex || masterTex;
 
         let material = null;
 
@@ -371,8 +382,8 @@ export class BlockRegistry {
             const mats = [
                 new THREE.MeshLambertMaterial({ ...matConfig, map: rightTex }),
                 new THREE.MeshLambertMaterial({ ...matConfig, map: leftTex }),
-                new THREE.MeshLambertMaterial({ ...matConfig, map: topTex }),
-                new THREE.MeshLambertMaterial({ ...matConfig, map: bottomTex }),
+                new THREE.MeshLambertMaterial({ ...matConfig, map: finalTopTex }),
+                new THREE.MeshLambertMaterial({ ...matConfig, map: finalBottomTex }),
                 new THREE.MeshLambertMaterial({ ...matConfig, map: frontTex }),
                 new THREE.MeshLambertMaterial({ ...matConfig, map: backTex })
             ];
@@ -388,7 +399,7 @@ export class BlockRegistry {
             );
             // Grass top texture is already baked green in this pack; avoid instance tinting
             // to prevent rare black-top failures from per-instance color paths.
-            const isGrassTopOnly = id === 'grass_block';
+            const isGrassTopOnly = id === 'grass_block' || id === 'grass';
             
                         for (let i = 0; i < mats.length; i++) {
                 const m = mats[i];

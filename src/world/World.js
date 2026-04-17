@@ -1383,6 +1383,12 @@ export class World {
 
         const playerPos = camera.position;
         if (new THREE.Vector3(px, py, pz).distanceTo(playerPos) < 1.05) return false;
+        
+        // Prevent stacking deco on deco (e.g. flower on grass)
+        const isPlacingDeco = blockData?.deco;
+        const isExistingDeco = this.getBlockData(existingId)?.deco;
+        if (isPlacingDeco && isExistingDeco) return false;
+
         if (existingId && !replaceExisting) return false;
 
         const ownerKey = this.getChunkKey(this.getChunkCoord(px), this.getChunkCoord(pz));

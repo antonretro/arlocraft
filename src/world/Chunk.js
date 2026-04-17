@@ -28,14 +28,14 @@ const CIVIC_STRUCTURE_POOL = [
 ];
 
 const BIOME_GROUND_LIFE = {
-    plains: ['short_grass', 'dandelion', 'poppy', 'red_tulip', 'tall_grass_bottom'],
-    forest: ['short_grass', 'fern', 'mushroom_brown', 'mushroom_red', 'blueberry', 'strawberry', 'poppy', 'tall_grass_bottom'],
-    meadow: ['short_grass', 'tall_grass_bottom', 'dandelion', 'poppy', 'orange_tulip', 'red_tulip', 'pink_tulip', 'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium', 'blueberry', 'lilac', 'peony', 'rose_bush'],
-    swamp: ['fern', 'mushroom_brown', 'mushroom_red', 'blueberry'],
+    plains: ['short_grass', 'short_grass', 'short_grass', 'short_grass', 'dandelion', 'poppy', 'red_tulip', 'tall_grass'],
+    forest: ['short_grass', 'short_grass', 'short_grass', 'fern', 'fern', 'mushroom_brown', 'mushroom_red', 'blueberry', 'strawberry', 'poppy', 'tall_grass'],
+    meadow: ['short_grass', 'short_grass', 'tall_grass', 'tall_grass', 'dandelion', 'poppy', 'orange_tulip', 'red_tulip', 'pink_tulip', 'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium', 'blueberry', 'lilac', 'peony', 'rose_bush'],
+    swamp: ['fern', 'fern', 'short_grass', 'mushroom_brown', 'mushroom_red', 'blueberry'],
     desert: ['tomato'],
     badlands: ['carrot'],
     canyon: ['carrot'],
-    highlands: ['potato'],
+    highlands: ['potato', 'short_grass'],
     alpine: ['potato'],
     tundra: ['potato']
 };
