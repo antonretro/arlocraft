@@ -20,7 +20,6 @@ export class BlockRegistry {
         this.animatedGif = null;
                 this.idAliases = {
             'grass': 'grass_block',
-            'grass_tall': 'grass',
             'wood': 'oak_log',
             'leaves': 'oak_leaves',
             'wood_birch': 'birch_log',
@@ -87,6 +86,11 @@ export class BlockRegistry {
 
             if (!this.blockTextures.has(blockId)) this.blockTextures.set(blockId, {});
             this.blockTextures.get(blockId)[fileName] = module.default || module;
+        }
+
+        // Bridge legacy content IDs to the texture-pack naming used by Igneous.
+        if (!this.blockTextures.has('grass_tall') && this.blockTextures.has('tall_grass')) {
+            this.blockTextures.set('grass_tall', { ...this.blockTextures.get('tall_grass') });
         }
 
         BLOCKS.forEach((config) => {

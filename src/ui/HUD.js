@@ -712,6 +712,9 @@ export class HUD {
         if (!itemId) return this.getGeneratedIconPath('item');
 
         const alias = this.resolveIconAlias(itemId) || itemId;
+        if (alias === 'grass_tall') {
+            return this.blockTextures?.tall_grass_top || this.blockTextures?.grass || this.getGeneratedIconPath(itemId);
+        }
         
         const toolMap = {
             // Picks / drills
@@ -896,7 +899,7 @@ export class HUD {
         if (explicit) return explicit;
 
         if (id.startsWith('wool_')) return 'grass';
-        if (id === 'grass_tall') return 'grass';
+        if (id === 'grass_tall') return 'grass_tall';
         if (id === 'flower_rose') return 'poppy';
         if (id === 'flower_dandelion') return 'dandelion';
         if (id.startsWith('flower_')) return id.replace('flower_', '');
