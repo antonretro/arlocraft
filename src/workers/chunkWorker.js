@@ -4,34 +4,34 @@ import { Noise } from '../world/Noise.js';
 import { NoiseRouter } from '../world/NoiseRouter.js';
 
 const SEA_LEVEL = 1;
-const MIN_TERRAIN_Y = -12;
+const MIN_TERRAIN_Y = -64;
 const MAX_TERRAIN_Y = 65;
 const DEEP_MIN_Y = -220;
 
 const DEFAULT_BIOME = BIOME_BY_ID.get('plains');
 
 const TREE_CONFIGS = {
-    oak: { trunk: 'wood', leaves: 'leaves', height: 5, radius: 2 },
-    birch: { trunk: 'wood_birch', leaves: 'leaves_birch', height: 6, radius: 2 },
-    pine: { trunk: 'wood_pine', leaves: 'leaves_pine', height: 7, radius: 1 },
-    palm: { trunk: 'wood_palm', leaves: 'leaves_palm', height: 5, radius: 2 },
-    willow: { trunk: 'wood_willow', leaves: 'leaves_willow', height: 4, radius: 3 },
-    cherry: { trunk: 'wood_cherry', leaves: 'leaves_cherry', height: 5, radius: 2 },
-    redwood: { trunk: 'wood_redwood', leaves: 'leaves_redwood', height: 10, radius: 2 },
-    crystal: { trunk: 'wood_crystal', leaves: 'leaves_crystal', height: 6, radius: 2 }
+    oak: { trunk: 'oak_log', leaves: 'oak_leaves', height: 5, radius: 2 },
+    birch: { trunk: 'birch_log', leaves: 'birch_leaves', height: 6, radius: 2 },
+    pine: { trunk: 'spruce_log', leaves: 'spruce_leaves', height: 7, radius: 1 },
+    palm: { trunk: 'jungle_log', leaves: 'jungle_leaves', height: 5, radius: 2 },
+    willow: { trunk: 'mangrove_log', leaves: 'mangrove_leaves', height: 4, radius: 3 },
+    cherry: { trunk: 'cherry_log', leaves: 'cherry_leaves', height: 5, radius: 2 },
+    redwood: { trunk: 'dark_oak_log', leaves: 'dark_oak_leaves', height: 10, radius: 2 },
+    crystal: { trunk: 'acacia_log', leaves: 'acacia_leaves', height: 6, radius: 2 }
 };
 
 const BIOME_GROUND_LIFE = {
-    plains: ['flower_dandelion', 'flower_rose'],
-    forest: ['mushroom_brown', 'blueberry', 'strawberry', 'flower_rose'],
-    meadow: ['flower_dandelion', 'flower_rose', 'blueberry'],
-    swamp: ['mushroom_brown', 'blueberry'],
-    desert: ['tomato'],
-    badlands: ['carrot'],
-    canyon: ['carrot'],
-    highlands: ['potato'],
-    alpine: ['potato'],
-    tundra: ['potato']
+    plains: ['flower_dandelion', 'flower_rose', 'flower_tulip_red', 'fern'],
+    forest: ['mushroom_brown', 'mushroom_red', 'flower_rose', 'fern', 'blueberry', 'strawberry'],
+    meadow: ['flower_dandelion', 'flower_rose', 'flower_tulip_orange', 'flower_tulip_red', 'blueberry'],
+    swamp: ['mushroom_brown', 'mushroom_red', 'fern', 'blueberry'],
+    desert: ['dead_bush', 'tomato', 'fern'],
+    badlands: ['dead_bush', 'carrot', 'fern'],
+    canyon: ['dead_bush', 'carrot'],
+    highlands: ['potato', 'fern', 'flower_rose'],
+    alpine: ['potato', 'fern'],
+    tundra: ['potato', 'fern']
 };
 
 let workerRouter = null;

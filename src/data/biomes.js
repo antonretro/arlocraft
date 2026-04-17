@@ -14,7 +14,8 @@ export const BIOMES = [
         ridgeStrength: 0.08,
         detailStrength: 0.5,
         waterLevelOffset: 0,
-        treeDensity: 0.08
+        treeDensity: 0.08,
+        color: 0x91bd59
     },
     {
         id: 'forest',
@@ -26,7 +27,8 @@ export const BIOMES = [
         ridgeStrength: 0.16,
         detailStrength: 0.72,
         waterLevelOffset: 0,
-        treeDensity: 0.22
+        treeDensity: 0.22,
+        color: 0x79c05a
     },
     {
         id: 'desert',
@@ -38,7 +40,8 @@ export const BIOMES = [
         ridgeStrength: 0.1,
         detailStrength: 0.45,
         waterLevelOffset: -1,
-        treeDensity: 0.01
+        treeDensity: 0.01,
+        color: 0xaea42a
     },
     {
         id: 'swamp',
@@ -50,7 +53,8 @@ export const BIOMES = [
         ridgeStrength: 0.03,
         detailStrength: 0.36,
         waterLevelOffset: 2,
-        treeDensity: 0.12
+        treeDensity: 0.12,
+        color: 0x6a7039
     },
     {
         id: 'highlands',
@@ -62,7 +66,8 @@ export const BIOMES = [
         ridgeStrength: 0.72,
         detailStrength: 0.82,
         waterLevelOffset: -2,
-        treeDensity: 0.04
+        treeDensity: 0.04,
+        color: 0x85b565
     },
     {
         id: 'meadow',
@@ -74,7 +79,8 @@ export const BIOMES = [
         ridgeStrength: 0.04,
         detailStrength: 0.4,
         waterLevelOffset: 0,
-        treeDensity: 0.015
+        treeDensity: 0.015,
+        color: 0x83bb6d
     },
     {
         id: 'badlands',
@@ -86,7 +92,8 @@ export const BIOMES = [
         ridgeStrength: 0.55,
         detailStrength: 0.75,
         waterLevelOffset: -2,
-        treeDensity: 0.003
+        treeDensity: 0.003,
+        color: 0x90814d
     },
     {
         id: 'canyon',
@@ -98,7 +105,8 @@ export const BIOMES = [
         ridgeStrength: 0.92,
         detailStrength: 0.9,
         waterLevelOffset: -3,
-        treeDensity: 0
+        treeDensity: 0,
+        color: 0x90814d
     },
     {
         id: 'alpine',
@@ -110,7 +118,8 @@ export const BIOMES = [
         ridgeStrength: 1.1,
         detailStrength: 1,
         waterLevelOffset: -4,
-        treeDensity: 0.01
+        treeDensity: 0.01,
+        color: 0x80b497
     },
     {
         id: 'tundra',
@@ -122,7 +131,8 @@ export const BIOMES = [
         ridgeStrength: 0.2,
         detailStrength: 0.58,
         waterLevelOffset: -1,
-        treeDensity: 0.02
+        treeDensity: 0.02,
+        color: 0x80b497
     }
 ];
 

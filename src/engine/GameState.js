@@ -24,7 +24,7 @@ export class GameState {
     initStartingInventory() {
         this.inventory[0] = { id: 'stone', count: 64, kind: 'block' };
         this.inventory[1] = { id: 'grass', count: 64, kind: 'block' };
-        this.inventory[2] = { id: 'wood', count: 48, kind: 'block' };
+        this.inventory[2] = { id: 'oak_log', count: 48, kind: 'block' };
         this.inventory[3] = { id: 'pick_wood', count: 1, kind: 'tool' };
     }
 

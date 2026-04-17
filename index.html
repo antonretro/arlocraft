@@ -6,14 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ArloCraft</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Press+Start+2P&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>tailwind.config = { corePlugins: { preflight: false } }</script>
+    <link rel="stylesheet" href="src/style.css" />
 </head>
 <body>
     <div id="app"></div>
 
-    <div id="hud">
+    <div id="hud" style="display: none;">
         <div id="hud-headline">
             <div id="mode-pill" class="hud-pill">SURVIVAL</div>
             <div id="world-time-pill" class="hud-pill">DAWN</div>
@@ -38,7 +39,10 @@
     </div>
 
     <div id="controls-help" aria-live="polite">
-        <div id="controls-help-title">Controls</div>
+        <div id="controls-help-title-row">
+            <div id="controls-help-title">Controls</div>
+            <button id="controls-help-toggle" type="button" title="Toggle info panel [I]">I</button>
+        </div>
         <div id="controls-help-body"></div>
     </div>
 
@@ -50,7 +54,7 @@
         </form>
     </div>
 
-    <div id="minimap">
+    <div id="minimap" style="display: none;">
         <canvas id="minimap-canvas" width="180" height="180"></canvas>
         <div id="minimap-caption">Minimap [M]</div>
         <div id="minimap-context">Seed arlocraft</div>
@@ -101,7 +105,7 @@
     </div>
 
     <!-- ═══════════════════ MENU OVERLAY ═══════════════════ -->
-    <div id="overlay" style="display:none; position:fixed; inset:0; z-index:100;">
+    <div id="overlay" style="display:block; position:fixed; inset:0; z-index:100;">
 
         <!-- ── SCREEN: Title ─────────────────────────────────── -->
         <div id="screen-title" class="ni-screen ni-screen-active">
@@ -109,17 +113,8 @@
             <div class="mc-bg-orb mc-orb-b"></div>
             <div class="mc-bg-orb mc-orb-c"></div>
 
-            <div id="ni-profile-bar">
-                <div class="ni-profile">
-                    <img src="faces/arlo_happy.png" class="ni-avatar" />
-                    <span class="ni-username">Arlo</span>
-                </div>
-                <div class="ni-time" id="ni-menu-time">12:00</div>
-            </div>
-
             <div class="ni-hero">
-                <img src="icons/items/arlo.png" alt="Arlo" class="ni-hero-img" />
-                <h1 class="ni-title">ARLOCRAFT</h1>
+                <h1 class="ni-title mc-logo" data-text="ARLOCRAFT"><span>ARLOCRAFT</span></h1>
                 <p class="ni-subtitle">Ported Beta 1.7.3 Terrain & Modern UI</p>
             </div>
 
@@ -162,6 +157,7 @@
             <div class="ni-container">
                 <div class="ni-header">
                     <h2 class="ni-heading">Select World</h2>
+                    <button class="ni-btn ni-btn-sm ni-btn-world-back" id="btn-worlds-back-top">Back</button>
                 </div>
                 
                 <div id="world-list-container" class="ni-grid-worlds" aria-live="polite">
@@ -206,6 +202,21 @@
                         <button class="ni-btn" id="btn-create-back">Cancel</button>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- ── SCREEN: Loading ────────────────────────────────── -->
+        <div id="screen-loading" class="ni-screen ni-glass" style="display: none;">
+            <div class="ni-loading-content">
+                <div class="ni-loading-logo">
+                    <img src="faces/arlo_happy.png" class="ni-loading-avatar" />
+                    <div class="ni-loading-spinner"></div>
+                </div>
+                <h2 id="loading-status" class="ni-loading-text">Generating Terrain...</h2>
+                <div class="ni-progress-rail">
+                    <div id="loading-progress" class="ni-progress-fill" style="width: 0%"></div>
+                </div>
+                <div id="loading-subtext" class="ni-loading-subtext">Calculating voxel structures...</div>
             </div>
         </div>
 
@@ -274,6 +285,13 @@
                         <div class="ni-setting-box">
                             <label class="ni-label">Auto Jump</label>
                             <input id="setting-auto-jump" type="checkbox" class="ni-check" />
+                        </div>
+                        <div class="ni-setting-box full-width">
+                            <label class="ni-label">Minecraft Skin (Username)</label>
+                            <div class="ni-input-row" style="margin-top: 8px;">
+                                <input id="setting-player-skin" type="text" placeholder="e.g. Steve" class="ni-input-modern" />
+                                <button class="ni-btn ni-btn-sm" id="btn-update-skin">Apply</button>
+                            </div>
                         </div>
                     </div>
                     <h3 class="ni-tab-heading" style="margin-top: 18px;">Audio</h3>
@@ -360,4 +378,3 @@
     <script type="module" src="src/main.js"></script>
 </body>
 </html>
-

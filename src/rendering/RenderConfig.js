@@ -18,11 +18,11 @@ export const RENDER_LAYERS = {
 };
 
 export const FOG_SETTINGS = {
-    dayDensity: 0.010,
-    nightDensity: 0.018,
-    underwaterMultiplier: 2.2,
-    minDensity: 0.008,
-    maxDensity: 0.045
+    dayDensity: 0.008,
+    nightDensity: 0.012,
+    underwaterMultiplier: 2.0,
+    minDensity: 0.005,
+    maxDensity: 0.035
 };
 
 export const ATMOSPHERIC_COLORS = {

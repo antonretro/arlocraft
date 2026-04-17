@@ -1,0 +1,7 @@
+{
+    "name": "Nuke",
+    "hardness": 0.1,
+    "xp": 25,
+    "emissive": true,
+    "color": "0x1c1c1c"
+}

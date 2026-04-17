@@ -1,0 +1,7 @@
+{
+    "name": "Cloud Block",
+    "hardness": 0.1,
+    "xp": 0,
+    "transparent": true,
+    "color": "0xffffff"
+}

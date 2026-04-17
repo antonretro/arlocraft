@@ -30,13 +30,29 @@ export class World {
         this.waterMeshes = new Set();
         this.virusMeshes = new Set();
         this.virusBlockCount = 0;
-        this.changedBlocks = new Map();
+                this.changedBlocks = new Map();
+        this.idAliases = {
+            'wood': 'oak_log',
+            'leaves': 'oak_leaves',
+            'wood_birch': 'birch_log',
+            'leaves_birch': 'birch_leaves',
+            'wood_pine': 'spruce_log',
+            'leaves_pine': 'spruce_leaves',
+            'wood_cherry': 'cherry_log',
+            'leaves_cherry': 'cherry_leaves',
+            'wood_crystal': 'crystal_log',
+            'leaves_crystal': 'crystal_leaves',
+            'wood_palm': 'jungle_log',
+            'leaves_palm': 'jungle_leaves',
+            'wood_willow': 'mangrove_log',
+            'leaves_willow': 'mangrove_leaves'
+        };
 
         this.chunkSize = 12;
         this.renderDistance = 2;
         this.minRenderDistance = 2;
         this.maxRenderDistance = 6;
-        this.minTerrainY = -12;
+        this.minTerrainY = -64;
         this.maxTerrainY = 65;
         this.deepMinY = -220;
         this.defaultSeaLevel = 1;
@@ -70,6 +86,7 @@ export class World {
         ];
         this.chunkGenerator = this.game?.features?.workerChunkGeneration ? new ChunkGenerator(this) : null;
         this.starterChestClaimed = false;
+        this.openedChestKeys = new Set();
         this.starterChestKey = null;
         this.settlementNameLibrarySize = SETTLEMENT_LIBRARY_SIZE;
         this.landmarks = new Map(); // key → { x, z, name }
@@ -83,14 +100,67 @@ export class World {
             [0, 1, 0], [0, -1, 0],
             [0, 0, 1], [0, 0, -1]
         ];
+        const withWhiteVertexColors = (geo) => {
+            const count = geo.attributes.position.count;
+            const colors = new Float32Array(count * 3);
+            colors.fill(1.0);
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            return geo;
+        };
+
         this.sharedChunkGeometries = {
-            solid: new THREE.BoxGeometry(1, 1, 1),
+            solid: withWhiteVertexColors(new THREE.BoxGeometry(1, 1, 1)),
+            path: (() => {
+                const geo = new THREE.BoxGeometry(1, 15/16, 1);
+                geo.translate(0, -0.03125, 0); // shift down by half a pixel so bottom aligns
+                return withWhiteVertexColors(geo);
+            })(),
             water: (() => {
                 const geo = new THREE.PlaneGeometry(1, 1);
                 geo.rotateX(-Math.PI / 2);
-                return geo;
+                return withWhiteVertexColors(geo);
             })(),
-            deco: new THREE.BoxGeometry(0.16, 1, 0.16)
+            deco: (() => {
+                const p1 = new THREE.PlaneGeometry(1, 1);
+                p1.rotateY(Math.PI / 4);
+                const p2 = new THREE.PlaneGeometry(1, 1);
+                p2.rotateY(-Math.PI / 4);
+                const merged = new THREE.BufferGeometry();
+                const pos1 = p1.attributes.position.array;
+                const pos2 = p2.attributes.position.array;
+                const uv1 = p1.attributes.uv.array;
+                const uv2 = p2.attributes.uv.array;
+                const norm1 = p1.attributes.normal.array;
+                const norm2 = p2.attributes.normal.array;
+                const idx1 = Array.from(p1.index.array);
+                const idx2 = Array.from(p2.index.array).map(i => i + 4);
+                merged.setAttribute('position', new THREE.Float32BufferAttribute([...pos1, ...pos2], 3));
+                merged.setAttribute('uv', new THREE.Float32BufferAttribute([...uv1, ...uv2], 2));
+                merged.setAttribute('normal', new THREE.Float32BufferAttribute([...norm1, ...norm2], 3));
+                merged.setIndex([...idx1, ...idx2]);
+                return withWhiteVertexColors(merged);
+            })(),
+            stair: (() => {
+                const base = new THREE.BoxGeometry(1, 0.5, 1);
+                base.translate(0, -0.25, 0);
+                const step = new THREE.BoxGeometry(1, 0.5, 0.5);
+                step.translate(0, 0.25, 0.25);
+                const merged = new THREE.BufferGeometry();
+                const pos = [...base.attributes.position.array, ...step.attributes.position.array];
+                const uv = [...base.attributes.uv.array, ...step.attributes.uv.array];
+                const norm = [...base.attributes.normal.array, ...step.attributes.normal.array];
+                const idx = [...Array.from(base.index.array), ...Array.from(step.index.array).map(i => i + base.attributes.position.count)];
+                merged.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+                merged.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+                merged.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
+                merged.setIndex(idx);
+                return withWhiteVertexColors(merged);
+            })(),
+            slab: (() => {
+                const geo = new THREE.BoxGeometry(1, 0.5, 1);
+                geo.translate(0, -0.25, 0);
+                return withWhiteVertexColors(geo);
+            })()
         };
 
         const hoverGeo = new THREE.BoxGeometry(1.04, 1.04, 1.04);
@@ -198,6 +268,7 @@ export class World {
     queueChunkLoad(cx, cz) { this.chunkManager.queueChunkLoad(cx, cz); }
     ensureChunksAround(cx, cz) { this.chunkManager.ensureChunksAround(cx, cz); }
     ensureCriticalChunks(cx, cz, r) { this.chunkManager.ensureCriticalChunks(cx, cz, r); }
+    processChunkLoadQueue(cx, cz, budget) { this.chunkManager.processChunkLoadQueue(cx, cz, budget); }
     flushPriorityChunkRebuilds(limit) { this.chunkManager.flushPriorityChunkRebuilds(limit); }
 
     // ─── Serialization ────────────────────────────────────────────────
@@ -207,6 +278,7 @@ export class World {
             seed: this.seedString,
             changedBlocks: Array.from(this.changedBlocks.entries()),
             starterChestClaimed: this.starterChestClaimed,
+            openedChestKeys: Array.from(this.openedChestKeys.values()),
             starterChestKey: this.starterChestKey,
             restoredLandmarks: Array.from(this.restoredLandmarks.values())
         };
@@ -225,8 +297,13 @@ export class World {
             }
         }
         this.changedBlocks = migrated;
-        this.starterChestClaimed = Boolean(data?.starterChestClaimed);
+        const openedChestKeys = Array.isArray(data?.openedChestKeys)
+            ? data.openedChestKeys.filter((value) => typeof value === 'number' || typeof value === 'string')
+            : [];
+        this.openedChestKeys = new Set(openedChestKeys);
         this.starterChestKey = typeof data?.starterChestKey === 'string' ? data.starterChestKey : null;
+        if (data?.starterChestClaimed && this.starterChestKey) this.openedChestKeys.add(this.starterChestKey);
+        this.starterChestClaimed = this.openedChestKeys.size > 0;
         const restored = Array.isArray(data?.restoredLandmarks) ? data.restoredLandmarks : [];
         this.restoredLandmarks = new Set(restored.filter((value) => typeof value === 'string'));
         this.clearWorld();
@@ -654,14 +731,14 @@ export class World {
             const baseY = this.getColumnHeight(centerX, centerZ);
             for (let dx = -2; dx <= 2; dx++) {
                 for (let dz = -2; dz <= 2; dz++) {
-                    this.setChangedBlock(centerX + dx, baseY, centerZ + dz, 'wood_planks');
+                    this.setChangedBlock(centerX + dx, baseY, centerZ + dz, 'oak_planks');
                 }
             }
             for (let dy = 1; dy <= 3; dy++) {
-                this.setChangedBlock(centerX - 2, baseY + dy, centerZ - 2, 'wood');
-                this.setChangedBlock(centerX + 2, baseY + dy, centerZ - 2, 'wood');
-                this.setChangedBlock(centerX - 2, baseY + dy, centerZ + 2, 'wood');
-                this.setChangedBlock(centerX + 2, baseY + dy, centerZ + 2, 'wood');
+                this.setChangedBlock(centerX - 2, baseY + dy, centerZ - 2, 'oak_log');
+                this.setChangedBlock(centerX + 2, baseY + dy, centerZ - 2, 'oak_log');
+                this.setChangedBlock(centerX - 2, baseY + dy, centerZ + 2, 'oak_log');
+                this.setChangedBlock(centerX + 2, baseY + dy, centerZ + 2, 'oak_log');
             }
             this.setChangedBlock(centerX, baseY + 1, centerZ - 2, 'glass');
             this.setChangedBlock(centerX, baseY + 1, centerZ + 2, 'glass');
@@ -866,17 +943,19 @@ export class World {
 
     isBlockSolid(blockId) {
         if (!blockId) return false;
-        if (blockId === 'water' || blockId === 'lava') return false;
-        if (blockId === 'leaves' || blockId.startsWith('leaves_')) return false;
-        if (blockId === 'cloud_block') return false;
+        const id = this.idAliases[blockId] || blockId;
+        if (id === 'water' || blockId === 'lava') return false;
+        if (id.includes('leaves')) return false;
+        if (id === 'cloud_block') return false;
 
-        const blockData = this.getBlockData(blockId);
+        const blockData = this.getBlockData(id);
         if (blockData?.deco || blockData?.nonSolid) return false;
         return true;
     }
 
     getBlockData(id) {
-        return this.blockDataById.get(id) ?? null;
+        const actualId = this.idAliases[id] || id;
+        return this.blockDataById.get(actualId) ?? null;
     }
 
     isSolidAt(x, y, z) {
@@ -921,8 +1000,8 @@ export class World {
     // Blocks that fall when their support is removed (tree trunks, leaves, deco)
     _isGravityBlock(id) {
         if (!id) return false;
-        if (id.startsWith('wood_') || id === 'wood') return true;
-        if (id.startsWith('leaves_') || id === 'leaves') return true;
+        if (id.startsWith('wood_') || id === 'oak_log') return true;
+        if (id.includes('leaves')) return true;
         if (id.startsWith('flower_') || id === 'grass_tall') return true;
         if (id === 'mushroom_brown' || id === 'cactus') return true;
         return false;
@@ -1203,7 +1282,9 @@ export class World {
         }
 
         if (blockId === 'starter_chest') {
-            if (!this.starterChestClaimed) {
+            const chestKey = this.getKey(hit.cell.x, hit.cell.y, hit.cell.z);
+            if (!this.openedChestKeys.has(chestKey)) {
+                this.openedChestKeys.add(chestKey);
                 this.starterChestClaimed = true;
                 this.game?.grantStarterChestLoot?.();
                 window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: 'STARTER CHEST LOOT' } }));
@@ -1250,9 +1331,21 @@ export class World {
         if (existingId && !replaceExisting) return false;
 
         const ownerKey = this.getChunkKey(this.getChunkCoord(px), this.getChunkCoord(pz));
-        this.changedBlocks.set(key, blockId);
-        this.addBlock(px, py, pz, blockId, ownerKey, replaceExisting);
-        window.dispatchEvent(new CustomEvent('block-placed', { detail: { id: blockId } }));
+        
+        let finalId = blockId;
+        if (blockId.includes('_stairs')) {
+            const yaw = camera.rotation.y;
+            const pi = Math.PI;
+            const angle = ((yaw % (2 * pi)) + (2 * pi)) % (2 * pi);
+            if (angle >= (7 * pi / 4) || angle < (pi / 4)) finalId += '_s';
+            else if (angle < (3 * pi / 4)) finalId += '_e';
+            else if (angle < (5 * pi / 4)) finalId += '_n';
+            else finalId += '_w';
+        }
+
+        this.changedBlocks.set(key, finalId);
+        this.addBlock(px, py, pz, finalId, ownerKey, replaceExisting);
+        window.dispatchEvent(new CustomEvent('block-placed', { detail: { id: finalId } }));
         return true;
     }
 
@@ -1277,7 +1370,7 @@ export class World {
         const chunkLoaded = this.chunks.has(chunkKey);
 
         if (chunkLoaded) {
-            for (let y = this.maxTerrainY + 10; y >= this.minTerrainY - 2; y--) {
+            for (let y = 160; y >= this.minTerrainY - 2; y--) {
                 const id = this.blockMap.get(this.getKey(gx, y, gz));
                 if (!id) continue;
                 if (!this.isBlockSolid(id)) continue;
@@ -1327,10 +1420,10 @@ export class World {
     getTopSolidBlockAt(x, z) {
         const gx = Math.round(x);
         const gz = Math.round(z);
-        for (let y = this.maxTerrainY + 10; y >= this.minTerrainY - 2; y--) {
+        for (let y = 160; y >= this.minTerrainY - 2; y--) {
             const id = this.blockMap.get(this.getKey(gx, y, gz));
             if (!id) continue;
-            if (!this.isBlockSolid(id) || id === 'leaves' || id.startsWith('leaves_')) continue;
+            if (!this.isBlockSolid(id) || id === 'oak_leaves' || id.startsWith('leaves_')) continue;
             return { id, y };
         }
         return null;
@@ -1339,7 +1432,7 @@ export class World {
     getTopBlockAt(x, z) {
         const gx = Math.round(x);
         const gz = Math.round(z);
-        for (let y = this.maxTerrainY + 10; y >= this.minTerrainY - 2; y--) {
+        for (let y = 160; y >= this.minTerrainY - 2; y--) {
             const id = this.blockMap.get(this.getKey(gx, y, gz));
             if (id) return id;
         }
@@ -1349,7 +1442,7 @@ export class World {
     getWaterSurfaceYAt(x, z) {
         const gx = Math.round(x);
         const gz = Math.round(z);
-        for (let y = this.maxTerrainY + 10; y >= this.minTerrainY - 2; y--) {
+        for (let y = 160; y >= this.minTerrainY - 2; y--) {
             const id = this.blockMap.get(this.getKey(gx, y, gz));
             if (id !== 'water') continue;
             const above = this.blockMap.get(this.getKey(gx, y + 1, gz));
@@ -1433,7 +1526,7 @@ export class World {
                     const z = oz + dz;
                     const top = this.getTopSolidBlockAt(x, z);
                     if (!top) continue;
-                    if (top.id === 'water' || top.id === 'leaves') continue;
+                    if (top.id === 'water' || top.id === 'oak_leaves') continue;
                     if (!this.hasHeadroomAt(x, top.y, z)) continue;
                     return {
                         x,
@@ -1444,14 +1537,13 @@ export class World {
             }
         }
 
-        const fallbackY = Math.max(this.getTerrainHeight(ox, oz), this.seaLevel + 2) + 0.8;
+        const fallbackY = Math.max(this.getTerrainHeight(ox, oz), this.seaLevel + 4) + 2.8;
         return { x: ox, y: fallbackY, z: oz };
     }
 
     // ─── Starter Chest ────────────────────────────────────────────────
 
     ensureStarterChest() {
-        if (this.starterChestClaimed) return;
         if (this.starterChestKey && this.blockMap.get(this.starterChestKey) === 'starter_chest') return;
 
         const spawn = this.getSafeSpawnPoint(0, 0, 18);

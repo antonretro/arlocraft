@@ -2,6 +2,9 @@ import { BLOCKS } from '../data/blocks.js';
 import { TOOLS } from '../data/tools.js';
 import { CraftingSystem } from '../engine/CraftingSystem.js';
 
+const itemTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/item/*.png', { eager: true, query: '?url' });
+const blockTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/block/*.png', { eager: true, query: '?url' });
+
 export class HUD {
     constructor(gameState, game = null) {
         this.gameState = gameState;
@@ -10,36 +13,19 @@ export class HUD {
         this.toolById = new Map(TOOLS.map((tool) => [tool.id, tool]));
         this.craftingSystem = new CraftingSystem();
 
-        this.iconMap = {
-            stone: 'icons/items/stone.png',
-            grass: 'icons/items/grass.png',
-            wood: 'icons/items/wood.png',
-            dirt: 'icons/items/dirt.png',
-            sand: 'icons/items/sand.png',
-            leaves: 'icons/items/leaves.png',
-            water: 'icons/items/water.png',
-            virus: 'icons/items/virus.png',
-            arlo: 'icons/items/arlo.png',
-            glass: 'icons/items/glass.png',
-            brick: 'icons/items/brick.png',
-            crafting_table: 'icons/items/crafting_table.png',
-            pick_wood: 'icons/items/pick_wood.png',
-            sledge_iron: 'icons/items/sledge_iron.png',
-            power_blade: 'icons/items/power_blade.png',
-            glitch_saber: 'icons/items/glitch_saber.png',
-            data_drill: 'icons/items/data_drill.png',
-            decoder_wand: 'icons/items/decoder_wand.png',
-            magnet_glove: 'icons/items/magnet_glove.png',
-            rocket_boots: 'icons/items/rocket_boots.png',
-            static_bow: 'icons/items/static_bow.png',
-            byte_axe: 'icons/items/power_blade.png',
-            echo_dagger: 'icons/items/glitch_saber.png',
-            arc_spear: 'icons/items/sledge_iron.png',
-            plasma_hammer: 'icons/items/sledge_iron.png',
-            pulse_pistol: 'icons/items/static_bow.png',
-            rail_rifle: 'icons/items/static_bow.png',
-            scatter_blaster: 'icons/items/static_bow.png'
-        };
+        this.itemTextures = {};
+        for (const [path, module] of Object.entries(itemTextureModules)) {
+            const fileName = path.split('/').pop().replace('.png', '');
+            this.itemTextures[fileName] = module.default || module;
+        }
+
+        this.blockTextures = {};
+        for (const [path, module] of Object.entries(blockTextureModules)) {
+            const fileName = path.split('/').pop().replace('.png', '');
+            this.blockTextures[fileName] = module.default || module;
+        }
+
+        
         this.availableIconIds = new Set([
             'arlo',
             'data_drill',
@@ -48,7 +34,7 @@ export class HUD {
             'glass',
             'glitch_saber',
             'grass',
-            'leaves',
+            'oak_leaves',
             'magnet_glove',
             'pick_wood',
             'power_blade',
@@ -59,19 +45,21 @@ export class HUD {
             'stone',
             'virus',
             'water',
-            'wood'
+            'oak_log'
         ]);
         this.iconAliasById = {
             cobblestone: 'stone',
             brick: 'stone',
             clay: 'dirt',
             path_block: 'dirt',
-            crafting_table: 'wood',
-            starter_chest: 'wood',
-            lantern: 'wood',
+            crafting_table: 'oak_log',
+            starter_chest: 'oak_log',
+            lantern: 'oak_log',
             tnt: 'dirt',
             nuke: 'virus',
             obsidian: 'stone',
+            wood: 'oak_log',
+            leaves: 'oak_leaves',
             bedrock: 'stone',
             sandstone: 'sand',
             snow_block: 'stone',
@@ -388,14 +376,50 @@ export class HUD {
         const element = document.createElement('div');
         element.className = 'item-icon';
 
-        const icon = this.getIconPath(item.id);
-        if (icon) {
-            element.style.backgroundImage = `url('${icon}')`;
-            if (icon.startsWith('data:image/svg+xml')) {
-                element.classList.add('generated');
-            }
+        const isBlockItem = this.blockById.has(item.id) || 
+                           item.id === 'wood' || item.id === 'leaves' || 
+                           item.id.startsWith('wood_') || item.id.startsWith('leaves_') ||
+                           item.id.includes('_stairs') || item.id.includes('_slab');
+
+        if (isBlockItem) {
+             const set = this.getBlockTextureSet(item.id);
+             if (set && (set.top || set.all || set.side || set.front || set.bottom)) {
+                 const topTex = set.top || set.all || set.side || set.front || set.bottom;
+                 const leftTex = set.front || set.side || set.all || set.top || set.bottom;
+                 const rightTex = set.side || set.front || set.all || set.top || set.bottom;
+
+                 const isoContainer = document.createElement('div');
+                 isoContainer.className = 'iso-icon';
+                 
+                 const topFace = document.createElement('div');
+                 topFace.className = 'iso-face top';
+                 topFace.style.backgroundImage = `url('${topTex}')`;
+                 
+                 const leftFace = document.createElement('div');
+                 leftFace.className = 'iso-face left';
+                 leftFace.style.backgroundImage = `url('${leftTex}')`;
+                 
+                 const rightFace = document.createElement('div');
+                 rightFace.className = 'iso-face right';
+                 rightFace.style.backgroundImage = `url('${rightTex}')`;
+                 
+                 isoContainer.appendChild(topFace);
+                 isoContainer.appendChild(leftFace);
+                 isoContainer.appendChild(rightFace);
+                 element.appendChild(isoContainer);
+             } else {
+                 element.textContent = String(item.id).slice(0, 2).toUpperCase();
+             }
         } else {
-            element.textContent = item.id.slice(0, 2).toUpperCase();
+             const icon = this.getIconPath(item.id);
+             if (icon) {
+                 element.style.backgroundImage = `url('${icon}')`;
+                 if (icon.startsWith('data:image/svg+xml')) {
+                     element.classList.add('generated');
+                 }
+             } else {
+                 element.textContent = String(item.id).slice(0, 2).toUpperCase();
+             }
         }
 
         if ((item.count ?? 1) > 1) {
@@ -625,19 +649,51 @@ export class HUD {
         return 'block';
     }
 
+    getBlockTextureSet(id) {
+        const alias = this.resolveIconAlias(id) || id;
+        return {
+            all: this.blockTextures[alias] || this.blockTextures[`${alias}_all`],
+            top: this.blockTextures[`${alias}_top`],
+            side: this.blockTextures[`${alias}_side`],
+            front: this.blockTextures[`${alias}_front`],
+            bottom: this.blockTextures[`${alias}_bottom`]
+        };
+    }
+
+    getBlockTextureSet(id) {
+        const alias = this.resolveIconAlias(id) || id;
+        return {
+            all: this.blockTextures[alias] || this.blockTextures[`${alias}_all`],
+            top: this.blockTextures[`${alias}_top`],
+            side: this.blockTextures[`${alias}_side`],
+            front: this.blockTextures[`${alias}_front`],
+            bottom: this.blockTextures[`${alias}_bottom`]
+        };
+    }
+
     getIconPath(itemId) {
         if (!itemId) return this.getGeneratedIconPath('item');
 
-        const direct = this.iconMap[itemId];
-        if (direct) {
-            const directId = direct.split('/').pop()?.replace('.png', '');
-            if (directId && this.availableIconIds.has(directId)) return direct;
-        }
+        const alias = this.resolveIconAlias(itemId) || itemId;
+        
+        const toolMap = {
+            pick_wood: 'wooden_pickaxe',
+            sledge_iron: 'iron_axe',
+            power_blade: 'iron_sword',
+            glitch_saber: 'diamond_sword',
+            data_drill: 'iron_pickaxe',
+            decoder_wand: 'stick',
+            magnet_glove: 'iron_ingot',
+            rocket_boots: 'iron_boots',
+            static_bow: 'bow',
+            apple: 'apple',
+            bread: 'bread',
+            steak: 'cooked_beef'
+        };
+        const mcId = toolMap[alias] || alias;
 
-        const alias = this.resolveIconAlias(itemId);
-        if (alias && this.availableIconIds.has(alias)) {
-            return `icons/items/${alias}.png`;
-        }
+        if (this.itemTextures && this.itemTextures[mcId]) return this.itemTextures[mcId];
+        if (this.blockTextures && this.blockTextures[mcId]) return this.blockTextures[mcId];
 
         return this.getGeneratedIconPath(itemId);
     }
@@ -758,11 +814,19 @@ export class HUD {
 
     resolveIconAlias(itemId) {
         const id = String(itemId);
+        const legacyMap = {
+            'wood': 'oak_log', 'leaves': 'oak_leaves',
+            'wood_birch': 'birch_log', 'leaves_birch': 'birch_leaves',
+            'wood_pine': 'spruce_log', 'leaves_pine': 'spruce_leaves',
+            'wood_cherry': 'cherry_log', 'leaves_cherry': 'cherry_leaves',
+            'wood_crystal': 'crystal_log', 'leaves_crystal': 'crystal_leaves',
+            'wood_palm': 'jungle_log', 'leaves_palm': 'jungle_leaves',
+            'wood_willow': 'mangrove_log', 'leaves_willow': 'mangrove_leaves'
+        };
+        if (legacyMap[id]) return legacyMap[id];
         const explicit = this.iconAliasById[id];
         if (explicit) return explicit;
 
-        if (id.startsWith('wood_')) return 'wood';
-        if (id.startsWith('leaves_')) return 'leaves';
         if (id.startsWith('wool_')) return 'grass';
         if (id.startsWith('flower_') || id === 'grass_tall') return 'grass';
 

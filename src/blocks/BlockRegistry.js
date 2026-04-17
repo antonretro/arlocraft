@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { BLOCKS } from '../data/blocks.js';
 
-const textureModules = import.meta.glob('../content/blocks/*/*.png', { eager: true, query: '?url' });
+const textureModules = import.meta.glob([
+    '../content/blocks/*/*.png', 
+    '../Igneous 1.19.4/assets/minecraft/textures/block/*.png'
+], { eager: true, query: '?url' });
 
 
 
@@ -14,6 +17,22 @@ export class BlockRegistry {
         this.atlasTileCache = new Map();
         this.pixelTextures = new Map();
         this.animatedGif = null;
+                this.idAliases = {
+            'wood': 'oak_log',
+            'leaves': 'oak_leaves',
+            'wood_birch': 'birch_log',
+            'leaves_birch': 'birch_leaves',
+            'wood_pine': 'spruce_log',
+            'leaves_pine': 'spruce_leaves',
+            'wood_cherry': 'cherry_log',
+            'leaves_cherry': 'cherry_leaves',
+            'wood_crystal': 'crystal_log',
+            'leaves_crystal': 'crystal_leaves',
+            'wood_palm': 'jungle_log',
+            'leaves_palm': 'jungle_leaves',
+            'wood_willow': 'mangrove_log',
+            'leaves_willow': 'mangrove_leaves'
+        };
         this.init();
     }
 
@@ -119,6 +138,64 @@ export class BlockRegistry {
         return texture;
     }
 
+    createCanvasTexture(size, painter) {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        painter(ctx, size);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.magFilter = THREE.NearestFilter;
+        texture.minFilter = THREE.NearestFilter;
+        texture.colorSpace = THREE.SRGBColorSpace;
+        return texture;
+    }
+
+    createStarterChestMaterial() {
+        const makeFace = (face) => this.createCanvasTexture(16, (ctx, size) => {
+            ctx.fillStyle = '#8a5a2b';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#6e431d';
+            for (let y = 0; y < size; y += 4) {
+                ctx.fillRect(0, y, size, 1);
+            }
+            ctx.fillStyle = '#a66d34';
+            ctx.fillRect(0, 2, size, 2);
+            ctx.fillRect(0, size - 4, size, 2);
+
+            if (face === 'top') {
+                ctx.fillStyle = '#b37a3d';
+                ctx.fillRect(1, 1, size - 2, size - 2);
+                ctx.fillStyle = '#6e431d';
+                ctx.fillRect(0, 7, size, 2);
+                return;
+            }
+
+            ctx.fillStyle = '#3d2614';
+            ctx.fillRect(0, 7, size, 2);
+            ctx.fillStyle = '#caa25b';
+            ctx.fillRect(6, 6, 4, 4);
+            if (face === 'front') {
+                ctx.fillStyle = '#e0bb70';
+                ctx.fillRect(6, 8, 4, 4);
+                ctx.fillStyle = '#4a2f18';
+                ctx.fillRect(7, 9, 2, 2);
+            }
+        });
+
+        const side = makeFace('side');
+        const top = makeFace('top');
+        const front = makeFace('front');
+        return [
+            new THREE.MeshLambertMaterial({ map: side }),
+            new THREE.MeshLambertMaterial({ map: side }),
+            new THREE.MeshLambertMaterial({ map: top }),
+            new THREE.MeshLambertMaterial({ map: top }),
+            new THREE.MeshLambertMaterial({ map: front }),
+            new THREE.MeshLambertMaterial({ map: side })
+        ];
+    }
+
     getAtlasTileTexture(tileX, tileY) {
         const columns = Math.max(1, BLOCK_TEXTURE_ATLAS.columns);
         const rows = Math.max(1, BLOCK_TEXTURE_ATLAS.rows);
@@ -170,7 +247,7 @@ export class BlockRegistry {
             id === 'grass_tall' ||
             id === 'mushroom_brown' ||
             id.startsWith('flower_') ||
-            id.startsWith('leaves') ||
+            id.includes('leaves') ||
             id.startsWith('mushroom_') ||
             id === 'fern' ||
             id === 'dead_bush' ||
@@ -182,17 +259,47 @@ export class BlockRegistry {
         );
     }
 
-    getMaterial(id) {
+        getMaterial(id) {
         if (this.materialCache.has(id)) return this.materialCache.get(id);
-        const config = this.blocks.get(id);
-        if (!config) return new THREE.MeshLambertMaterial({ color: 0xff00ff });
+        
+        const alias = this.idAliases[id];
+        if (alias) {
+            const material = this.getMaterial(alias);
+            this.materialCache.set(id, material);
+            return material;
+        }
+        let targetId = id;
+        const stairMatch = id.match(/(.*_stairs)(_[nswe])$/);
+        const slabMatch = id.match(/(.*_slab)(_[nswe])$/); // Slabs might have half-height positioning later
+        
+        let strippedId = id;
+        if (stairMatch) strippedId = stairMatch[1];
+        else if (slabMatch) strippedId = slabMatch[1];
 
-        const textures = this.blockTextures.get(id) || {};
+        if (strippedId.endsWith('_stairs')) {
+            targetId = strippedId.replace('_stairs', '_planks');
+            if (!this.blockTextures.has(targetId)) targetId = strippedId.replace('_stairs', '');
+        } else if (strippedId.endsWith('_slab')) {
+            targetId = strippedId.replace('_slab', '_planks');
+            if (!this.blockTextures.has(targetId)) targetId = strippedId.replace('_slab', '');
+        }
+
+        const config = this.blocks.get(id) || this.blocks.get(strippedId) || this.blocks.get(targetId) || { id, name: id };
+        const textures = this.blockTextures.get(targetId) || this.blockTextures.get(id) || {};
+
+        if (!config && Object.keys(textures).length === 0) return new THREE.MeshLambertMaterial({ color: 0xff00ff });
         
         const load = (name) => {
             const url = textures[name];
-            if (!url) return null;
-            return this.loadTexture(url);
+            if (url) return this.loadTexture(url);
+            
+            // IGNEOUS FALLBACK: Check if filename exists without 'all.png' 
+            // Often blocks in packs are named {id}.png (e.g. stone.png)
+            const fallbackKey = `${targetId}.png`;
+            const fallbackUrl = textures[fallbackKey];
+            if (fallbackUrl) return this.loadTexture(fallbackUrl);
+
+            return null;
         };
 
         const allTex = load('all.png');
@@ -206,8 +313,12 @@ export class BlockRegistry {
 
         let material = null;
 
+        if (id === 'starter_chest' && Object.keys(textures).length === 0) {
+            material = this.createStarterChestMaterial();
+        }
+
         // Face order: px, nx, py, ny, pz, nz (Right, Left, Top, Bottom, Front, Back)
-        if (topTex || bottomTex || sideTex || frontTex || backTex || leftTex || rightTex) {
+        if (!material && (topTex || bottomTex || sideTex || frontTex || backTex || leftTex || rightTex)) {
             const isDeco = Boolean(config.deco);
             const cutoutBlock = this.isCutoutBlockId(id, isDeco);
             const isCutout = cutoutBlock;
@@ -215,7 +326,7 @@ export class BlockRegistry {
             const matConfig = {
                 transparent: isTransparent,
                 opacity: isTransparent ? 0.82 : 1,
-                alphaTest: isCutout ? 0.33 : 0,
+                alphaTest: isCutout ? 0.05 : 0,
                 depthWrite: isCutout ? true : !isTransparent,
                 side: isDeco ? THREE.DoubleSide : THREE.FrontSide
             };
@@ -234,27 +345,19 @@ export class BlockRegistry {
                 }
             }
             
-            const isFoliage = id === 'grass_tall' || id === 'vine' || id === 'fern' || id === 'sugar_cane' || id.startsWith('leaves');
+            const isFoliage = id === 'grass_tall' || id === 'vine' || id === 'fern' || id === 'sugar_cane' || id.includes('leaves');
             // Grass top texture is already baked green in this pack; avoid instance tinting
             // to prevent rare black-top failures from per-instance color paths.
-            const isGrassTopOnly = false;
+            const isGrassTopOnly = id === 'grass';
             
-            for (let i = 0; i < mats.length; i++) {
+                        for (let i = 0; i < mats.length; i++) {
                 const m = mats[i];
                 if ((isGrassTopOnly && i === 2) || isFoliage) {
                     m.userData.tintable = true;
                 } else {
                     m.userData.tintable = false;
-                    // Ignore InstancedMesh colors for non-tintable faces
-                    m.onBeforeCompile = (shader) => {
-                        shader.vertexShader = shader.vertexShader.replace(
-                            'vColor.xyz = instanceColor.xyz;',
-                            'vColor.xyz = vec3(1.0);'
-                        );
-                    };
                 }
             }
-            
             // If all sides are identical and no specific ones provided, use a single material
             if (!textures['top.png'] && !textures['bottom.png'] && !textures['side.png'] && 
                 !textures['front.png'] && !textures['back.png'] && !textures['left.png'] && !textures['right.png'] && allTex) {

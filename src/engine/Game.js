@@ -93,7 +93,11 @@ export class Game {
         this.clock = new THREE.Clock();
         this.bindEvents();
         this.setupUI();
-        this.init();
+        this.setupSkinListeners();
+        this.init().catch(e => {
+            console.error("[ArloCraft] Init Failure:", e);
+            if (this.showOnScreenError) this.showOnScreenError(e.message);
+        });
     }
 
     setupPlayerVisual() {
@@ -193,6 +197,13 @@ export class Game {
         });
         window.addEventListener('level-up', () => {
             this.audio.play('level-up');
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'F3') {
+                e.preventDefault();
+                this.toggleDebugOverlay();
+            }
         });
     }
 
@@ -1777,14 +1788,14 @@ export class Game {
             const physicsStart = performance.now();
             this.physics.update(delta, this.input, this.viewYaw);
             this.profiler.physicsMs = performance.now() - physicsStart;
-
             playerPos = this.getPlayerPosition();
             this.entities.update(delta);
-
             const worldStart = performance.now();
             this.world.update(playerPos, delta);
             this.profiler.worldMs = performance.now() - worldStart;
             this.updateSurvivalSystems(delta);
+            this.animatePlayer(delta);
+            this.updateDebugHUD(delta);
 
             if (this.input.mouseButtons.left) {
                 this.handlePrimaryAction(delta);
@@ -1956,6 +1967,81 @@ export class Game {
         const talked = this.entityManager.interactNearbyEntity(pos, 4);
         if (talked) {
             this.screenShake = Math.max(this.screenShake, 0.02);
+        }
+    }
+
+    setupSkinListeners() {
+        const btn = document.getElementById('btn-update-skin');
+        const input = document.getElementById('setting-player-skin');
+        if (!btn || !input) return;
+        btn.onclick = () => {
+            const user = input.value.trim();
+            if (!user) return;
+            btn.textContent = '...';
+            this.updatePlayerSkin(user).finally(() => btn.textContent = 'Apply');
+        };
+        if (this.settings.skinUsername) {
+            input.value = this.settings.skinUsername;
+            this.updatePlayerSkin(this.settings.skinUsername);
+        }
+    }
+
+    async updatePlayerSkin(username) {
+        try {
+            const { materials } = await this.skinLoader.loadSkin(username);
+            if (this.playerParts) {
+                Object.assign(this.playerParts.head.material, materials.head);
+                Object.assign(this.playerParts.torso.material, materials.torso);
+                if (this.playerParts.face) this.playerParts.face.visible = false;
+            }
+            if (this.hand) this.hand.arm.material = materials.armR;
+            const h = document.getElementById('arlo-face-image');
+            if (h) h.src = `https://minotar.net/avatar/${username}/64`;
+            this.settings.skinUsername = username;
+            this.saveSettings();
+        } catch (e) { console.error('[ArloCraft] Skin Error:', e); }
+    }
+
+    animatePlayer(delta) {
+        if (!this.playerParts) return;
+        const speed = Math.sqrt(this.physics.velocity.x ** 2 + this.physics.velocity.z ** 2);
+        if (speed > 0.05) {
+            const a = Math.sin(this.bobCycle || 0) * 0.45;
+            this.playerParts.legR.rotation.x = a;
+            this.playerParts.legL.rotation.x = -a;
+            this.playerParts.armR.rotation.x = -a * 1.1;
+            this.playerParts.armL.rotation.x = a * 1.1;
+            this.bobCycle = (this.bobCycle || 0) + delta * 15;
+        } else {
+            this.bobCycle = THREE.MathUtils.lerp(this.bobCycle || 0, 0, delta * 3);
+        }
+    }
+
+    toggleDebugOverlay() {
+        this.debugVisible = !this.debugVisible;
+        const o = document.getElementById('debug-overlay');
+        if (o) o.style.display = this.debugVisible ? 'block' : 'none';
+        this.audio.play('ui-click');
+    }
+
+    initDebugOverlay() {
+        let overlay = document.getElementById('debug-overlay');
+        if (!overlay) {
+            overlay = document.createElement('pre');
+            overlay.id = 'debug-overlay';
+            document.body.appendChild(overlay);
+        }
+        overlay.style.cssText = 'position:fixed;top:96px;left:24px;z-index:100000;background:rgba(0,0,0,0.6);color:#0f0;padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);pointer-events:none;font-family:monospace;font-size:12px;display:none;';
+        this.debugOverlay = overlay;
+    }
+
+    updateDebugHUD(delta) {
+        if (!this.debugVisible) return;
+        const overlay = this.debugOverlay || document.getElementById('debug-overlay');
+        if (overlay) {
+            const fps = Math.round(1 / Math.max(0.001, delta));
+            const pos = this.physics.position;
+            overlay.textContent = `FPS: ${fps} | POS: ${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`;
         }
     }
 }

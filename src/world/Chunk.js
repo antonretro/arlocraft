@@ -41,14 +41,14 @@ const BIOME_GROUND_LIFE = {
 };
 
 const TREE_PROFILES = {
-    oak: { trunk: 'wood', leaves: 'leaves', height: 5, radius: 2, style: 'round' },
-    birch: { trunk: 'wood_birch', leaves: 'leaves_birch', height: 6, radius: 2, style: 'round' },
-    pine: { trunk: 'wood_pine', leaves: 'leaves_pine', height: 7, radius: 2, style: 'cone' },
-    palm: { trunk: 'wood_palm', leaves: 'leaves_palm', height: 6, radius: 3, style: 'palm' },
-    willow: { trunk: 'wood_willow', leaves: 'leaves_willow', height: 5, radius: 3, style: 'willow' },
-    cherry: { trunk: 'wood_cherry', leaves: 'leaves_cherry', height: 5, radius: 3, style: 'round' },
-    redwood: { trunk: 'wood_redwood', leaves: 'leaves_redwood', height: 11, radius: 2, style: 'spire' },
-    crystal: { trunk: 'wood_crystal', leaves: 'leaves_crystal', height: 7, radius: 2, style: 'crystal' }
+    oak: { trunk: 'oak_log', leaves: 'oak_leaves', height: 5, radius: 2, style: 'round' },
+    birch: { trunk: 'birch_log', leaves: 'birch_leaves', height: 6, radius: 2, style: 'round' },
+    pine: { trunk: 'spruce_log', leaves: 'spruce_leaves', height: 7, radius: 2, style: 'cone' },
+    palm: { trunk: 'jungle_log', leaves: 'jungle_leaves', height: 6, radius: 3, style: 'palm' },
+    willow: { trunk: 'mangrove_log', leaves: 'mangrove_leaves', height: 5, radius: 3, style: 'willow' },
+    cherry: { trunk: 'cherry_log', leaves: 'cherry_leaves', height: 5, radius: 3, style: 'round' },
+    redwood: { trunk: 'redwood_log', leaves: 'redwood_leaves', height: 11, radius: 2, style: 'spire' },
+    crystal: { trunk: 'crystal_log', leaves: 'crystal_leaves', height: 7, radius: 2, style: 'crystal' }
 };
 
 export class Chunk {
@@ -76,27 +76,40 @@ export class Chunk {
     }
 
 
-    enableMaterialInstanceColors(material) {
-        let anyEnabled = false;
-        if (Array.isArray(material)) {
-            for (const mat of material) {
-                if (!mat) continue;
-                if (mat.userData && mat.userData.tintable) {
-                    anyEnabled = true;
-                    if (!mat.vertexColors) {
-                        mat.vertexColors = true;
-                        mat.needsUpdate = true;
-                    }
-                }
-            }
-        } else if (material && material.userData && material.userData.tintable) {
-            anyEnabled = true;
-            if (!material.vertexColors) {
-                material.vertexColors = true;
-                material.needsUpdate = true;
-            }
+    handleMaterialSpecialization(baseMaterial) {
+        if (!baseMaterial) return null;
+        
+        const isTintable = (mat) => mat && mat.userData && mat.userData.tintable;
+        let needsSpecialization = false;
+
+        if (Array.isArray(baseMaterial)) {
+            needsSpecialization = baseMaterial.some(isTintable);
+        } else {
+            needsSpecialization = isTintable(baseMaterial);
         }
-        return anyEnabled;
+
+        if (!needsSpecialization) return baseMaterial;
+
+        // Clone the material so each chunk can have its own vertex color state
+        // without corrupting the shared registry material.
+        const material = Array.isArray(baseMaterial) 
+            ? baseMaterial.map(m => m ? m.clone() : null)
+            : baseMaterial.clone();
+
+        const enableVertexColors = (mat) => {
+            if (mat && isTintable(mat)) {
+                mat.vertexColors = true;
+                mat.needsUpdate = true;
+            }
+        };
+
+        if (Array.isArray(material)) {
+            material.forEach(enableVertexColors);
+        } else {
+            enableVertexColors(material);
+        }
+
+        return material;
     }
 
     disableMaterialInstanceColors(material) {
@@ -548,15 +561,28 @@ export class Chunk {
             const baseMaterial = this.world.blockRegistry.getMaterial(id);
             const isWater = id === 'water';
             const isDeco = blockData?.deco;
-            const tintable = this.enableMaterialInstanceColors(baseMaterial);
-            const material = baseMaterial;
+            const material = this.handleMaterialSpecialization(baseMaterial);
+            const isCloned = material !== baseMaterial;
+            const isTintable = (mat) => mat && mat.userData && mat.userData.tintable;
+            const tintable = Array.isArray(material) ? material.some(isTintable) : isTintable(material);
             const tempColor = tintable ? new THREE.Color() : null;
             
-            const geometry = isWater
-                ? this.world.sharedChunkGeometries.water
-                : (isDeco ? this.world.sharedChunkGeometries.deco : this.world.sharedChunkGeometries.solid);
+            let geometry; 
+            if (isWater) {
+                geometry = this.world.sharedChunkGeometries.water;
+            } else if (id === 'path_block') {
+                geometry = this.world.sharedChunkGeometries.path;
+            } else if (isDeco) {
+                geometry = this.world.sharedChunkGeometries.deco;
+            } else if (id.includes('_stairs')) {
+                geometry = this.world.sharedChunkGeometries.stair;
+            } else if (id.includes('_slab')) {
+                geometry = this.world.sharedChunkGeometries.slab;
+            } else {
+                geometry = this.world.sharedChunkGeometries.solid;
+            }
             
-            const im = new THREE.InstancedMesh(geometry, material, count);
+            const im = new THREE.InstancedMesh(geometry, material, count); if (isCloned) im.userData.ownedMaterial = true;
             im.frustumCulled = false; // Never cull chunks; handled by World visibility
             im.matrixAutoUpdate = false; 
             im.instanceMatrix.setUsage(THREE.StaticDrawUsage);
@@ -570,6 +596,12 @@ export class Chunk {
             // Keep shadows on hard blocks, but skip them for grass-style surfaces.
             const receivesShadow = !transparentMaterial && id !== 'grass' && id !== 'grass_tall';
             im.receiveShadow = receivesShadow;
+            let chunkTintHex = null;
+            if (tintable) {
+                const cx = this.cx * this.world.chunkSize + Math.floor(this.world.chunkSize / 2);
+                const cz = this.cz * this.world.chunkSize + Math.floor(this.world.chunkSize / 2);
+                chunkTintHex = this.resolveBiomeTintHex(this.world.getBiomeAt(cx, cz));
+            }
 
             let renderCount = 0;
             for (let i = 0; i < count; i++) {
@@ -605,23 +637,25 @@ export class Chunk {
                 const ly = ay;
                 const lz = az - worldZ;
                 temp.position.set(lx, ly, lz);
+                temp.rotation.set(0, 0, 0);
                 
                 if (isWater) {
-                    // Lift the water plane to the very top of the voxel cell.
-                    // 0.49 prevents z-fighting with adjacent solid blocks at exactly the same height.
                     temp.position.y += 0.49;
                     temp.scale.set(1, 1, 1);
                 } else {
                     temp.scale.set(1, 1, 1);
+                    if (id.includes('_stairs')) {
+                        if (id.endsWith('_n')) temp.rotation.y = Math.PI;
+                        else if (id.endsWith('_e')) temp.rotation.y = Math.PI / 2;
+                        else if (id.endsWith('_w')) temp.rotation.y = -Math.PI / 2;
+                    }
                 }
                 
                 temp.updateMatrix();
                 im.setMatrixAt(renderCount, temp.matrix);
                 
                 if (tintable) {
-                    const biome = this.world.getBiomeAt(ax, az);
-                    const tintHex = this.resolveBiomeTintHex(biome);
-                    im.setColorAt(renderCount, tempColor.setHex(tintHex));
+                    im.setColorAt(renderCount, tempColor.setHex(chunkTintHex));
                 }
                 
                 renderCount++;
@@ -630,7 +664,6 @@ export class Chunk {
             if (renderCount === 0) {
                 continue;
             }
-
             im.count = renderCount;
             im.instanceMatrix.needsUpdate = true;
             if (im.instanceColor) im.instanceColor.needsUpdate = true;
@@ -804,7 +837,7 @@ export class Chunk {
     placeLampPost(x, y, z) {
         const baseY = this.world.getColumnHeight(x, z) + 1;
         for (let i = 0; i < 3; i++) {
-            this.addGeneratedBlock(x, baseY + i, z, 'wood_planks');
+            this.addGeneratedBlock(x, baseY + i, z, 'oak_planks');
         }
         this.addGeneratedBlock(x, baseY + 3, z, 'lantern');
         this.addGeneratedBlock(x + 1, baseY + 2, z, 'lantern');

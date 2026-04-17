@@ -9,7 +9,6 @@ export class Input {
             rightJustPressed: false
         };
         this.isLocked = false;
-
         this.init();
     }
 
@@ -103,20 +102,13 @@ export class Input {
                 this.game.toggleGameMode();
             }
 
-            if (event.code === 'KeyI' && this.isLocked) {
-                this.game.interactWithNPC();
+            if (event.code === 'KeyI') {
+                this.game.toggleHelpPanel();
+                return;
             }
 
             if (event.code === 'KeyE') {
                 this.game.toggleInventory();
-            }
-
-            if (event.code === 'KeyF' && this.isLocked && !this.game.gameState.isInventoryOpen) {
-                this.game.toggleOffhandFromSelected();
-            }
-
-            if (event.code === 'KeyQ' && this.isLocked && !this.game.gameState.isInventoryOpen) {
-                this.game.handleDigDown();
             }
 
             if (event.code.startsWith('Digit')) {
@@ -151,10 +143,7 @@ export class Input {
             if (!this.isLocked || this.game.isPaused || this.game.gameState.isInventoryOpen) return;
             event.preventDefault();
 
-            if (event.button === 0) {
-                this.mouseButtons.left = true;
-            }
-
+            if (event.button === 0) this.mouseButtons.left = true;
             if (event.button === 2) {
                 this.mouseButtons.right = true;
                 this.mouseButtons.rightJustPressed = true;
@@ -166,10 +155,7 @@ export class Input {
                 this.mouseButtons.left = false;
                 this.game.cancelMining();
             }
-
-            if (event.button === 2) {
-                this.mouseButtons.right = false;
-            }
+            if (event.button === 2) this.mouseButtons.right = false;
         });
 
         window.addEventListener('blur', () => {

@@ -20,6 +20,7 @@ export class ChunkManager {
         this.pendingChunkLoads = [];            // { cx, cz, key }
         this.pendingChunkSet = new Set();
         this.priorityDirtyChunkKeys = new Set();
+        this.needsQueueSort = true;
         this.lastPlayerChunkKey = null;
 
         // --- tunables ---
@@ -175,15 +176,21 @@ export class ChunkManager {
         }
 
         budget = Math.max(1, Math.floor(budget));
-        const refCx = Number.isFinite(centerCx) ? centerCx : 0;
-        const refCz = Number.isFinite(centerCz) ? centerCz : 0;
-        this.pendingChunkLoads.sort((a, b) => {
-            const adx = a.cx - refCx;
-            const adz = a.cz - refCz;
-            const bdx = b.cx - refCx;
-            const bdz = b.cz - refCz;
-            return (adx * adx) + (adz * adz) - ((bdx * bdx) + (bdz * bdz));
-        });
+        const cx = Number.isFinite(centerCx) ? centerCx : 0;
+        const cz = Number.isFinite(centerCz) ? centerCz : 0;
+
+        // Optimization: Sorting is expensive. We only sort when a major change happens (like a chunk cross).
+        // Since budget is usually 1, there's no need to sort every frame.
+        if (this.needsQueueSort) {
+            this.pendingChunkLoads.sort((a, b) => {
+                const adx = Math.abs(a.cx - cx);
+                const adz = Math.abs(a.cz - cz);
+                const bdx = Math.abs(b.cx - cx);
+                const bdz = Math.abs(b.cz - cz);
+                return (adx * adx) + (adz * adz) - ((bdx * bdx) + (bdz * bdz));
+            });
+            this.needsQueueSort = false;
+        }
 
         while (budget > 0 && this.pendingChunkLoads.length > 0) {
             const next = this.pendingChunkLoads.shift();
@@ -220,12 +227,20 @@ export class ChunkManager {
         const pcz = this.world.getChunkCoord(playerPosition.z);
 
         // 1. Emergency Rebuilds: Immediate 5x5 chunks ignore budget
+        // Budgeted dirty chunk rebuilds to prevent frame-rate freezing.
+        // We only process up to 2 dirty chunks per frame, prioritizing the central 5x5 area.
+        let rebuildsDone = 0;
+        const maxRebuildsPerFrame = 2;
+
         for (let dx = -2; dx <= 2; dx++) {
+            if (rebuildsDone >= maxRebuildsPerFrame) break;
             for (let dz = -2; dz <= 2; dz++) {
+                if (rebuildsDone >= maxRebuildsPerFrame) break;
                 const key = this.world.getChunkKey(pcx + dx, pcz + dz);
                 const chunk = this.chunks.get(key);
                 if (chunk?.dirty && !chunk.destroyed) {
                     chunk.update();
+                    rebuildsDone++;
                 }
             }
         }
@@ -369,19 +384,9 @@ export class ChunkManager {
             // or if we detection a massive teleport (more than 128 blocks jump),
             // we should be cautious about purging. Massive jumps on resume 
             // often mean stale data.
-            let shouldPurge = true;
-            if (this.lastPlayerChunkKey !== null) {
-                const [lastCx, lastCz] = this.lastPlayerChunkKey.split(',').map(Number);
-                const jumpDist = Math.max(Math.abs(playerCx - lastCx), Math.abs(playerCz - lastCz));
-                if (jumpDist > 8) {
-                    console.warn('[ArloCraft] Massive position jump detected in ChunkManager. Skipping purge to prevent voiding.');
-                    shouldPurge = false;
-                }
-            }
-
-            if (shouldPurge) {
-                this.unloadFarChunks(playerCx, playerCz);
-            }
+            // Clean up distant chunks on every chunk-boundary crossing, 
+            // including after large teleports, to prevent memory leaks from "orphaned" areas.
+            this.unloadFarChunks(playerCx, playerCz);
             this.ensureChunksAround(playerCx, playerCz);
             
             // Boundary Flush: Force remesh 5x5 area to prevent voids during movement
@@ -395,6 +400,7 @@ export class ChunkManager {
 
             this.lastPlayerChunkKey = key;
             this.chunkRefreshTick = 0;
+            this.needsQueueSort = true; // Trigger sort on next process
         }
 
         this.chunkRefreshTick = (this.chunkRefreshTick + 1) % 12;
