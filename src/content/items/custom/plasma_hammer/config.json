@@ -1,0 +1,8 @@
+{
+    "id": "plasma_hammer",
+    "name": "Plasma Hammer",
+    "type": "hammer",
+    "description": "A massive warhammer with a plasma-charged head. Slow but devastating.",
+    "sprite": "plasma_hammer.png",
+    "spriteStatus": "NEEDED"
+}

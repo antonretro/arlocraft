@@ -3,11 +3,13 @@ import LZString from 'lz-string';
 import StatsPanel from 'stats.js';
 import { ActionSystem } from './ActionSystem.js';
 import { Camera } from './Camera.js';
+import { DayNightSystem } from './DayNightSystem.js';
 import { GameState } from './GameState.js';
 import { Input } from './Input.js';
 import { Physics } from './Physics.js';
 import { Renderer } from './Renderer.js';
 import { Stats } from './Stats.js';
+import { SurvivalSystem } from './SurvivalSystem.js';
 import { EntityManager } from '../entities/EntityManager.js';
 import { HUD } from '../ui/HUD.js';
 import { World } from '../world/World.js';
@@ -19,14 +21,6 @@ import { PlayerHand } from '../entities/PlayerHand.js';
 import { AudioSystem } from './AudioSystem.js';
 import appPackage from '../../package.json';
 
-const FOOD_VALUES = {
-    apple: 4, tomato: 4, carrot: 3, potato: 3, corn: 3,
-    blueberry: 2, strawberry: 2, melon_slice: 2, honey_bottle: 3,
-    bread: 5, pumpkin_pie: 6, cookie: 2,
-    mushroom_brown: 2,
-    steak: 8, cooked_fish: 6,
-};
-
 const LOCAL_APP_VERSION = `v${appPackage?.version ?? '0.0.0'}`;
 const GITHUB_REPO_OWNER = 'antonretro';
 const GITHUB_REPO_NAME = 'arlocraft';
@@ -36,9 +30,6 @@ export class Game {
         this.settings = this.loadSettings();
         this.selectedStartMode = this.settings.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
         this.selectedWorldSlot = this.settings.selectedWorldSlot ?? 'slot-1';
-        this.systemTimers = { hunger: 0, regen: 0, starve: 0 };
-        this.timeOfDay = 0.3;
-        this.dayDurationSeconds = 420;
         this.performanceSampler = { frames: 0, time: 0, lastAdjust: 0 };
         this.qualityTier = 'balanced';
         this.qualityInitialized = false;
@@ -46,7 +37,7 @@ export class Game {
         this.viewYaw = 0;
         this.viewPitch = 0;
         this.pitchLimit = Math.PI / 2 - 0.02;
-        this.cameraModes = ['FIRST_PERSON', 'THIRD_PERSON_BACK'];
+        this.cameraModes = ['FIRST_PERSON', 'THIRD_PERSON_BACK', 'THIRD_PERSON_FRONT'];
         this.cameraModeIndex = 0;
         this.debugVisible = false;
         this.debugAccumulator = 0;
@@ -84,6 +75,8 @@ export class Game {
         this.actionSystem = new ActionSystem(this.gameState);
         this.input = new Input(this);
         this.hud = new HUD(this.gameState, this);
+        this.survival = new SurvivalSystem(this.gameState, this.hud);
+        this.dayNight = new DayNightSystem(this.renderer, this.world, this.features);
         this.helpPanel = new HelpPanel();
         this.minimap = new MiniMap(this);
         this.audio = new AudioSystem();
@@ -828,6 +821,8 @@ export class Game {
         }
 
         document.getElementById('crosshair')?.classList.add('active');
+        const hud = document.getElementById('hud');
+        if (hud) hud.style.display = 'flex';
     }
 
     returnToTitle() {
@@ -842,6 +837,8 @@ export class Game {
 
         this.touchControls?.show(false);
         document.getElementById('crosshair')?.classList.remove('active');
+        const hud = document.getElementById('hud');
+        if (hud) hud.style.display = 'none';
         this.showPause(false);
         this.showSettings(false);
         this.showTitle(true);
@@ -871,6 +868,29 @@ export class Game {
         const pause = document.getElementById('pause-overlay');
         if (!pause) return;
         pause.style.display = visible ? 'flex' : 'none';
+
+        if (visible) {
+            // Update the premium Pause Menu details
+            const clockEl = document.getElementById('ni-pause-clock');
+            if (clockEl && this.dayNight) {
+                // Convert 0-1 timeOfDay to 24h, then 12h format
+                // 0.3 is dawn, let's assume 0.0 is midnight.
+                const hoursTotal = (this.dayNight.timeOfDay * 24);
+                const hours = Math.floor(hoursTotal);
+                const minutes = Math.floor((hoursTotal % 1) * 60);
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                const displayHours = hours % 12 || 12;
+                const displayMinutes = minutes.toString().padStart(2, '0');
+                clockEl.textContent = `${displayHours}:${displayMinutes} ${ampm}`;
+            }
+
+            const statusEl = document.querySelector('.ni-pause-status');
+            if (statusEl) {
+                const biomes = ['Plains', 'Forest', 'Desert', 'Mountains', 'Meadow'];
+                const biome = biomes[Math.floor(this.dayNight.timeOfDay * biomes.length)] || 'Exploring';
+                statusEl.textContent = `Surviving in ${biome}`;
+            }
+        }
     }
 
     setMenuScreen(screen) {
@@ -1465,6 +1485,11 @@ export class Game {
         if (this.framePanel?.dom) {
             this.framePanel.dom.style.display = this.debugVisible ? 'block' : 'none';
         }
+        this.audio?.play('ui-click');
+    }
+
+    toggleHelpPanel() {
+        this.helpPanel?.toggleCollapsed?.();
     }
 
     toggleMinimap() {
@@ -1493,11 +1518,17 @@ export class Game {
         this.playerVisual.position.set(pos.x, pos.y - feetOffset, pos.z);
         this.playerVisual.rotation.set(0, this.viewYaw, 0);
 
-        const distance = -4.1;
-        const desired = head.clone().addScaledVector(lookDir, distance).add(new THREE.Vector3(0, 1.1, 0));
+        const cameraMode = this.cameraModes[this.cameraModeIndex];
+        const isFront = cameraMode === 'THIRD_PERSON_FRONT';
+        const distance = isFront ? 3.8 : -4.1;
+        const desired = head.clone().addScaledVector(lookDir, distance).add(new THREE.Vector3(0, isFront ? 0.3 : 1.1, 0));
         desired.add(new THREE.Vector3(shakeX, shakeY, shakeZ));
         this.camera.instance.position.lerp(desired, 0.4);
-        this.camera.instance.lookAt(head);
+        if (isFront) {
+            this.camera.instance.lookAt(head);
+        } else {
+            this.camera.instance.lookAt(head);
+        }
     }
 
     updateZoneMeter(influence) {
@@ -1660,27 +1691,36 @@ export class Game {
         this.world.digDownFrom(pos, this.gameState.mode);
     }
 
-    tryEatFood() {
-        const selectedSlot = this.gameState.selectedSlot;
-        const selected = this.gameState.getSelectedItem();
-        if (!selected) return false;
-        const foodValue = FOOD_VALUES[selected.id];
-        if (!foodValue) return false;
-        if (this.gameState.hunger >= 20) return false; // already full
+    pickBlock() {
+        if (!this.hasStarted || this.isPaused) return;
+        const hit = this.world.raycastBlocks?.(this.camera.instance, 6, false);
+        if (!hit?.id) return;
+        const id = hit.id;
+        const inv = this.gameState.inventory;
+        // First check hotbar slots 0-8
+        for (let i = 0; i < 9; i++) {
+            if (inv[i]?.id === id) {
+                this.gameState.setSlot(i);
+                this.hud?.flashPrompt?.(`Selected: ${id}`, '#aaddff');
+                return;
+            }
+        }
+        // Creative: add block to selected slot
+        if (this.gameState.mode === 'CREATIVE') {
+            const slot = this.gameState.selectedSlot;
+            inv[slot] = { id, count: 64, kind: 'block' };
+            window.dispatchEvent(new CustomEvent('inventory-changed'));
+            this.hud?.flashPrompt?.(`Picked: ${id}`, '#aaddff');
+        }
+    }
 
-        this.gameState.modifyHunger(foodValue);
-        selected.count = Math.max(0, (selected.count ?? 1) - 1);
-        if (selected.count === 0) this.gameState.inventory[selectedSlot] = null;
-        window.dispatchEvent(new CustomEvent('inventory-changed'));
-        this.hud?.setFace('happy', 800);
-        this.hud?.flashPrompt?.(`+${foodValue} FOOD`, '#aaff88');
-        return true;
+    tryEatFood() {
+        return this.survival.tryEatFood(this.gameState.selectedSlot);
     }
 
     handleSecondaryAction() {
-        // Try eating food first
         const selected = this.gameState.getSelectedItem();
-        if (selected && FOOD_VALUES[selected.id]) {
+        if (selected && this.survival.isFoodItem(selected.id)) {
             this.tryEatFood();
             return;
         }
@@ -1705,60 +1745,11 @@ export class Game {
     }
 
     updateDayNight(delta) {
-        this.timeOfDay = (this.timeOfDay + (delta / this.dayDurationSeconds)) % 1;
-        const angle = (this.timeOfDay * Math.PI * 2) - (Math.PI / 2);
-        const sunHeight = Math.sin(angle);
-        const sunDistance = 110;
-
-        this.renderer.sun.position.set(
-            Math.cos(angle) * sunDistance,
-            sunHeight * sunDistance,
-            70
-        );
-
-        const daylight = Math.max(0.08, Math.min(1, (sunHeight + 0.3)));
-        this.renderer.setDaylightLevel(daylight);
-        if (this.features.dynamicLighting) {
-            const pos = this.getPlayerPosition();
-            let depthBlend = 0;
-            if (pos) {
-                const surfaceY = this.world.getColumnHeight(pos.x, pos.z);
-                const relativeDepth = surfaceY - pos.y;
-                depthBlend = Math.max(0, Math.min(1, relativeDepth / 16));
-            }
-            this.renderer.updateEnvironmentLighting(daylight, pos, depthBlend);
-        }
+        this.dayNight.update(delta, () => this.getPlayerPosition());
     }
 
     updateSurvivalSystems(delta) {
-        if (this.gameState.mode !== 'SURVIVAL') return;
-
-        this.systemTimers.hunger += delta;
-        if (this.systemTimers.hunger >= 10) {
-            this.systemTimers.hunger = 0;
-            this.gameState.modifyHunger(-1);
-        }
-
-        if (this.gameState.hunger >= 16 && this.gameState.hp < this.gameState.maxHp) {
-            this.systemTimers.regen += delta;
-            if (this.systemTimers.regen >= 4) {
-                this.systemTimers.regen = 0;
-                this.gameState.heal(1);
-                this.gameState.modifyHunger(-1);
-            }
-        } else {
-            this.systemTimers.regen = 0;
-        }
-
-        if (this.gameState.hunger === 0) {
-            this.systemTimers.starve += delta;
-            if (this.systemTimers.starve >= 3) {
-                this.systemTimers.starve = 0;
-                this.gameState.takeDamage(1);
-            }
-        } else {
-            this.systemTimers.starve = 0;
-        }
+        this.survival.update(delta);
     }
 
     animate() {
@@ -1962,9 +1953,9 @@ export class Game {
     }
 
     interactWithNPC() {
-        if (!this.player || !this.entityManager) return;
-        const pos = this.player.position;
-        const talked = this.entityManager.interactNearbyEntity(pos, 4);
+        if (!this.entities) return;
+        const pos = this.physics?.position ?? this.getPlayerPosition();
+        const talked = this.entities.interactNearbyEntity?.(pos, 4);
         if (talked) {
             this.screenShake = Math.max(this.screenShake, 0.02);
         }
@@ -1988,15 +1979,16 @@ export class Game {
 
     async updatePlayerSkin(username) {
         try {
+            if (!this.skinLoader) throw new Error('skinLoader not initialized');
             const { materials } = await this.skinLoader.loadSkin(username);
             if (this.playerParts) {
                 Object.assign(this.playerParts.head.material, materials.head);
                 Object.assign(this.playerParts.torso.material, materials.torso);
                 if (this.playerParts.face) this.playerParts.face.visible = false;
             }
-            if (this.hand) this.hand.arm.material = materials.armR;
+            if (this.hand) this.hand.updateArmSkin(materials.armR);
             const h = document.getElementById('arlo-face-image');
-            if (h) h.src = `https://minotar.net/avatar/${username}/64`;
+            if (h && username) h.src = `https://crafatar.com/avatars/${username}?size=64&overlay`;
             this.settings.skinUsername = username;
             this.saveSettings();
         } catch (e) { console.error('[ArloCraft] Skin Error:', e); }
@@ -2015,13 +2007,6 @@ export class Game {
         } else {
             this.bobCycle = THREE.MathUtils.lerp(this.bobCycle || 0, 0, delta * 3);
         }
-    }
-
-    toggleDebugOverlay() {
-        this.debugVisible = !this.debugVisible;
-        const o = document.getElementById('debug-overlay');
-        if (o) o.style.display = this.debugVisible ? 'block' : 'none';
-        this.audio.play('ui-click');
     }
 
     initDebugOverlay() {

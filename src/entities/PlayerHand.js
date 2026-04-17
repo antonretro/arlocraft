@@ -1,6 +1,21 @@
 import * as THREE from 'three';
 import { TOOLS } from '../data/tools.js';
 
+const itemTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/item/*.png', { eager: true, query: '?url' });
+const ITEM_TEXTURES = new Map();
+for (const [path, module] of Object.entries(itemTextureModules)) {
+    const fileName = path.split('/').pop().replace('.png', '');
+    ITEM_TEXTURES.set(fileName, module.default || module);
+}
+
+const TOOL_MAP = {
+    'pick': 'wooden_pickaxe',
+    'sword': 'wooden_sword',
+    'axe': 'wooden_axe',
+    'shovel': 'wooden_shovel',
+    'hoe': 'wooden_hoe'
+};
+
 /**
  * Animated First-Person Viewmodel (Player Hand).
  * Handles arm mesh, held items, and procedural animations for walking/swinging.
@@ -11,11 +26,11 @@ export class PlayerHand {
         this.group.position.set(0.65, -0.55, -0.75); // Natural FPS position
         this.group.rotation.set(0.1, -0.4, 0);
 
-        // Arm Mesh
-        this.armGeometry = new THREE.BoxGeometry(0.35, 0.35, 1.2);
-        this.armMaterial = new THREE.MeshLambertMaterial({ color: 0x4a9eff }); // Arlo Blue
+        // Arm Mesh (Textured with Player Skin)
+        this.armGeometry = new THREE.BoxGeometry(0.24, 0.24, 0.9);
+        this.armMaterial = new THREE.MeshLambertMaterial({ color: 0x4a9eff }); // Initial Arlo Blue
         this.arm = new THREE.Mesh(this.armGeometry, this.armMaterial);
-        this.arm.position.set(0, 0, 0.4);
+        this.arm.position.set(0, 0, 0.35);
         this.group.add(this.arm);
 
         // Item Slot (Where blocks/tools are held)
@@ -96,26 +111,37 @@ export class PlayerHand {
     }
 
     buildToolMesh(tool) {
+        let texName = tool?.id || 'stick';
+        if (tool?.type && TOOL_MAP[tool.type]) texName = TOOL_MAP[tool.type];
+        else if (tool?.id && TOOL_MAP[tool.id]) texName = TOOL_MAP[tool.id];
+
+        const url = ITEM_TEXTURES.get(texName) || ITEM_TEXTURES.get('stick');
+
+        if (url) {
+            const texture = new THREE.TextureLoader().load(url);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            texture.colorSpace = THREE.SRGBColorSpace;
+            const mat = new THREE.MeshLambertMaterial({
+                map: texture,
+                transparent: true,
+                alphaTest: 0.1,
+                side: THREE.DoubleSide
+            });
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), mat);
+            mesh.rotation.set(0, -0.6, 0); // Angle it slightly inwards
+            mesh.position.set(0.15, 0.25, -0.1);
+            mesh.userData.ownedGeometry = true;
+            mesh.userData.ownedMaterial = true;
+            return mesh;
+        }
+
+        // Deep fallback
         const model = new THREE.Group();
         const handleMat = new THREE.MeshLambertMaterial({ color: 0x6f4b2b });
-        const headMat = new THREE.MeshLambertMaterial({ color: 0xb7c3d0, emissive: 0x111111 });
-
-        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.34, 0.08), handleMat.clone());
-        handle.position.set(-0.03, -0.08, 0.00);
-        handle.userData.ownedGeometry = true;
-        handle.userData.ownedMaterial = true;
-
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.10, 0.08), headMat.clone());
-        head.position.set(0.08, 0.08, 0.00);
-        head.userData.ownedGeometry = true;
-        head.userData.ownedMaterial = true;
-
+        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.34, 0.08), handleMat);
+        handle.userData.ownedGeometry = true; handle.userData.ownedMaterial = true;
         model.add(handle);
-        model.add(head);
-        model.rotation.set(0.25, -0.25, -0.25);
-        model.position.set(0.04, -0.02, 0.00);
-        handleMat.dispose();
-        headMat.dispose();
         return model;
     }
 
@@ -134,12 +160,71 @@ export class PlayerHand {
         if (!itemId) return;
 
         const tool = this.toolById.get(itemId);
+        const blockConfig = registry.blocks.get(itemId);
         const isTool = selectedItem?.kind === 'tool' || Boolean(tool);
-        if (isTool) {
-            const mesh = tool?.type === 'gun' ? this.buildGunMesh(tool) : this.buildToolMesh(tool ?? { id: itemId });
-            this.itemSlot.add(mesh);
-            this.heldItemMesh = mesh;
-            return;
+        const isDeco = blockConfig?.deco;
+
+        if (isTool || isDeco) {
+            let texName = itemId;
+            // Map common block IDs to their item texture names if needed
+            if (itemId.startsWith('flower_')) texName = itemId.replace('flower_', '');
+            if (itemId === 'grass_tall') texName = 'tall_grass';
+            
+            if (isTool) {
+                if (tool?.type && TOOL_MAP[tool.type]) texName = TOOL_MAP[tool.type];
+                else if (tool?.id && TOOL_MAP[tool.id]) texName = TOOL_MAP[tool.id];
+            }
+
+            const url = ITEM_TEXTURES.get(texName) || ITEM_TEXTURES.get(itemId);
+
+            if (url || isDeco) {
+                let texture;
+                if (url) {
+                    texture = new THREE.TextureLoader().load(url);
+                } else {
+                    // Fallback to block texture if no item texture found
+                    const mat = registry.getMaterial(itemId);
+                    // Handle multi-texture materials (pick a side face usually)
+                    texture = Array.isArray(mat) ? (mat[4].map || mat[0].map) : mat.map;
+                    if (!texture && Array.isArray(mat)) {
+                        // Find any texture in the array
+                        texture = mat.find(m => m.map)?.map;
+                    }
+                }
+
+                if (texture) {
+                    texture.magFilter = THREE.NearestFilter;
+                    texture.minFilter = THREE.NearestFilter;
+                    texture.colorSpace = THREE.SRGBColorSpace;
+                    const mat = new THREE.MeshLambertMaterial({
+                        map: texture,
+                        transparent: true,
+                        alphaTest: 0.1,
+                        side: THREE.DoubleSide
+                    });
+                    
+                    // Apply biome tint if it's grass or foliage
+                    if (itemId.includes('grass') || itemId.includes('leaves')) {
+                        mat.color.set(0x79c05a); // Standard biome green
+                    }
+
+                    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), mat);
+                    mesh.rotation.set(0, -0.6, 0);
+                    mesh.position.set(0.15, 0.25, -0.1);
+                    mesh.userData.ownedGeometry = true;
+                    mesh.userData.ownedMaterial = true;
+                    this.itemSlot.add(mesh);
+                    this.heldItemMesh = mesh;
+                    return;
+                }
+            }
+
+            if (isTool) {
+                const mesh = tool?.type === 'gun' ? this.buildGunMesh(tool) : this.buildToolMesh(tool ?? { id: itemId });
+                this.itemSlot.add(mesh);
+                this.heldItemMesh = mesh;
+                return;
+            }
         }
 
         // Try to get a block mesh from the registry
@@ -187,5 +272,13 @@ export class PlayerHand {
             this.group.position.z = THREE.MathUtils.lerp(this.group.position.z, -0.75, delta * 6);
             this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, 0.1, delta * 6);
         }
+    }
+
+    updateArmSkin(armMaterials) {
+        if (!armMaterials) return;
+        // Three.js BoxGeometry materials order: px, nx, py, ny, pz, nz
+        // The SkinLoader returns them in this order.
+        this.arm.material = armMaterials;
+        this.arm.material.needsUpdate = true;
     }
 }

@@ -109,6 +109,17 @@ export class Input {
 
             if (event.code === 'KeyE') {
                 this.game.toggleInventory();
+                return;
+            }
+
+            if (event.code === 'KeyF') {
+                this.game.toggleOffhandFromSelected?.();
+                return;
+            }
+
+            if (event.code === 'KeyQ') {
+                this.game.pickBlock?.();
+                return;
             }
 
             if (event.code.startsWith('Digit')) {

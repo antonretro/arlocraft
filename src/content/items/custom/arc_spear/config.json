@@ -1,0 +1,8 @@
+{
+    "id": "arc_spear",
+    "name": "Arc Spear",
+    "type": "spear",
+    "description": "A long reach weapon that crackles with electric arc energy.",
+    "sprite": "arc_spear.png",
+    "spriteStatus": "NEEDED"
+}

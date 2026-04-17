@@ -16,8 +16,11 @@ export class BlockRegistry {
         this.textureCache = new Map();
         this.atlasTileCache = new Map();
         this.pixelTextures = new Map();
+        this.breakingTextures = [];
         this.animatedGif = null;
                 this.idAliases = {
+            'grass': 'grass_block',
+            'grass_tall': 'grass',
             'wood': 'oak_log',
             'leaves': 'oak_leaves',
             'wood_birch': 'birch_log',
@@ -38,10 +41,50 @@ export class BlockRegistry {
 
     init() {
         this.blockTextures = new Map();
-        for (const [path, module] of Object.entries(textureModules)) {
+        
+        // Sort paths to process Igneous assets last so they overwrite default ones
+        const entries = Object.entries(textureModules).sort((a, b) => {
+            const aIsIgneous = a[0].includes('Igneous');
+            const bIsIgneous = b[0].includes('Igneous');
+            if (aIsIgneous && !bIsIgneous) return 1;
+            if (!aIsIgneous && bIsIgneous) return -1;
+            return 0;
+        });
+
+        for (const [path, module] of entries) {
             const segments = path.split('/');
-            const blockId = segments[segments.length - 2];
-            const fileName = segments[segments.length - 1];
+            let blockId = segments[segments.length - 2];
+            let fileName = segments[segments.length - 1];
+            const isIgneous = path.includes('Igneous');
+
+            if (blockId === 'block') { // Igneous texture pack handling
+                const baseName = fileName.replace('.png', '');
+                
+                // Breaking stage textures
+                if (baseName.startsWith('destroy_stage_')) {
+                    const stage = parseInt(baseName.replace('destroy_stage_', ''));
+                    this.breakingTextures[stage] = module.default || module;
+                    continue;
+                }
+
+                if (baseName.endsWith('_top')) {
+                    blockId = baseName.substring(0, baseName.length - 4);
+                    fileName = 'top.png';
+                } else if (baseName.endsWith('_side')) {
+                    blockId = baseName.substring(0, baseName.length - 5);
+                    fileName = 'side.png';
+                } else if (baseName.endsWith('_bottom')) {
+                    blockId = baseName.substring(0, baseName.length - 7);
+                    fileName = 'bottom.png';
+                } else if (baseName.endsWith('_front')) {
+                    blockId = baseName.substring(0, baseName.length - 6);
+                    fileName = 'front.png';
+                } else {
+                    blockId = baseName;
+                    fileName = 'all.png';
+                }
+            }
+
             if (!this.blockTextures.has(blockId)) this.blockTextures.set(blockId, {});
             this.blockTextures.get(blockId)[fileName] = module.default || module;
         }
@@ -75,9 +118,6 @@ export class BlockRegistry {
         const idToTexKey = {
             'furnace': 'furnace',
             'starter_chest': 'starter_chest',
-            'grass_tall': 'grass_tall',
-            'flower_rose': 'flower_rose',
-            'flower_dandelion': 'flower_dandelion',
             'fern': 'fern',
             'banana': 'banana'
         };
@@ -348,7 +388,7 @@ export class BlockRegistry {
             const isFoliage = id === 'grass_tall' || id === 'vine' || id === 'fern' || id === 'sugar_cane' || id.includes('leaves');
             // Grass top texture is already baked green in this pack; avoid instance tinting
             // to prevent rare black-top failures from per-instance color paths.
-            const isGrassTopOnly = id === 'grass';
+            const isGrassTopOnly = id === 'grass' || id === 'grass_block';
             
                         for (let i = 0; i < mats.length; i++) {
                 const m = mats[i];

@@ -26,7 +26,7 @@ export class Physics {
         this.swimSpeed = 4.8;
         this.swimRiseSpeed = 5.4;
         this.swimSinkSpeed = -4.8;
-        this.buoyancy = -0.75;
+        this.buoyancy = 1.2;
         this.feetOffset = 0.3;
         this.maxStepHeight = 0.62;
         this.playerRadius = 0.32;
@@ -328,17 +328,15 @@ export class Physics {
         return headClear1 && headClear2;
     }
 
-    update(delta, keys, input, lookYaw) {
+    update(delta, input, lookYaw) {
         if (!this.isReady) return;
-        
-        // Safety: If keys or input are missing, try to recover from game instance
-        const activeKeys = keys || (this.camera?.game?.input?.keys) || {};
-        const activeInput = input || (this.camera?.game?.input);
-        
+
+        const keys = input?.keys ?? Object.create(null);
+
         const inWater = this.world.isPositionInWater(this.position.x, this.position.y, this.position.z);
         const grounded = !inWater && this.mode === 'SURVIVAL' && this.isGrounded();
 
-        let wantsToCrouch = this.mode === 'SURVIVAL' && (activeKeys['ShiftLeft'] || activeKeys['ShiftRight']);
+        let wantsToCrouch = this.mode === 'SURVIVAL' && (keys['ShiftLeft'] || keys['ShiftRight']);
         
         // Ceiling Check (if releasing crouch under a low ceiling, force crouch)
         if (!wantsToCrouch && this.isCrouching) {
@@ -358,52 +356,46 @@ export class Physics {
             this.tryResolveEmbeddedPosition(8);
         }
 
-        // Minecraft-style sprinting logic
         const wPressed = keys['KeyW'] || keys['ArrowUp'];
         const ctrlPressed = keys['ControlLeft'] || keys['ControlRight'];
-        
-        // Double-tap W detection
+
+        // Double-tap W sprints (Minecraft Java edition style)
         if (input?.consumeKeyPress?.('KeyW') || input?.consumeKeyPress?.('ArrowUp')) {
-            if (this.wPressTimer > 0 && this.wPressTimer < 0.3) {
+            if (this.wPressTimer > 0 && this.wPressTimer < 0.28) {
                 this.isSprinting = true;
             }
-            this.wPressTimer = 0.001; // Small bias to distinguish from 0
+            this.wPressTimer = 0.001;
         }
         if (this.wPressTimer > 0) {
             this.wPressTimer += delta;
-            if (this.wPressTimer > 0.35) this.wPressTimer = 0;
+            if (this.wPressTimer > 0.32) this.wPressTimer = 0;
         }
 
-        // Start sprinting if Ctrl is held while moving forward
-        if (ctrlPressed && wPressed && !this.isCrouching) {
-            this.isSprinting = true;
-        }
+        // Ctrl+W also starts sprint
+        if (ctrlPressed && wPressed && !this.isCrouching) this.isSprinting = true;
 
-        // Stop sprinting if we stop moving forward or hit a wall (speed drops)
-        if (!wPressed || this.isCrouching || inWater) {
-            this.isSprinting = false;
-        }
+        // Sprint cancels on: stop forward movement, crouch, enter water, hit a wall
+        if (!wPressed || this.isCrouching || inWater) this.isSprinting = false;
 
         const sprinting = this.mode === 'SURVIVAL' && this.isSprinting;
-        const speed = this.mode === 'CREATIVE' ? this.creativeSpeed : (this.isCrouching ? this.crouchSpeed : (sprinting ? this.sprintSpeed : this.walkSpeed));
+        const speed = this.mode === 'CREATIVE'
+            ? (ctrlPressed ? this.creativeSpeed * 2.2 : this.creativeSpeed)
+            : (this.isCrouching ? this.crouchSpeed : (sprinting ? this.sprintSpeed : this.walkSpeed));
 
         let inputX = 0;
         let inputZ = 0;
-        if (keys['KeyW'] || keys['ArrowUp']) inputZ += 1;
-        if (keys['KeyS'] || keys['ArrowDown']) inputZ -= 1;
-        if (keys['KeyA'] || keys['ArrowLeft']) inputX -= 1;
-        if (keys['KeyD'] || keys['ArrowRight']) inputX += 1;
+        if (keys['KeyW'] || keys['ArrowUp'])    inputZ += 1;
+        if (keys['KeyS'] || keys['ArrowDown'])   inputZ -= 1;
+        if (keys['KeyA'] || keys['ArrowLeft'])   inputX -= 1;
+        if (keys['KeyD'] || keys['ArrowRight'])  inputX += 1;
 
         const yaw = Number.isFinite(lookYaw) ? lookYaw : 0;
-        // Keep movement basis aligned with Three.js camera yaw convention.
         this.forward.set(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
         this.right.crossVectors(this.forward, this.up).normalize();
         this.moveDir.set(0, 0, 0);
         this.moveDir.addScaledVector(this.forward, inputZ);
         this.moveDir.addScaledVector(this.right, inputX);
         if (this.moveDir.lengthSq() > 0) this.moveDir.normalize();
-
-        // Safety check to prevent NaN movement from corrupted inputs or look yaw
         if (!Number.isFinite(this.moveDir.x) || !Number.isFinite(this.moveDir.z)) {
             this.moveDir.set(0, 0, 0);
         }
@@ -414,25 +406,13 @@ export class Physics {
 
         const spaceTapped = input?.consumeKeyPress?.('Space');
         if (spaceTapped) {
-            // Optional sprint trigger: double-tap Space while moving forward.
-            const canSpaceSprint = this.mode === 'SURVIVAL' && wPressed && !this.isCrouching && !inWater;
-            if (canSpaceSprint && this.spacePressTimer > 0 && this.spacePressTimer < 0.32) {
-                this.isSprinting = true;
-                this.spacePressTimer = 0;
-            } else {
-                this.jumpBufferTimer = this.jumpBufferWindow;
-                this.spacePressTimer = 0.001;
-            }
+            this.jumpBufferTimer = this.jumpBufferWindow;
         } else {
             this.jumpBufferTimer = Math.max(0, this.jumpBufferTimer - delta);
-            if (this.spacePressTimer > 0) {
-                this.spacePressTimer += delta;
-                if (this.spacePressTimer > 0.36) this.spacePressTimer = 0;
-            }
         }
         this.coyoteTimer = grounded ? this.coyoteWindow : Math.max(0, this.coyoteTimer - delta);
         this.autoJumpCooldown = Math.max(0, this.autoJumpCooldown - delta);
-        
+
         const friction = inWater ? this.waterFriction : (grounded ? this.groundFriction : this.airFriction);
         const lerpT = Math.min(1, friction * delta);
         this.velocity.x = THREE.MathUtils.lerp(this.velocity.x, targetX, lerpT);
@@ -441,17 +421,18 @@ export class Physics {
         if (this.mode === 'CREATIVE') {
             let vertical = 0;
             if (keys['Space']) vertical += 1;
-            if (keys['ControlLeft'] || keys['ControlRight']) vertical -= 1;
+            if (keys['ShiftLeft'] || keys['ShiftRight']) vertical -= 1;
             this.velocity.y = vertical * speed;
         } else {
             if (inWater) {
+                // Minecraft: Space=rise fast, Shift=sink, otherwise slow natural float
                 let targetY = this.buoyancy;
                 if (keys['Space']) {
                     targetY = this.swimRiseSpeed;
-                } else if (keys['ShiftLeft'] || keys['ShiftRight'] || keys['ControlLeft'] || keys['ControlRight']) {
+                } else if (keys['ShiftLeft'] || keys['ShiftRight']) {
                     targetY = this.swimSinkSpeed;
                 }
-                this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, targetY, delta * 5.8);
+                this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, targetY, delta * 9.5);
             } else if (grounded) {
                 if (this.velocity.y < 0) this.velocity.y = 0;
                 const bufferedJump = this.jumpBufferTimer > 0 && this.coyoteTimer > 0;

@@ -306,9 +306,8 @@ const api = {
                     setPlannedBlock(planMap, changedMap, wx, y, wz, biome.fillerBlock);
                 }
 
-                const minCrust = Math.max(exposedDepth, 24);
-                const cliffFill = Math.min(minCrust, 80);
-                for (let d = 4; d <= cliffFill; d++) {
+                const totalDepth = terrainHeight - MIN_TERRAIN_Y;
+                for (let d = 4; d <= totalDepth; d++) {
                     const y = terrainHeight - d;
                     if (y < MIN_TERRAIN_Y) break;
                     if (shouldCarveCave(wx, y, wz, terrainHeight, cavesEnabled)) continue;

@@ -17,6 +17,8 @@ export class World {
     constructor(scene, game) {
         this.scene = scene;
         this.game = game;
+        this.retroDecorated = false; // Prevents repeated retro-decoration
+
         this.registry = new BlockRegistry();
         this.blockRegistry = this.registry;
         this.boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -163,28 +165,44 @@ export class World {
             })()
         };
 
-        const hoverGeo = new THREE.BoxGeometry(1.04, 1.04, 1.04);
+        // High-Fidelity Selection Indicator
+        const hoverGeo = new THREE.BoxGeometry(1.002, 1.002, 1.002);
         const hoverMat = new THREE.MeshBasicMaterial({
-            color: 0xffef9a,
-            wireframe: true,
+            color: 0x000000,
             transparent: true,
-            opacity: 0.9,
+            opacity: 0.12, // Subtle dark tint
             depthWrite: false
         });
         this.hoverOutline = new THREE.Mesh(hoverGeo, hoverMat);
+        
+        // Add a clean black wireframe border to the selection
+        const borderGeo = new THREE.BoxGeometry(1.003, 1.003, 1.003);
+        const borderMat = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.4,
+            depthWrite: false
+        });
+        const border = new THREE.Mesh(borderGeo, borderMat);
+        this.hoverOutline.add(border);
+
         this.hoverOutline.visible = false;
         this.hoverOutline.renderOrder = 5;
         this.scene.add(this.hoverOutline);
 
-        // Mining Cracks Overlay
+        // Mining Cracks Overlay (High-Fidelity)
         const crackGeo = new THREE.BoxGeometry(1.02, 1.02, 1.02);
         this.miningCracks = new THREE.Mesh(
             crackGeo,
             new THREE.MeshBasicMaterial({
-                color: 0x000000,
                 transparent: true,
-                opacity: 0,
-                wireframe: true
+                alphaTest: 0.1,
+                side: THREE.FrontSide,
+                depthWrite: false,
+                polygonOffset: true,
+                polygonOffsetFactor: -1,
+                polygonOffsetUnits: -1
             })
         );
         this.scene.add(this.miningCracks);
@@ -196,11 +214,13 @@ export class World {
         this.structureVirusInfluenceEnabled = true;
 
         // ─── Sub-systems ──────────────────────────────────────────────
+    }
+
+    init() {
+        this.registry.init();
         this.chunkManager = new ChunkManager(this);
         this.explosions = new ExplosionSystem(this);
-
-        // Backward-compat: expose chunks via property delegation
-        // so Chunk.js and other consumers can still do `this.world.chunks`
+        return this;
     }
 
     // ─── Chunk delegation (backward compatibility) ────────────────────
@@ -208,10 +228,6 @@ export class World {
     get priorityDirtyChunkKeys() { return this.chunkManager.priorityDirtyChunkKeys; }
     get pendingChunkLoads() { return this.chunkManager.pendingChunkLoads; }
     get pendingChunkSet() { return this.chunkManager.pendingChunkSet; }
-
-    init() {
-        // Placeholder for any one-time setup
-    }
 
     setSeed(seedValue) {
         this.seedString = String(seedValue ?? 'arlocraft').trim() || 'arlocraft';
@@ -1208,7 +1224,20 @@ export class World {
         // Visual mining feedback
         this.miningCracks.visible = true;
         this.miningCracks.position.set(hit.cell.x, hit.cell.y, hit.cell.z);
-        this.miningCracks.material.opacity = 0.15 + (ratio * 0.55);
+        
+        // Map ratio to stage 0-9
+        if (this.registry.breakingTextures && this.registry.breakingTextures.length > 0) {
+            const stage = Math.min(9, Math.floor(ratio * 10));
+            const tex = this.registry.breakingTextures[stage];
+            if (tex) {
+                this.miningCracks.material.map = tex;
+                this.miningCracks.material.opacity = 1.0;
+                this.miningCracks.material.needsUpdate = true;
+            }
+        } else {
+            // Fallback to legacy wireframe-ish look if textures failed to load
+            this.miningCracks.material.opacity = 0.15 + (ratio * 0.55);
+        }
         
         // Block shrinks by up to 15% as it breaks, with a subtle high-frequency wobble (stress)
         const wobble = 1.0 + (Math.sin(performance.now() * 0.06) * 0.015 * ratio);
@@ -1317,7 +1346,7 @@ export class World {
         const blockId = this.resolveBlockPlacementId(this.game?.gameState.inventory[slotId]);
         if (!blockId) return false;
 
-        const hit = this.raycastBlocks(camera, 6, true);
+        const hit = this.raycastBlocks(camera, 6, false);
         if (!hit) return false;
         const px = hit.previous.x;
         const py = hit.previous.y;

@@ -96,18 +96,8 @@ export class Chunk {
             ? baseMaterial.map(m => m ? m.clone() : null)
             : baseMaterial.clone();
 
-        const enableVertexColors = (mat) => {
-            if (mat && isTintable(mat)) {
-                mat.vertexColors = true;
-                mat.needsUpdate = true;
-            }
-        };
-
-        if (Array.isArray(material)) {
-            material.forEach(enableVertexColors);
-        } else {
-            enableVertexColors(material);
-        }
+        // Don't enable vertexColors — we tint by setting material.color on tintable faces
+        // (instance colors via setColorAt affect all faces, which would tint sides too)
 
         return material;
     }
@@ -202,7 +192,9 @@ export class Chunk {
     // ... existing terrain gen methods ...
     generateTerrainColumn(wx, wz) {
         const terrainHeight = this.world.getColumnHeight(wx, wz);
-        const inForcedSpawnZone = this.world.shouldForceSpawnZone(wx, wz);
+        const inForcedSpawnZone = this.world.shouldForceSpawnZone(wx, wz)
+            || this.world.shouldPlaceStructureChunk(this.cx, this.cz)
+            || this.world.shouldPlaceVillageChunk(this.cx, this.cz);
         const biome = this.world.getBiomeAt(wx, wz);
         const waterLevel = this.world.seaLevel + (biome.waterLevelOffset ?? 0);
         let surfaceId = terrainHeight <= waterLevel ? 'sand' : biome.surfaceBlock;
@@ -232,9 +224,9 @@ export class Chunk {
             if (y < this.world.minTerrainY) break;
             this.addGeneratedBlock(wx, y, wz, biome.fillerBlock);
         }
-        // Fill exposed cliff faces with stone so mountains look solid
-        const cliffFill = Math.min(exposedDepth, 50);
-        for (let d = 4; d <= cliffFill; d++) {
+        // Fill all the way down to minTerrainY so the world isn't hollow
+        const totalDepth = terrainHeight - this.world.minTerrainY;
+        for (let d = 4; d <= totalDepth; d++) {
             const y = terrainHeight - d;
             if (y < this.world.minTerrainY) break;
             if (this.world.shouldCarveCave(wx, y, wz, terrainHeight)) continue;
@@ -565,7 +557,6 @@ export class Chunk {
             const isCloned = material !== baseMaterial;
             const isTintable = (mat) => mat && mat.userData && mat.userData.tintable;
             const tintable = Array.isArray(material) ? material.some(isTintable) : isTintable(material);
-            const tempColor = tintable ? new THREE.Color() : null;
             
             let geometry; 
             if (isWater) {
@@ -592,15 +583,23 @@ export class Chunk {
             const transparentMaterial = materialIsTransparent(material);
             if (!isWater && !isDeco && !transparentMaterial) im.castShadow = true;
             else im.castShadow = false;
-            // Grass tops are biome-tinted and were getting extreme dark blotches from shadow acne.
-            // Keep shadows on hard blocks, but skip them for grass-style surfaces.
-            const receivesShadow = !transparentMaterial && id !== 'grass' && id !== 'grass_tall';
+            // Allow shadows on grass blocks (previously disabled due to shadow acne concerns)
+            const receivesShadow = !transparentMaterial;
             im.receiveShadow = receivesShadow;
-            let chunkTintHex = null;
             if (tintable) {
                 const cx = this.cx * this.world.chunkSize + Math.floor(this.world.chunkSize / 2);
                 const cz = this.cz * this.world.chunkSize + Math.floor(this.world.chunkSize / 2);
-                chunkTintHex = this.resolveBiomeTintHex(this.world.getBiomeAt(cx, cz));
+                const chunkTintHex = this.resolveBiomeTintHex(this.world.getBiomeAt(cx, cz));
+                // Apply tint only to tintable faces via material.color (not instanceColor which affects all faces)
+                const tintColor = new THREE.Color(chunkTintHex);
+                if (Array.isArray(material)) {
+                    for (const m of material) {
+                        if (isTintable(m)) { m.color.copy(tintColor); m.needsUpdate = true; }
+                    }
+                } else if (isTintable(material)) {
+                    material.color.copy(tintColor);
+                    material.needsUpdate = true;
+                }
             }
 
             let renderCount = 0;
@@ -654,19 +653,14 @@ export class Chunk {
                 temp.updateMatrix();
                 im.setMatrixAt(renderCount, temp.matrix);
                 
-                if (tintable) {
-                    im.setColorAt(renderCount, tempColor.setHex(chunkTintHex));
-                }
-                
                 renderCount++;
             }
-            
+
             if (renderCount === 0) {
                 continue;
             }
             im.count = renderCount;
             im.instanceMatrix.needsUpdate = true;
-            if (im.instanceColor) im.instanceColor.needsUpdate = true;
             this.instancedMeshes.set(id, im);
             this.group.add(im);
         }

@@ -38,10 +38,10 @@ export class Renderer {
     }
 
     setupLights() {
-        this.hemiLight = new THREE.HemisphereLight(0xb9e3ff, 0x3a301f, 0.72);
+        this.hemiLight = new THREE.HemisphereLight(0xcce8ff, 0x4a402f, 0.95);
         this.scene.add(this.hemiLight);
 
-        this.sun = new THREE.DirectionalLight(0xffffff, 1.0);
+        this.sun = new THREE.DirectionalLight(0xfffff5, 1.25);
         this.sun.position.set(20, 100, 20);
         this.sun.castShadow = true;
         this.sun.shadow.mapSize.width = 2048;
@@ -186,9 +186,9 @@ export class Renderer {
         this.scene.fog.color.copy(fogCol);
         this.scene.fog.density = computeFogDensity(daylight, this.submerged) * (this.fogDensityScale || 1.0);
 
-        this.sun.intensity = 0.2 + (clamped * 1.0);
+        this.sun.intensity = 0.3 + (clamped * 1.15);
         this.sun.color.copy(sunCol);
-        this.hemiLight.intensity = 0.55 + (clamped * 0.45);
+        this.hemiLight.intensity = 0.8 + (clamped * 0.45);
         this.hemiLight.color.set(top);
         this.hemiLight.groundColor.set(0x3e362d);
 
@@ -208,8 +208,8 @@ export class Renderer {
 
     setDaylightLevel(daylight) {
         this.daylight = Math.max(0, Math.min(1, daylight));
-        this.hemiLight.intensity = 0.4 + this.daylight * 0.6;
-        this.sun.intensity = this.daylight * 1.25;
+        this.hemiLight.intensity = 0.6 + this.daylight * 0.6;
+        this.sun.intensity = this.daylight * 1.35;
         
         // Sky colors mix - use THREE.Color to wrap the hex constants from RenderConfig
         const dayTop = new THREE.Color(ATMOSPHERIC_COLORS.DAY.top);
