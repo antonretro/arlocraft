@@ -2,5 +2,6 @@
     "name": "Cherry Blossoms",
     "hardness": 0.5,
     "xp": 2,
-    "color": "0xffadc0"
+    "color": "0xffadc0",
+    "transparent": true
 }

@@ -38,7 +38,9 @@ export class Renderer {
         this.sun.shadow.camera.right = 64;
         this.sun.shadow.camera.top = 64;
         this.sun.shadow.camera.bottom = -64;
-        this.sun.shadow.bias = -0.002;
+        // Keep terrain from self-shadowing into near-black patches.
+        this.sun.shadow.bias = -0.0002;
+        this.sun.shadow.normalBias = 0.024;
         this.scene.add(this.sun);
 
         this.playerLight = new THREE.PointLight(0xffd88b, 0.0, 16, 2);

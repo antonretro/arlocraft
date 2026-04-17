@@ -133,13 +133,27 @@
                         <div class="ni-tile-icon">&#9881;</div>
                         <span>Options</span>
                     </button>
-                    <button class="ni-tile ni-tile-muted" disabled>
+                    <button class="ni-tile ni-tile-muted" id="btn-title-quit">
                         <div class="ni-tile-icon">&#128274;</div>
                         <span>Quit</span>
                     </button>
                 </div>
             </nav>
 
+            <section id="ni-release-card" aria-live="polite">
+                <div class="ni-release-head">
+                    <div id="ni-release-version">Version: v0.0.0</div>
+                    <button class="ni-btn ni-btn-sm" id="btn-release-refresh">Refresh</button>
+                </div>
+                <div id="ni-release-date">Checking latest GitHub release...</div>
+                <ul id="ni-release-notes">
+                    <li>Loading changelog...</li>
+                </ul>
+                <div class="ni-release-actions">
+                    <button class="ni-btn ni-btn-sm" id="btn-open-release">Latest Release</button>
+                    <button class="ni-btn ni-btn-sm" id="btn-open-repo">GitHub Repo</button>
+                </div>
+            </section>
             <div class="ni-footer-hint">ArloCraft Alpha · antonretro</div>
         </div>
 
@@ -346,3 +360,4 @@
     <script type="module" src="src/main.js"></script>
 </body>
 </html>
+

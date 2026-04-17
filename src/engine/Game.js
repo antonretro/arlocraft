@@ -17,6 +17,7 @@ import { TouchControls } from '../ui/TouchControls.js';
 import { FEATURES } from '../data/features.js';
 import { PlayerHand } from '../entities/PlayerHand.js';
 import { AudioSystem } from './AudioSystem.js';
+import appPackage from '../../package.json';
 
 const FOOD_VALUES = {
     apple: 4, tomato: 4, carrot: 3, potato: 3, corn: 3,
@@ -25,6 +26,10 @@ const FOOD_VALUES = {
     mushroom_brown: 2,
     steak: 8, cooked_fish: 6,
 };
+
+const LOCAL_APP_VERSION = `v${appPackage?.version ?? '0.0.0'}`;
+const GITHUB_REPO_OWNER = 'antonretro';
+const GITHUB_REPO_NAME = 'arlocraft';
 
 export class Game {
     constructor() {
@@ -52,6 +57,8 @@ export class Game {
         this.features.dynamicQualityAuto = this.settings.autoQuality;
         this.profiler = { physicsMs: 0, worldMs: 0, renderMs: 0, uiMs: 0 };
         this.idleWorldTick = 0;
+        this.latestReleaseInfo = null;
+        this.releaseFetchPromise = null;
 
         this.hasStarted = false;
         this.isPaused = false;
@@ -363,6 +370,142 @@ export class Game {
         if (!status) return;
         status.textContent = message;
         status.style.color = isError ? '#ff7979' : '#d2ffd6';
+    }
+
+    getRepositoryUrl() {
+        return `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`;
+    }
+
+    getLatestReleaseApiUrl() {
+        return `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`;
+    }
+
+    openRepositoryPage() {
+        const url = this.getRepositoryUrl();
+        window.open(url, '_blank', 'noopener');
+    }
+
+    extractReleaseNotes(body) {
+        const lines = String(body ?? '')
+            .split(/\r?\n/g)
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+            .filter((line) => !line.startsWith('#'));
+
+        const cleaned = [];
+        for (const raw of lines) {
+            const text = raw.replace(/^[-*]\s+/, '').trim();
+            if (!text) continue;
+            cleaned.push(text);
+            if (cleaned.length >= 4) break;
+        }
+
+        if (cleaned.length > 0) return cleaned;
+        return ['No release notes published yet.'];
+    }
+
+    setTitleReleaseInfo(info = {}) {
+        const versionEl = document.getElementById('ni-release-version');
+        const dateEl = document.getElementById('ni-release-date');
+        const notesEl = document.getElementById('ni-release-notes');
+        if (!versionEl || !dateEl || !notesEl) return;
+
+        const version = String(info.version ?? LOCAL_APP_VERSION);
+        const dateLabel = String(info.dateLabel ?? 'Local build');
+        const notes = Array.isArray(info.notes) && info.notes.length > 0
+            ? info.notes
+            : ['No changelog entries available.'];
+        const releaseUrl = typeof info.releaseUrl === 'string' && info.releaseUrl
+            ? info.releaseUrl
+            : this.getRepositoryUrl();
+
+        versionEl.textContent = `Version: ${version}`;
+        dateEl.textContent = dateLabel;
+        notesEl.innerHTML = '';
+        for (const note of notes) {
+            const item = document.createElement('li');
+            item.textContent = note;
+            notesEl.appendChild(item);
+        }
+
+        this.latestReleaseInfo = {
+            version,
+            dateLabel,
+            notes,
+            releaseUrl
+        };
+    }
+
+    async refreshTitleReleaseInfo(force = false) {
+        if (!force && this.releaseFetchPromise) return this.releaseFetchPromise;
+        if (!force && this.latestReleaseInfo) {
+            this.setTitleReleaseInfo(this.latestReleaseInfo);
+            return Promise.resolve(this.latestReleaseInfo);
+        }
+
+        this.setTitleReleaseInfo({
+            version: LOCAL_APP_VERSION,
+            dateLabel: 'Checking latest GitHub release...',
+            notes: ['Loading changelog...'],
+            releaseUrl: this.getRepositoryUrl()
+        });
+
+        const fallback = {
+            version: LOCAL_APP_VERSION,
+            dateLabel: 'Latest release unavailable (offline or rate-limited).',
+            notes: ['Showing local build info.'],
+            releaseUrl: this.getRepositoryUrl()
+        };
+
+        const task = (async () => {
+            try {
+                const response = await fetch(this.getLatestReleaseApiUrl(), {
+                    headers: { Accept: 'application/vnd.github+json' }
+                });
+                if (!response.ok) throw new Error(`GitHub API error ${response.status}`);
+
+                const data = await response.json();
+                const tag = String(data?.tag_name || '').trim() || LOCAL_APP_VERSION;
+                const publishedAt = data?.published_at ? new Date(data.published_at) : null;
+                const publishedLabel = publishedAt && !Number.isNaN(publishedAt.getTime())
+                    ? publishedAt.toLocaleDateString()
+                    : 'Unknown date';
+                const notes = this.extractReleaseNotes(data?.body);
+                const releaseUrl = typeof data?.html_url === 'string' && data.html_url
+                    ? data.html_url
+                    : this.getRepositoryUrl();
+
+                this.setTitleReleaseInfo({
+                    version: tag,
+                    dateLabel: `Latest GitHub release · ${publishedLabel}`,
+                    notes,
+                    releaseUrl
+                });
+            } catch (error) {
+                console.warn('[ArloCraft] Failed to load GitHub release info:', error);
+                this.setTitleReleaseInfo(fallback);
+            } finally {
+                this.releaseFetchPromise = null;
+            }
+        })();
+
+        this.releaseFetchPromise = task;
+        return task;
+    }
+
+    handleTitleQuit() {
+        const isElectron = /\belectron\//i.test(navigator.userAgent);
+        if (isElectron) {
+            window.close();
+            return;
+        }
+
+        if (window.history.length > 1) {
+            window.history.back();
+            return;
+        }
+
+        this.openRepositoryPage();
     }
 
     grantStarterChestLoot() {
@@ -702,6 +845,7 @@ export class Game {
         if (visible) {
             this.renderWorldList();
             this.setMenuScreen('title');
+            this.refreshTitleReleaseInfo(false);
 
             if (!this._niClockTick) {
                 this._niClockTick = setInterval(() => {
@@ -834,6 +978,10 @@ export class Game {
         const btnRandomSeed = document.getElementById('btn-title-random-seed');
         const btnToWorlds = document.getElementById('btn-to-worlds');
         const btnToSettings = document.getElementById('btn-to-settings');
+        const btnTitleQuit = document.getElementById('btn-title-quit');
+        const btnReleaseRefresh = document.getElementById('btn-release-refresh');
+        const btnOpenRelease = document.getElementById('btn-open-release');
+        const btnOpenRepo = document.getElementById('btn-open-repo');
         const btnPlayWorld = document.getElementById('btn-play-world');
         const btnNewWorld = document.getElementById('btn-new-world');
         const btnDeleteWorld = document.getElementById('btn-delete-world');
@@ -940,6 +1088,15 @@ export class Game {
             btnToSettings.addEventListener('click', () => {
                 this.showSettings(true);
                 this.setStatus('Settings opened.');
+            });
+        }
+        if (btnTitleQuit) btnTitleQuit.addEventListener('click', () => this.handleTitleQuit());
+        if (btnReleaseRefresh) btnReleaseRefresh.addEventListener('click', () => this.refreshTitleReleaseInfo(true));
+        if (btnOpenRepo) btnOpenRepo.addEventListener('click', () => this.openRepositoryPage());
+        if (btnOpenRelease) {
+            btnOpenRelease.addEventListener('click', () => {
+                const target = this.latestReleaseInfo?.releaseUrl || this.getRepositoryUrl();
+                window.open(target, '_blank', 'noopener');
             });
         }
 
@@ -1212,6 +1369,12 @@ export class Game {
 
         this.setMenuMode(this.selectedStartMode, false);
         this.world.setRenderDistance(this.getEffectiveRenderDistanceForTier(this.settings.qualityTierPref ?? this.qualityTier));
+        this.setTitleReleaseInfo({
+            version: LOCAL_APP_VERSION,
+            dateLabel: 'Checking latest GitHub release...',
+            notes: ['Loading changelog...'],
+            releaseUrl: this.getRepositoryUrl()
+        });
         this.renderWorldList();
         this.setMenuScreen('title');
     }
@@ -1665,13 +1828,22 @@ export class Game {
         if (isGrounded && speed > 0.1) {
             this.bobCycle = (this.bobCycle || 0) + delta * 12;
         } else if (inWater) {
-            this.bobCycle = (this.bobCycle || 0) + delta * 4; // Slower bob in water
+            this.bobCycle = (this.bobCycle || 0) + delta * 4;
         } else {
             this.bobCycle = THREE.MathUtils.lerp(this.bobCycle || 0, 0, delta * 3);
         }
 
         this.camera.instance.rotation.order = 'YXZ';
         this.camera.instance.rotation.set(this.viewPitch, this.viewYaw, 0);
+
+        // FOV Effect — Minecraft-style zoom when sprinting
+        const baseFov = this.settings?.fov ?? 75;
+        const targetFov = this.physics.isSprinting ? baseFov + 13 : baseFov;
+        if (Math.abs(this.camera.instance.fov - targetFov) > 0.1) {
+            this.camera.instance.fov = THREE.MathUtils.lerp(this.camera.instance.fov, targetFov, delta * 8);
+            this.camera.instance.updateProjectionMatrix();
+        }
+
         const cameraMode = this.cameraModes[this.cameraModeIndex];
         if (cameraMode === 'FIRST_PERSON') {
             this.playerVisual.visible = false;
@@ -1710,7 +1882,7 @@ export class Game {
         this.updateDebugOverlay(delta);
         this.hud.updateCoordinates(playerPos, this.viewYaw, this.world);
         
-        // Smelting Logic (Auto-process if holding furnace or interacting)
+        // Smelting Logic
         this.smeltTimer = (this.smeltTimer || 0) + delta;
         if (this.smeltTimer > 3.0) {
             this.processSmelting();
@@ -1787,4 +1959,3 @@ export class Game {
         }
     }
 }
-

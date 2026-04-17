@@ -77,37 +77,30 @@ export class Chunk {
 
 
     enableMaterialInstanceColors(material) {
+        let anyEnabled = false;
         if (Array.isArray(material)) {
             for (const mat of material) {
                 if (!mat) continue;
-                if (!mat.vertexColors) {
-                    mat.vertexColors = true;
-                    mat.needsUpdate = true;
+                if (mat.userData && mat.userData.tintable) {
+                    anyEnabled = true;
+                    if (!mat.vertexColors) {
+                        mat.vertexColors = true;
+                        mat.needsUpdate = true;
+                    }
                 }
             }
-            return;
+        } else if (material && material.userData && material.userData.tintable) {
+            anyEnabled = true;
+            if (!material.vertexColors) {
+                material.vertexColors = true;
+                material.needsUpdate = true;
+            }
         }
-        if (material && !material.vertexColors) {
-            material.vertexColors = true;
-            material.needsUpdate = true;
-        }
+        return anyEnabled;
     }
 
     disableMaterialInstanceColors(material) {
-        if (Array.isArray(material)) {
-            for (const mat of material) {
-                if (!mat) continue;
-                if (mat.vertexColors) {
-                    mat.vertexColors = false;
-                    mat.needsUpdate = true;
-                }
-            }
-            return;
-        }
-        if (material && material.vertexColors) {
-            material.vertexColors = false;
-            material.needsUpdate = true;
-        }
+        // Obsolete
     }
 
     materialHasVertexColors(material) {
@@ -125,6 +118,24 @@ export class Chunk {
             return material.map((mat) => (mat?.clone ? mat.clone() : mat));
         }
         return material?.clone ? material.clone() : material;
+    }
+
+    resolveBiomeTintHex(biome) {
+        const fallback = 0x91bd59;
+        const raw = biome?.color;
+        if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+            return Math.floor(raw);
+        }
+        if (typeof raw === 'string') {
+            const text = raw.trim();
+            if (text) {
+                const parsed = text.toLowerCase().startsWith('0x')
+                    ? Number(text)
+                    : Number.parseInt(text, 16);
+                if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+            }
+        }
+        return fallback;
     }
 
     getRenderOrder(id, material) {
@@ -513,9 +524,9 @@ export class Chunk {
             const baseMaterial = this.world.blockRegistry.getMaterial(id);
             const isWater = id === 'water';
             const isDeco = blockData?.deco;
-            const tintable = false;
-            this.disableMaterialInstanceColors(baseMaterial);
+            const tintable = this.enableMaterialInstanceColors(baseMaterial);
             const material = baseMaterial;
+            const tempColor = tintable ? new THREE.Color() : null;
             
             const geometry = isWater
                 ? this.world.sharedChunkGeometries.water
@@ -527,8 +538,10 @@ export class Chunk {
             im.instanceMatrix.setUsage(THREE.StaticDrawUsage);
             im.renderOrder = this.getRenderOrder(id, material);
             
-            // Shadows: only cast if it's a solid block (not water/deco) to save performance
-            if (!isWater && !isDeco) im.castShadow = true;
+            // Avoid black slab shadows from cutout/transparent materials (leaves, flowers, etc.).
+            const transparentMaterial = materialIsTransparent(material);
+            if (!isWater && !isDeco && !transparentMaterial) im.castShadow = true;
+            else im.castShadow = false;
             im.receiveShadow = true;
 
             let renderCount = 0;
@@ -577,6 +590,13 @@ export class Chunk {
                 
                 temp.updateMatrix();
                 im.setMatrixAt(renderCount, temp.matrix);
+                
+                if (tintable) {
+                    const biome = this.world.getBiomeAt(ax, az);
+                    const tintHex = this.resolveBiomeTintHex(biome);
+                    im.setColorAt(renderCount, tempColor.setHex(tintHex));
+                }
+                
                 renderCount++;
             }
             
@@ -586,6 +606,7 @@ export class Chunk {
 
             im.count = renderCount;
             im.instanceMatrix.needsUpdate = true;
+            if (im.instanceColor) im.instanceColor.needsUpdate = true;
             this.instancedMeshes.set(id, im);
             this.group.add(im);
         }

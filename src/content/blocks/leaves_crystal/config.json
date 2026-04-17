@@ -3,5 +3,6 @@
     "hardness": 0.5,
     "xp": 5,
     "emissive": true,
-    "color": "0xbc7fff"
+    "color": "0xbc7fff",
+    "transparent": true
 }

@@ -93,6 +93,12 @@ export class BlockRegistry {
             }
             return;
         }
+        const alphaCutout = Number(material.alphaTest) > 0.001 || Boolean(material.userData?.alphaCutout);
+        if (alphaCutout) {
+            // Cutout textures (foliage/flowers) should write depth for stable sorting.
+            material.depthWrite = true;
+            return;
+        }
         if (material.transparent) {
             material.depthWrite = false;
         }
@@ -153,6 +159,24 @@ export class BlockRegistry {
         mat.uniforms.uTime.value = timeSeconds;
     }
 
+    isCutoutBlockId(id, isDeco = false) {
+        return (
+            isDeco ||
+            id === 'grass_tall' ||
+            id === 'mushroom_brown' ||
+            id.startsWith('flower_') ||
+            id.startsWith('leaves') ||
+            id.startsWith('mushroom_') ||
+            id === 'fern' ||
+            id === 'dead_bush' ||
+            id.includes('sapling') ||
+            id.includes('vine') ||
+            id.includes('roots') ||
+            id.includes('fungus') ||
+            id.includes('sprouts')
+        );
+    }
+
     getMaterial(id) {
         if (this.materialCache.has(id)) return this.materialCache.get(id);
         const config = this.blocks.get(id);
@@ -179,18 +203,16 @@ export class BlockRegistry {
 
         // Face order: px, nx, py, ny, pz, nz (Right, Left, Top, Bottom, Front, Back)
         if (topTex || bottomTex || sideTex || frontTex || backTex || leftTex || rightTex) {
-            const isTransparent = Boolean(config.transparent);
-            const isCutout = isTransparent && (
-                id === 'grass_tall' ||
-                id === 'mushroom_brown' ||
-                id.startsWith('flower_') ||
-                id.startsWith('leaves')
-            );
+            const isDeco = Boolean(config.deco);
+            const cutoutBlock = this.isCutoutBlockId(id, isDeco);
+            const isTransparent = Boolean(config.transparent) || cutoutBlock;
+            const isCutout = isTransparent && cutoutBlock;
             const matConfig = {
                 transparent: isTransparent,
                 opacity: isTransparent ? (isCutout ? 1 : 0.82) : 1,
                 alphaTest: isCutout ? 0.24 : 0,
-                depthWrite: isCutout ? true : !isTransparent
+                depthWrite: isCutout ? true : !isTransparent,
+                side: isDeco ? THREE.DoubleSide : THREE.FrontSide
             };
 
             const mats = [
@@ -201,6 +223,30 @@ export class BlockRegistry {
                 new THREE.MeshLambertMaterial({ ...matConfig, map: frontTex }),
                 new THREE.MeshLambertMaterial({ ...matConfig, map: backTex })
             ];
+            if (isCutout) {
+                for (const mat of mats) {
+                    mat.userData.alphaCutout = true;
+                }
+            }
+            
+            const isFoliage = id === 'grass_tall' || id === 'vine' || id === 'fern' || id === 'sugar_cane' || id.startsWith('leaves');
+            const isGrassTopOnly = id === 'grass';
+            
+            for (let i = 0; i < mats.length; i++) {
+                const m = mats[i];
+                if ((isGrassTopOnly && i === 2) || isFoliage) {
+                    m.userData.tintable = true;
+                } else {
+                    m.userData.tintable = false;
+                    // Ignore InstancedMesh colors for non-tintable faces
+                    m.onBeforeCompile = (shader) => {
+                        shader.vertexShader = shader.vertexShader.replace(
+                            'vColor.xyz = instanceColor.xyz;',
+                            'vColor.xyz = vec3(1.0);'
+                        );
+                    };
+                }
+            }
             
             // If all sides are identical and no specific ones provided, use a single material
             if (!textures['top.png'] && !textures['bottom.png'] && !textures['side.png'] && 
@@ -250,13 +296,10 @@ export class BlockRegistry {
                     side: THREE.DoubleSide
                 });
             } else {
-                const isTransparent = Boolean(config.transparent);
-                const isCutout = isTransparent && (
-                    id === 'grass_tall' ||
-                    id === 'mushroom_brown' ||
-                    id.startsWith('flower_') ||
-                    id.startsWith('leaves')
-                );
+                const isDeco = Boolean(config.deco);
+                const cutoutBlock = this.isCutoutBlockId(id, isDeco);
+                const isTransparent = Boolean(config.transparent) || cutoutBlock;
+                const isCutout = isTransparent && cutoutBlock;
                 material = new THREE.MeshLambertMaterial({
                     color: config.color ? parseInt(config.color) : 0x9c9c9c,
                     transparent: isTransparent,
@@ -264,6 +307,7 @@ export class BlockRegistry {
                     alphaTest: isCutout ? 0.24 : 0,
                     depthWrite: isCutout ? true : !isTransparent
                 });
+                if (isCutout) material.userData.alphaCutout = true;
             }
 
             // Special handling for wool texture/grain

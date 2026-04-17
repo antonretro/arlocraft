@@ -577,6 +577,13 @@ canvas { display: block; }
     gap: 12px;
 }
 
+.ni-btn-sm {
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 0.62rem;
+    letter-spacing: 0.7px;
+}
+
 .ni-btn:hover {
     transform: scale(1.05);
     background: #fff;
@@ -754,6 +761,55 @@ canvas { display: block; }
     font-size: 0.75rem;
     opacity: 0.4;
     letter-spacing: 1px;
+}
+
+#ni-release-card {
+    position: absolute;
+    bottom: 64px;
+    width: min(720px, 88vw);
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(5, 10, 18, 0.78);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(10px);
+}
+
+.ni-release-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+#ni-release-version {
+    font-size: 0.83rem;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    color: #d9ecff;
+}
+
+#ni-release-date {
+    margin-top: 6px;
+    font-size: 0.7rem;
+    color: rgba(210, 230, 255, 0.75);
+}
+
+#ni-release-notes {
+    margin: 8px 0 0 16px;
+    padding: 0;
+    font-size: 0.72rem;
+    color: rgba(228, 240, 255, 0.9);
+    line-height: 1.45;
+    max-height: 96px;
+    overflow: auto;
+}
+
+.ni-release-actions {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 /* ── NI World Selection ── */
@@ -1413,6 +1469,25 @@ canvas { display: block; }
     .ni-footer-hint {
         font-size: 0.52rem;
         bottom: 12px;
+    }
+
+    #ni-release-card {
+        bottom: 34px;
+        width: 92vw;
+        padding: 10px 10px;
+    }
+
+    #ni-release-version {
+        font-size: 0.62rem;
+    }
+
+    #ni-release-date,
+    #ni-release-notes {
+        font-size: 0.58rem;
+    }
+
+    #ni-release-notes {
+        max-height: 72px;
     }
 
     /* ── World select ── */
