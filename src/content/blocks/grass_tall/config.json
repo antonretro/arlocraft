@@ -1,7 +1,8 @@
 {
-    "name": "Short Grass",
-    "hardness": 0,
-    "xp": 0,
-    "deco": true,
-    "transparent": true
+    "hardness":  0,
+    "xp":  0,
+    "deco":  true,
+    "transparent":  true,
+    "id":  "short_grass",
+    "textureId":  "grass"
 }

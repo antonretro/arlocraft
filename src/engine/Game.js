@@ -19,6 +19,7 @@ import { TouchControls } from '../ui/TouchControls.js';
 import { FEATURES } from '../data/features.js';
 import { PlayerHand } from '../entities/PlayerHand.js';
 import { AudioSystem } from './AudioSystem.js';
+import { migrateInventoryItem } from '../data/blockMigrations.js';
 import appPackage from '../../package.json';
 
 const LOCAL_APP_VERSION = `v${appPackage?.version ?? '0.0.0'}`;
@@ -635,14 +636,14 @@ export class Game {
         if (seedInput) seedInput.value = this.world.seedString;
 
         if (Array.isArray(data.inventory)) {
-            this.gameState.inventory = data.inventory.slice(0, 36);
+            this.gameState.inventory = data.inventory.slice(0, 36).map((item) => migrateInventoryItem(item));
             while (this.gameState.inventory.length < 36) this.gameState.inventory.push(null);
         }
 
-        this.gameState.offhand = data?.offhand ?? null;
+        this.gameState.offhand = migrateInventoryItem(data?.offhand ?? null);
 
         if (Array.isArray(data.craftingGrid)) {
-            this.gameState.craftingGrid = data.craftingGrid.slice(0, 9);
+            this.gameState.craftingGrid = data.craftingGrid.slice(0, 9).map((item) => migrateInventoryItem(item));
             while (this.gameState.craftingGrid.length < 9) this.gameState.craftingGrid.push(null);
         }
 
@@ -1696,13 +1697,14 @@ export class Game {
         if (!this.hasStarted || this.isPaused) return;
         const hit = this.world.raycastBlocks?.(this.camera.instance, 6, false);
         if (!hit?.id) return;
-        const id = hit.id;
+        const id = this.world.getBlockPickId(hit.id);
+        const blockName = this.world.getBlockData(id)?.name ?? id;
         const inv = this.gameState.inventory;
         // First check hotbar slots 0-8
         for (let i = 0; i < 9; i++) {
             if (inv[i]?.id === id) {
                 this.gameState.setSlot(i);
-                this.hud?.flashPrompt?.(`Selected: ${id}`, '#aaddff');
+                this.hud?.flashPrompt?.(`Selected: ${blockName}`, '#aaddff');
                 return;
             }
         }
@@ -1711,7 +1713,7 @@ export class Game {
             const slot = this.gameState.selectedSlot;
             inv[slot] = { id, count: 64, kind: 'block' };
             window.dispatchEvent(new CustomEvent('inventory-changed'));
-            this.hud?.flashPrompt?.(`Picked: ${id}`, '#aaddff');
+            this.hud?.flashPrompt?.(`Picked: ${blockName}`, '#aaddff');
         }
     }
 

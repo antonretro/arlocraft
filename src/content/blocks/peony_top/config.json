@@ -1,0 +1,12 @@
+{
+  "name": "Peony",
+  "hardness": 0,
+  "xp": 0,
+  "deco": true,
+  "transparent": true,
+  "textureId": "peony_top",
+  "pairId": "peony",
+  "pairOffsetY": -1,
+  "dropId": "peony",
+  "pickId": "peony"
+}

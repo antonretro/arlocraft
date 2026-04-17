@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BIOMES, BIOME_BY_ID } from '../data/biomes.js';
 import { MOBS } from '../data/mobs.js';
 import { BlockRegistry } from '../blocks/BlockRegistry.js';
+import { migrateBlockId } from '../data/blockMigrations.js';
 import { BLOCKS } from '../data/blocks.js';
 import { TOOLS } from '../data/tools.js';
 import { Chunk } from './Chunk.js';
@@ -306,10 +307,11 @@ export class World {
         const entries = Array.isArray(data?.changedBlocks) ? data.changedBlocks : [];
         const migrated = new Map();
         for (const [oldKey, id] of entries) {
-            if (!this.corruptionEnabled && (id === 'virus' || id === 'arlo')) continue;
+            const migratedId = migrateBlockId(id);
+            if (!this.corruptionEnabled && (migratedId === 'virus' || migratedId === 'arlo')) continue;
             const coords = this.keyToCoords(oldKey);
             if (coords.length === 3 && !isNaN(coords[0])) {
-                migrated.set(this.getKey(coords[0], coords[1], coords[2]), id);
+                migrated.set(this.getKey(coords[0], coords[1], coords[2]), migratedId);
             }
         }
         this.changedBlocks = migrated;
@@ -770,10 +772,10 @@ export class World {
                     if (dist > 4.2) continue;
                     const wx = centerX + dx;
                     const wz = centerZ + dz;
-                    this.setChangedBlock(wx, baseY, wz, 'grass');
+                    this.setChangedBlock(wx, baseY, wz, 'grass_block');
                     const flowerRoll = this.hash2D(wx + 319, wz - 211);
                     if (flowerRoll > 0.84) {
-                        this.setChangedBlock(wx, baseY + 1, wz, flowerRoll > 0.92 ? 'flower_rose' : 'flower_dandelion');
+                        this.setChangedBlock(wx, baseY + 1, wz, flowerRoll > 0.92 ? 'poppy' : 'dandelion');
                     }
                 }
             }
@@ -974,6 +976,30 @@ export class World {
         return this.blockDataById.get(actualId) ?? null;
     }
 
+    getBlockDropId(id) {
+        const blockData = this.getBlockData(id);
+        return blockData?.dropId || id;
+    }
+
+    getBlockPickId(id) {
+        const blockData = this.getBlockData(id);
+        return blockData?.pickId || blockData?.dropId || id;
+    }
+
+    getBlockPairState(id, x, y, z) {
+        const blockData = this.getBlockData(id);
+        const pairId = blockData?.pairId;
+        const pairOffsetY = Number(blockData?.pairOffsetY);
+        if (!pairId || !Number.isFinite(pairOffsetY) || pairOffsetY === 0) return null;
+
+        const pairY = y + pairOffsetY;
+        const pairKey = this.getKey(x, pairY, z);
+        const actualPairId = this.blockMap.get(pairKey);
+        if (actualPairId !== pairId) return null;
+
+        return { pairId, pairY, pairKey };
+    }
+
     isSolidAt(x, y, z) {
         const id = this.blockMap.get(this.getKey(Math.round(x), Math.round(y), Math.round(z)));
         if (!id) return false;
@@ -1018,30 +1044,20 @@ export class World {
         if (!id) return false;
         if (id.startsWith('wood_') || id === 'oak_log') return true;
         if (id.includes('leaves')) return true;
-        if (id.startsWith('flower_') || id === 'grass_tall') return true;
         if (id === 'mushroom_brown' || id === 'cactus') return true;
+        const blockData = this.getBlockData(id);
+        if (blockData?.deco) return true;
         return false;
     }
 
     _applyGravityAbove(x, y, z) {
-        const playerPos = this.game?.getPlayerPosition?.();
-        const toBreak = [];
         for (let dy = 1; dy <= 28; dy++) {
             const ay = y + dy;
             const aboveId = this.blockMap.get(this.getKey(x, ay, z));
             if (!aboveId) break;
             if (!this._isGravityBlock(aboveId)) break;
-            toBreak.push({ ay, id: aboveId });
+            if (!this.breakBlockAt(x, ay, z)) break;
         }
-        for (const { ay, id } of toBreak) {
-            const bkey = this.getKey(x, ay, z);
-            this.changedBlocks.set(bkey, null);
-            this.removeBlockByKey(bkey, { skipChangeTracking: true });
-            this.spawnBreakParticles(x, ay, z, id);
-            this.spawnPickupEffect(x, ay, z, id, playerPos);
-            window.dispatchEvent(new CustomEvent('block-mined', { detail: { id, x, y: ay, z } }));
-        }
-        if (toBreak.length > 0) this.flushPriorityChunkRebuilds(20);
     }
 
     breakBlockAt(x, y, z) {
@@ -1049,16 +1065,24 @@ export class World {
         const id = this.blockMap.get(key);
         if (!id || id === 'bedrock') return false;
 
+        const pairState = this.getBlockPairState(id, x, y, z);
+        const dropId = this.getBlockDropId(id);
+        if (pairState) {
+            this.changedBlocks.set(pairState.pairKey, null);
+            this.removeBlockByKey(pairState.pairKey, { skipChangeTracking: true });
+            this.spawnBreakParticles(x, pairState.pairY, z, pairState.pairId);
+        }
+
         this.changedBlocks.set(key, null);
         this.removeBlockByKey(key, { skipChangeTracking: true });
         this.flushPriorityChunkRebuilds(20);
         this.ensureSubsurfaceBelow(x, y - 1, z);
         this.spawnBreakParticles(x, y, z, id);
-        this.spawnPickupEffect(x, y, z, id, this.game?.getPlayerPosition?.());
-        window.dispatchEvent(new CustomEvent('block-mined', { detail: { id, x, y, z } }));
+        this.spawnPickupEffect(x, y, z, dropId, this.game?.getPlayerPosition?.());
+        window.dispatchEvent(new CustomEvent('block-mined', { detail: { id: dropId, x, y, z } }));
 
         // Gravity: if breaking a trunk/support, collapse blocks above
-        if (this._isGravityBlock(id) || id === 'stone' || id === 'dirt' || id === 'grass' || id === 'sand') {
+        if (this._isGravityBlock(id) || id === 'stone' || id === 'dirt' || id === 'grass_block' || id === 'sand') {
             this._applyGravityAbove(x, y, z);
         }
 
@@ -1275,10 +1299,11 @@ export class World {
         if (!slotItem || !slotItem.id) return null;
         if (slotItem.kind === 'tool') return null;
 
-        const blockData = this.blockDataById.get(slotItem.id);
+        const requestedId = this.getBlockPickId(slotItem.id);
+        const blockData = this.blockDataById.get(requestedId);
         if (!blockData) return null;
-        if (!this.corruptionEnabled && (slotItem.id === 'virus' || slotItem.id === 'arlo')) return null;
-        return slotItem.id;
+        if (!this.corruptionEnabled && (requestedId === 'virus' || requestedId === 'arlo')) return null;
+        return requestedId;
     }
 
     isReplaceableForPlacement(id) {
@@ -1345,6 +1370,7 @@ export class World {
     placeBlock(camera, slotId) {
         const blockId = this.resolveBlockPlacementId(this.game?.gameState.inventory[slotId]);
         if (!blockId) return false;
+        const blockData = this.getBlockData(blockId);
 
         const hit = this.raycastBlocks(camera, 6, false);
         if (!hit) return false;
@@ -1370,6 +1396,18 @@ export class World {
             else if (angle < (3 * pi / 4)) finalId += '_e';
             else if (angle < (5 * pi / 4)) finalId += '_n';
             else finalId += '_w';
+        }
+
+        const pairId = blockData?.pairId;
+        const pairOffsetY = Number(blockData?.pairOffsetY);
+        if (pairId && Number.isFinite(pairOffsetY) && pairOffsetY !== 0) {
+            const pairY = py + pairOffsetY;
+            const pairKey = this.getKey(px, pairY, pz);
+            const pairExistingId = this.blockMap.get(pairKey);
+            const replacePair = this.isReplaceableForPlacement(pairExistingId);
+            if (pairExistingId && !replacePair) return false;
+            this.changedBlocks.set(pairKey, pairId);
+            this.addBlock(px, pairY, pz, pairId, ownerKey, replacePair);
         }
 
         this.changedBlocks.set(key, finalId);
@@ -1487,7 +1525,7 @@ export class World {
 
         const terrain = this.getColumnHeight(Math.round(x), Math.round(z));
         if (terrain <= this.seaLevel) return 'water';
-        return terrain <= this.seaLevel + 1 ? 'sand' : 'grass';
+        return terrain <= this.seaLevel + 1 ? 'sand' : 'grass_block';
     }
 
     getBiomeIdAt(x, z) {

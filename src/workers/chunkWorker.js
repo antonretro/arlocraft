@@ -1,5 +1,6 @@
 import { expose, transfer } from 'comlink';
 import { BIOME_BY_ID } from '../data/biomes.js';
+import { BLOCKS } from '../data/blocks.js';
 import { Noise } from '../world/Noise.js';
 import { NoiseRouter } from '../world/NoiseRouter.js';
 
@@ -9,6 +10,7 @@ const MAX_TERRAIN_Y = 65;
 const DEEP_MIN_Y = -220;
 
 const DEFAULT_BIOME = BIOME_BY_ID.get('plains');
+const BLOCK_DATA_BY_ID = new Map(BLOCKS.map((block) => [block.id, block]));
 
 const TREE_CONFIGS = {
     oak: { trunk: 'oak_log', leaves: 'oak_leaves', height: 5, radius: 2 },
@@ -22,14 +24,14 @@ const TREE_CONFIGS = {
 };
 
 const BIOME_GROUND_LIFE = {
-    plains: ['flower_dandelion', 'flower_rose', 'flower_tulip_red', 'fern'],
-    forest: ['mushroom_brown', 'mushroom_red', 'flower_rose', 'fern', 'blueberry', 'strawberry'],
-    meadow: ['flower_dandelion', 'flower_rose', 'flower_tulip_orange', 'flower_tulip_red', 'blueberry'],
+    plains: ['short_grass', 'dandelion', 'poppy', 'red_tulip', 'tall_grass_bottom', 'fern'],
+    forest: ['short_grass', 'fern', 'mushroom_brown', 'mushroom_red', 'poppy', 'blueberry', 'strawberry', 'tall_grass_bottom'],
+    meadow: ['short_grass', 'tall_grass_bottom', 'dandelion', 'poppy', 'orange_tulip', 'red_tulip', 'pink_tulip', 'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium', 'blueberry', 'lilac', 'peony', 'rose_bush'],
     swamp: ['mushroom_brown', 'mushroom_red', 'fern', 'blueberry'],
     desert: ['dead_bush', 'tomato', 'fern'],
     badlands: ['dead_bush', 'carrot', 'fern'],
     canyon: ['dead_bush', 'carrot'],
-    highlands: ['potato', 'fern', 'flower_rose'],
+    highlands: ['potato', 'fern', 'poppy'],
     alpine: ['potato', 'fern'],
     tundra: ['potato', 'fern']
 };
@@ -213,6 +215,19 @@ function setPlannedBlock(planMap, changedMap, x, y, z, id) {
     planMap.set(key, override ?? id);
 }
 
+function setPlannedPlant(planMap, changedMap, x, y, z, id) {
+    const blockData = BLOCK_DATA_BY_ID.get(id);
+    const pairId = blockData?.pairId;
+    const pairOffsetY = Number(blockData?.pairOffsetY);
+    if (pairId && Number.isFinite(pairOffsetY) && pairOffsetY !== 0) {
+        setPlannedBlock(planMap, changedMap, x, y, z, id);
+        setPlannedBlock(planMap, changedMap, x, y + pairOffsetY, z, pairId);
+        return;
+    }
+
+    setPlannedBlock(planMap, changedMap, x, y, z, id);
+}
+
 function addTree(planMap, changedMap, x, y, z, biome, corruptionEnabled) {
     const treeType = chooseTreeType(x, z, biome, corruptionEnabled);
     const config = TREE_CONFIGS[treeType] ?? TREE_CONFIGS.oak;
@@ -242,7 +257,7 @@ function addGroundLife(planMap, changedMap, x, y, z, biome) {
     const roll = hash2D((x * 53) + 17, (z * 61) - 29, currentSeed);
     if (roll > 0.045) return;
     const pick = Math.floor(hash2D(x - 919, z + 771, currentSeed) * lifeChoices.length);
-    setPlannedBlock(planMap, changedMap, x, y + 1, z, lifeChoices[pick]);
+    setPlannedPlant(planMap, changedMap, x, y + 1, z, lifeChoices[pick]);
 }
 
 function chunkCoord(worldValue, chunkSize) {
@@ -346,8 +361,8 @@ const api = {
                 if (!surfaceCarved && !inForcedSpawnZone && !isHighAltitude && terrainHeight > waterLevel) {
                     const decoHash = hash2D(wx * 22, wz * 33, currentSeed);
                     if (decoHash < 0.08) {
-                        const decoId = decoHash < 0.06 ? 'grass_tall' : (decoHash < 0.07 ? 'flower_rose' : 'flower_dandelion');
-                        setPlannedBlock(planMap, changedMap, wx, terrainHeight + 1, wz, decoId);
+                        const decoId = decoHash < 0.045 ? 'short_grass' : (decoHash < 0.065 ? 'tall_grass_bottom' : (decoHash < 0.073 ? 'poppy' : 'dandelion'));
+                        setPlannedPlant(planMap, changedMap, wx, terrainHeight + 1, wz, decoId);
                     } else {
                         addGroundLife(planMap, changedMap, wx, terrainHeight, wz, biome);
                     }

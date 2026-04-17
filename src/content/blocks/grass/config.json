@@ -1,5 +1,7 @@
 {
-    "name": "Grass",
+    "id": "grass_block",
+    "name": "Grass Block",
+    "textureId": "grass_block",
     "hardness": 1,
     "xp": 2
 }

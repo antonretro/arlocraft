@@ -171,12 +171,14 @@ export class PlayerHand {
         const blockConfig = registry.blocks.get(itemId);
         const isTool = selectedItem?.kind === 'tool' || Boolean(tool);
         const isDeco = blockConfig?.deco;
+        let textureKey = blockConfig?.textureId || itemId;
+        if (blockConfig?.pairId && typeof textureKey === 'string' && textureKey.endsWith('_bottom')) {
+            const pairTextureKey = registry.blocks.get(blockConfig.pairId)?.textureId;
+            if (pairTextureKey) textureKey = pairTextureKey;
+        }
 
         if (isTool || isDeco) {
-            let texName = itemId;
-            // Map common block IDs to their item texture names if needed
-            if (itemId.startsWith('flower_')) texName = itemId.replace('flower_', '');
-            if (itemId === 'grass_tall') texName = 'grass';
+            let texName = textureKey;
             
             if (isTool) {
                 if (tool?.type && TOOL_MAP[tool.type]) texName = TOOL_MAP[tool.type];
@@ -212,7 +214,7 @@ export class PlayerHand {
                     });
                     
                     // Apply biome tint if it's grass or foliage
-                    if (itemId.includes('grass') || itemId.includes('leaves')) {
+                    if (textureKey === 'grass' || textureKey.includes('grass') || textureKey.includes('fern') || textureKey.includes('leaves')) {
                         mat.color.set(0x79c05a); // Standard biome green
                     }
 
@@ -240,7 +242,7 @@ export class PlayerHand {
         const material = Array.isArray(sourceMaterial)
             ? sourceMaterial.map((mat) => (mat?.clone ? mat.clone() : mat))
             : (sourceMaterial?.clone ? sourceMaterial.clone() : sourceMaterial);
-        if (Array.isArray(material) && itemId === 'grass' && material[2]?.color) {
+        if (Array.isArray(material) && itemId === 'grass_block' && material[2]?.color) {
             material[2].color.setHex(GRASS_PREVIEW_TINT);
         }
         const geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);

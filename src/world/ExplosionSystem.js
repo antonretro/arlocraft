@@ -30,7 +30,7 @@ export class ExplosionSystem {
 
     getBlockColor(id) {
         const palette = {
-            grass: 0x7cc56a,
+            grass_block: 0x7cc56a,
             dirt: 0x8a6442,
             stone: 0x8c969f,
             sand: 0xd2c48d,

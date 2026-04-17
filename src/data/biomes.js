@@ -7,7 +7,7 @@ export const BIOMES = [
     {
         id: 'plains',
         name: 'Plains',
-        surfaceBlock: 'grass',
+        surfaceBlock: 'grass_block',
         fillerBlock: 'dirt',
         mcDepth: 2,
         mcScale: 0.07,
@@ -20,7 +20,7 @@ export const BIOMES = [
     {
         id: 'forest',
         name: 'Forest',
-        surfaceBlock: 'grass',
+        surfaceBlock: 'grass_block',
         fillerBlock: 'dirt',
         mcDepth: 5,
         mcScale: 0.2,
@@ -46,7 +46,7 @@ export const BIOMES = [
     {
         id: 'swamp',
         name: 'Swamp',
-        surfaceBlock: 'grass',
+        surfaceBlock: 'grass_block',
         fillerBlock: 'dirt',
         mcDepth: -3,
         mcScale: 0.1,
@@ -72,7 +72,7 @@ export const BIOMES = [
     {
         id: 'meadow',
         name: 'Meadow',
-        surfaceBlock: 'grass',
+        surfaceBlock: 'grass_block',
         fillerBlock: 'dirt',
         mcDepth: 0,
         mcScale: 0.05,

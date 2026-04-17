@@ -100,9 +100,7 @@ canvas { display: block; }
 }
 
 .tint-grass-sprite {
-    background-color: rgba(121, 192, 90, 0.78);
-    background-blend-mode: multiply;
-    filter: brightness(0.9) saturate(1.05);
+    filter: brightness(0.72) sepia(1) hue-rotate(58deg) saturate(2.2);
 }
 
 .iso-face.tint-grass-face {

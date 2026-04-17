@@ -1,7 +1,12 @@
-﻿{
+{
     "hardness":  1,
     "transparent":  true,
-    "name":  "Flower Rose Bush",
     "xp":  2,
-    "deco":  true
+    "deco":  true,
+    "id":  "rose_bush",
+    "textureId":  "rose_bush_bottom",
+    "pairId":  "rose_bush_top",
+    "pairOffsetY":  1,
+    "dropId":  "rose_bush",
+    "pickId":  "rose_bush"
 }

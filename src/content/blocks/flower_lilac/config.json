@@ -1,7 +1,12 @@
-﻿{
+{
     "hardness":  1,
     "transparent":  true,
-    "name":  "Flower Lilac",
     "xp":  2,
-    "deco":  true
+    "deco":  true,
+    "id":  "lilac",
+    "textureId":  "lilac_bottom",
+    "pairId":  "lilac_top",
+    "pairOffsetY":  1,
+    "dropId":  "lilac",
+    "pickId":  "lilac"
 }

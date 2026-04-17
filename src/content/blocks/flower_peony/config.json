@@ -1,7 +1,12 @@
-﻿{
+{
     "hardness":  1,
     "transparent":  true,
-    "name":  "Flower Peony",
     "xp":  2,
-    "deco":  true
+    "deco":  true,
+    "id":  "peony",
+    "textureId":  "peony_bottom",
+    "pairId":  "peony_top",
+    "pairOffsetY":  1,
+    "dropId":  "peony",
+    "pickId":  "peony"
 }

@@ -28,10 +28,10 @@ const CIVIC_STRUCTURE_POOL = [
 ];
 
 const BIOME_GROUND_LIFE = {
-    plains: ['flower_dandelion', 'flower_rose'],
-    forest: ['mushroom_brown', 'blueberry', 'strawberry', 'flower_rose'],
-    meadow: ['flower_dandelion', 'flower_rose', 'blueberry'],
-    swamp: ['mushroom_brown', 'blueberry'],
+    plains: ['short_grass', 'dandelion', 'poppy', 'red_tulip', 'tall_grass_bottom'],
+    forest: ['short_grass', 'fern', 'mushroom_brown', 'mushroom_red', 'blueberry', 'strawberry', 'poppy', 'tall_grass_bottom'],
+    meadow: ['short_grass', 'tall_grass_bottom', 'dandelion', 'poppy', 'orange_tulip', 'red_tulip', 'pink_tulip', 'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium', 'blueberry', 'lilac', 'peony', 'rose_bush'],
+    swamp: ['fern', 'mushroom_brown', 'mushroom_red', 'blueberry'],
     desert: ['tomato'],
     badlands: ['carrot'],
     canyon: ['carrot'],
@@ -189,6 +189,23 @@ export class Chunk {
         this.world.addBlock(x, y, z, finalId, this.key, false, { allowCorruption: true });
     }
 
+    addGeneratedPlant(x, y, z, id) {
+        const blockData = this.world.getBlockData(id);
+        const pairId = blockData?.pairId;
+        const pairOffsetY = Number(blockData?.pairOffsetY);
+        if (pairId && Number.isFinite(pairOffsetY) && pairOffsetY !== 0) {
+            const pairKey = this.world.getKey(x, y + pairOffsetY, z);
+            const pairExistingId = this.world.blockMap.get(pairKey);
+            if (pairExistingId && !this.world.isReplaceableForPlacement(pairExistingId)) return false;
+            this.addGeneratedBlock(x, y, z, id);
+            this.addGeneratedBlock(x, y + pairOffsetY, z, pairId);
+            return true;
+        }
+
+        this.addGeneratedBlock(x, y, z, id);
+        return true;
+    }
+
     // ... existing terrain gen methods ...
     generateTerrainColumn(wx, wz) {
         const terrainHeight = this.world.getColumnHeight(wx, wz);
@@ -266,8 +283,8 @@ export class Chunk {
         if (!inForcedSpawnZone && !isHighAltitude && terrainHeight > waterLevel && this.world.blockMap.get(this.world.getKey(wx, terrainHeight, wz)) !== 'water') {
             const decoHash = this.world.hash2D(wx * 22, wz * 33);
             if (decoHash < 0.08) {
-                const decoId = decoHash < 0.06 ? 'grass_tall' : (decoHash < 0.07 ? 'flower_rose' : 'flower_dandelion');
-                this.addGeneratedBlock(wx, terrainHeight + 1, wz, decoId);
+                const decoId = decoHash < 0.045 ? 'short_grass' : (decoHash < 0.065 ? 'tall_grass_bottom' : (decoHash < 0.073 ? 'poppy' : 'dandelion'));
+                this.addGeneratedPlant(wx, terrainHeight + 1, wz, decoId);
             } else {
                 this.placeGroundLife(wx, terrainHeight, wz, biome);
             }
@@ -363,7 +380,7 @@ export class Chunk {
         if (roll > 0.045) return;
 
         const pick = Math.floor(this.world.hash2D(x - 919, z + 771) * choices.length);
-        this.addGeneratedBlock(x, surfaceY + 1, z, choices[pick]);
+        this.addGeneratedPlant(x, surfaceY + 1, z, choices[pick]);
     }
 
     placeLeafBlob(x, y, z, radius, leafId, yRadius = 1) {

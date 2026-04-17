@@ -18,8 +18,7 @@ export class BlockRegistry {
         this.pixelTextures = new Map();
         this.breakingTextures = [];
         this.animatedGif = null;
-                this.idAliases = {
-            'grass': 'grass_block',
+        this.idAliases = {
             'wood': 'oak_log',
             'leaves': 'oak_leaves',
             'wood_birch': 'birch_log',
@@ -86,13 +85,6 @@ export class BlockRegistry {
 
             if (!this.blockTextures.has(blockId)) this.blockTextures.set(blockId, {});
             this.blockTextures.get(blockId)[fileName] = module.default || module;
-        }
-
-        // Legacy content uses `grass_tall` as the ID for the one-block decorative grass plant.
-        // In modern Minecraft terms this is short grass, and in this pack that art lives under
-        // the normal `grass` texture rather than the separate two-block `tall_grass_*` textures.
-        if (!this.blockTextures.has('grass_tall') && this.blockTextures.has('grass')) {
-            this.blockTextures.set('grass_tall', { ...this.blockTextures.get('grass') });
         }
 
         BLOCKS.forEach((config) => {
@@ -290,9 +282,7 @@ export class BlockRegistry {
     isCutoutBlockId(id, isDeco = false) {
         return (
             isDeco ||
-            id === 'grass_tall' ||
             id === 'mushroom_brown' ||
-            id.startsWith('flower_') ||
             id.includes('leaves') ||
             id.startsWith('mushroom_') ||
             id === 'fern' ||
@@ -330,8 +320,9 @@ export class BlockRegistry {
             if (!this.blockTextures.has(targetId)) targetId = strippedId.replace('_slab', '');
         }
 
-        const config = this.blocks.get(id) || this.blocks.get(strippedId) || this.blocks.get(targetId) || { id, name: id };
-        const textures = this.blockTextures.get(targetId) || this.blockTextures.get(id) || {};
+        const config = this.blocks.get(id) || this.blocks.get(strippedId) || this.blocks.get(targetId) || { id, name: id, textureId: targetId };
+        const textureId = config.textureId || targetId;
+        const textures = this.blockTextures.get(textureId) || this.blockTextures.get(targetId) || this.blockTextures.get(id) || {};
 
         if (!config && Object.keys(textures).length === 0) return new THREE.MeshLambertMaterial({ color: 0xff00ff });
         
@@ -341,7 +332,7 @@ export class BlockRegistry {
             
             // IGNEOUS FALLBACK: Check if filename exists without 'all.png' 
             // Often blocks in packs are named {id}.png (e.g. stone.png)
-            const fallbackKey = `${targetId}.png`;
+            const fallbackKey = `${textureId}.png`;
             const fallbackUrl = textures[fallbackKey];
             if (fallbackUrl) return this.loadTexture(fallbackUrl);
 
@@ -391,10 +382,13 @@ export class BlockRegistry {
                 }
             }
             
-            const isFoliage = id === 'grass_tall' || id === 'vine' || id === 'fern' || id === 'sugar_cane' || id.includes('leaves');
+            const isFoliage = (
+                (isDeco && (textureId === 'grass' || textureId.includes('grass') || textureId.includes('fern') || textureId === 'vine' || textureId === 'sugar_cane' || textureId.includes('roots') || textureId.includes('sprouts')))
+                || textureId.includes('leaves')
+            );
             // Grass top texture is already baked green in this pack; avoid instance tinting
             // to prevent rare black-top failures from per-instance color paths.
-            const isGrassTopOnly = id === 'grass' || id === 'grass_block';
+            const isGrassTopOnly = id === 'grass_block';
             
                         for (let i = 0; i < mats.length; i++) {
                 const m = mats[i];

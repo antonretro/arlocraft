@@ -371,11 +371,12 @@ export class HUD {
     createItemElement(item) {
         const element = document.createElement('div');
         element.className = 'item-icon';
-        const shouldTintGrassFace = item.id === 'grass';
-        const shouldTintFoliageIcon = item.id === 'grass_tall' || item.id === 'leaves' || item.id === 'oak_leaves';
-        const shouldUseGrassSpriteTint = item.id === 'grass_tall';
-
         const block = this.blockById.get(item.id);
+        const textureKey = this.getDisplayTextureKey(item.id);
+        const isDeco = Boolean(block?.deco);
+        const shouldTintGrassFace = item.id === 'grass_block';
+        const shouldTintFoliageIcon = ((isDeco && (textureKey === 'grass' || textureKey.includes('grass') || textureKey === 'fern')) || textureKey.includes('leaves'));
+        const shouldUseGrassSpriteTint = isDeco && textureKey === 'grass';
         const isBlockItem = (block && !block.deco) || 
                            item.id === 'wood' || item.id === 'leaves' || 
                            item.id.startsWith('wood_') || item.id.startsWith('leaves_') ||
@@ -664,7 +665,6 @@ export class HUD {
 
     getBlockTextureSet(id) {
         const legacyMap = {
-            'grass': 'grass_block',
             'wood': 'oak_log',
             'leaves': 'oak_leaves',
             'wood_birch': 'birch_log', 
@@ -693,13 +693,8 @@ export class HUD {
             'brick': 'bricks'
         };
         
-        let alias = legacyMap[id];
-        if (!alias) {
-            alias = this.resolveIconAlias(id) || id;
-            if (legacyMap[alias]) {
-                alias = legacyMap[alias];
-            }
-        }
+        let alias = this.getBlockTextureKey(id);
+        if (legacyMap[alias]) alias = legacyMap[alias];
 
         const all = this.blockTextures[alias] || this.blockTextures[`${alias}_all`];
         return {
@@ -714,10 +709,17 @@ export class HUD {
     getIconPath(itemId) {
         if (!itemId) return this.getGeneratedIconPath('item');
 
-        const alias = this.resolveIconAlias(itemId) || itemId;
-        if (alias === 'grass_tall') {
-            return this.blockTextures?.grass || this.blockTextures?.tall_grass_top || this.getGeneratedIconPath(itemId);
+        const block = this.blockById.get(itemId);
+        if (block?.deco) {
+            const textureKey = this.getDisplayTextureKey(itemId);
+            return this.blockTextures?.[textureKey]
+                || this.blockTextures?.[`${textureKey}_front`]
+                || this.blockTextures?.[`${textureKey}_top`]
+                || this.blockTextures?.[`${textureKey}_bottom`]
+                || this.getGeneratedIconPath(itemId);
         }
+
+        const alias = this.resolveIconAlias(itemId) || itemId;
         
         const toolMap = {
             // Picks / drills
@@ -902,11 +904,6 @@ export class HUD {
         if (explicit) return explicit;
 
         if (id.startsWith('wool_')) return 'grass';
-        if (id === 'grass_tall') return 'grass_tall';
-        if (id === 'flower_rose') return 'poppy';
-        if (id === 'flower_dandelion') return 'dandelion';
-        if (id.startsWith('flower_')) return id.replace('flower_', '');
-
         const block = this.blockById.get(id);
         if (block?.name?.includes('Ore')) return 'stone';
 
@@ -919,6 +916,21 @@ export class HUD {
         }
 
         return null;
+    }
+
+    getBlockTextureKey(itemId) {
+        const block = this.blockById.get(itemId);
+        if (block?.textureId) return block.textureId;
+        return this.resolveIconAlias(itemId) || itemId;
+    }
+
+    getDisplayTextureKey(itemId) {
+        const block = this.blockById.get(itemId);
+        if (block?.pairId && typeof block.textureId === 'string' && block.textureId.endsWith('_bottom')) {
+            const pairTexture = this.blockById.get(block.pairId)?.textureId;
+            if (pairTexture) return pairTexture;
+        }
+        return this.getBlockTextureKey(itemId);
     }
 
     describeItem(item) {

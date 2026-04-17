@@ -10,7 +10,7 @@ export class MiniMap {
         this.cells = 34;
 
         this.colors = {
-            grass: '#5c914d',
+            grass_block: '#5c914d',
             dirt: '#6b5138',
             stone: '#636c75',
             sand: '#bdae76',
