@@ -95,11 +95,16 @@ export class BlockRegistry {
         }
         const alphaCutout = Number(material.alphaTest) > 0.001 || Boolean(material.userData?.alphaCutout);
         if (alphaCutout) {
-            // Cutout textures (foliage/flowers) should write depth for stable sorting.
+            // Cutout textures (foliage/flowers) render most reliably as alpha-test only,
+            // not blended transparency.
+            material.transparent = false;
+            material.opacity = 1;
+            material.alphaToCoverage = true;
             material.depthWrite = true;
             return;
         }
         if (material.transparent) {
+            material.alphaToCoverage = false;
             material.depthWrite = false;
         }
     }
@@ -205,12 +210,12 @@ export class BlockRegistry {
         if (topTex || bottomTex || sideTex || frontTex || backTex || leftTex || rightTex) {
             const isDeco = Boolean(config.deco);
             const cutoutBlock = this.isCutoutBlockId(id, isDeco);
-            const isTransparent = Boolean(config.transparent) || cutoutBlock;
-            const isCutout = isTransparent && cutoutBlock;
+            const isCutout = cutoutBlock;
+            const isTransparent = Boolean(config.transparent) && !isCutout;
             const matConfig = {
                 transparent: isTransparent,
-                opacity: isTransparent ? (isCutout ? 1 : 0.82) : 1,
-                alphaTest: isCutout ? 0.24 : 0,
+                opacity: isTransparent ? 0.82 : 1,
+                alphaTest: isCutout ? 0.33 : 0,
                 depthWrite: isCutout ? true : !isTransparent,
                 side: isDeco ? THREE.DoubleSide : THREE.FrontSide
             };
@@ -230,7 +235,9 @@ export class BlockRegistry {
             }
             
             const isFoliage = id === 'grass_tall' || id === 'vine' || id === 'fern' || id === 'sugar_cane' || id.startsWith('leaves');
-            const isGrassTopOnly = id === 'grass';
+            // Grass top texture is already baked green in this pack; avoid instance tinting
+            // to prevent rare black-top failures from per-instance color paths.
+            const isGrassTopOnly = false;
             
             for (let i = 0; i < mats.length; i++) {
                 const m = mats[i];
@@ -298,13 +305,13 @@ export class BlockRegistry {
             } else {
                 const isDeco = Boolean(config.deco);
                 const cutoutBlock = this.isCutoutBlockId(id, isDeco);
-                const isTransparent = Boolean(config.transparent) || cutoutBlock;
-                const isCutout = isTransparent && cutoutBlock;
+                const isCutout = cutoutBlock;
+                const isTransparent = Boolean(config.transparent) && !isCutout;
                 material = new THREE.MeshLambertMaterial({
                     color: config.color ? parseInt(config.color) : 0x9c9c9c,
                     transparent: isTransparent,
-                    opacity: isTransparent ? (isCutout ? 1 : 0.82) : 1,
-                    alphaTest: isCutout ? 0.24 : 0,
+                    opacity: isTransparent ? 0.82 : 1,
+                    alphaTest: isCutout ? 0.33 : 0,
                     depthWrite: isCutout ? true : !isTransparent
                 });
                 if (isCutout) material.userData.alphaCutout = true;

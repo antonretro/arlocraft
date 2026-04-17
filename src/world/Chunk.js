@@ -123,8 +123,32 @@ export class Chunk {
     resolveBiomeTintHex(biome) {
         const fallback = 0x91bd59;
         const raw = biome?.color;
+        const normalize = (hex) => {
+            const value = Math.max(0, Math.min(0xffffff, Math.floor(hex)));
+            let r = (value >> 16) & 0xff;
+            let g = (value >> 8) & 0xff;
+            let b = value & 0xff;
+
+            // Safety clamp: prevent accidental near-black biome tint from nuking grass color.
+            const minChannel = 58;
+            if (r < minChannel) r = minChannel;
+            if (g < minChannel) g = minChannel;
+            if (b < minChannel) b = minChannel;
+
+            const sum = r + g + b;
+            const minLumaSum = 230;
+            if (sum < minLumaSum && sum > 0) {
+                const scale = minLumaSum / sum;
+                r = Math.min(255, Math.round(r * scale));
+                g = Math.min(255, Math.round(g * scale));
+                b = Math.min(255, Math.round(b * scale));
+            }
+
+            return (r << 16) | (g << 8) | b;
+        };
+
         if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
-            return Math.floor(raw);
+            return normalize(raw);
         }
         if (typeof raw === 'string') {
             const text = raw.trim();
@@ -132,10 +156,10 @@ export class Chunk {
                 const parsed = text.toLowerCase().startsWith('0x')
                     ? Number(text)
                     : Number.parseInt(text, 16);
-                if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+                if (Number.isFinite(parsed) && parsed > 0) return normalize(parsed);
             }
         }
-        return fallback;
+        return normalize(fallback);
     }
 
     getRenderOrder(id, material) {
@@ -542,7 +566,10 @@ export class Chunk {
             const transparentMaterial = materialIsTransparent(material);
             if (!isWater && !isDeco && !transparentMaterial) im.castShadow = true;
             else im.castShadow = false;
-            im.receiveShadow = true;
+            // Grass tops are biome-tinted and were getting extreme dark blotches from shadow acne.
+            // Keep shadows on hard blocks, but skip them for grass-style surfaces.
+            const receivesShadow = !transparentMaterial && id !== 'grass' && id !== 'grass_tall';
+            im.receiveShadow = receivesShadow;
 
             let renderCount = 0;
             for (let i = 0; i < count; i++) {

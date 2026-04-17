@@ -300,7 +300,8 @@ export class ChunkManager {
                         break;
                     }
                 }
-                if (hasVertexColors) {
+                const hasInstanceColor = Boolean(mesh.instanceColor);
+                if ((hasVertexColors && !hasInstanceColor) || (!hasVertexColors && hasInstanceColor)) {
                     needsRebuild = true;
                     break;
                 }

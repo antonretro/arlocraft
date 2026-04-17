@@ -56,11 +56,12 @@ export function computeFogDensity(daylight, submerged = false) {
 }
 
 export function materialIsTransparent(material) {
+    const isCutout = (mat) => Number(mat?.alphaTest) > 0.001 || Boolean(mat?.userData?.alphaCutout);
     if (Array.isArray(material)) {
         for (let i = 0; i < material.length; i++) {
-            if (material?.[i]?.transparent) return true;
+            if (material?.[i]?.transparent || isCutout(material?.[i])) return true;
         }
         return false;
     }
-    return Boolean(material?.transparent);
+    return Boolean(material?.transparent || isCutout(material));
 }
