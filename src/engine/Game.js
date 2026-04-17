@@ -1423,6 +1423,7 @@ export class Game {
             if (this.framePanel) this.framePanel.dom.style.display = 'block';
         }
         this.hud.init();
+        this.updatePlayerSkin(); // Final Premium Polish: Initialize textured arms immediately
         this.initPerfPanel();
 
         if (TouchControls.isTouchDevice()) {
