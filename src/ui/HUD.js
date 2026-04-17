@@ -373,6 +373,7 @@ export class HUD {
         element.className = 'item-icon';
         const shouldTintGrassFace = item.id === 'grass';
         const shouldTintFoliageIcon = item.id === 'grass_tall' || item.id === 'leaves' || item.id === 'oak_leaves';
+        const shouldUseGrassSpriteTint = item.id === 'grass_tall';
 
         const block = this.blockById.get(item.id);
         const isBlockItem = (block && !block.deco) || 
@@ -421,7 +422,9 @@ export class HUD {
              const icon = this.getIconPath(item.id);
              if (icon) {
                  element.style.backgroundImage = `url('${icon}')`;
-                 if (shouldTintFoliageIcon) {
+                 if (shouldUseGrassSpriteTint) {
+                     element.classList.add('tint-grass-sprite');
+                 } else if (shouldTintFoliageIcon) {
                      element.classList.add('tint-grass');
                  }
                  if (icon.startsWith('data:image/svg+xml')) {
@@ -713,7 +716,7 @@ export class HUD {
 
         const alias = this.resolveIconAlias(itemId) || itemId;
         if (alias === 'grass_tall') {
-            return this.blockTextures?.tall_grass_top || this.blockTextures?.grass || this.getGeneratedIconPath(itemId);
+            return this.blockTextures?.grass || this.blockTextures?.tall_grass_top || this.getGeneratedIconPath(itemId);
         }
         
         const toolMap = {

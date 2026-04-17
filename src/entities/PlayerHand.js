@@ -8,6 +8,13 @@ for (const [path, module] of Object.entries(itemTextureModules)) {
     ITEM_TEXTURES.set(fileName, module.default || module);
 }
 
+const blockTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/block/*.png', { eager: true, query: '?url' });
+const BLOCK_TEXTURES = new Map();
+for (const [path, module] of Object.entries(blockTextureModules)) {
+    const fileName = path.split('/').pop().replace('.png', '');
+    BLOCK_TEXTURES.set(fileName, module.default || module);
+}
+
 const TOOL_MAP = {
     'pick': 'wooden_pickaxe',
     'sword': 'wooden_sword',
@@ -169,14 +176,14 @@ export class PlayerHand {
             let texName = itemId;
             // Map common block IDs to their item texture names if needed
             if (itemId.startsWith('flower_')) texName = itemId.replace('flower_', '');
-            if (itemId === 'grass_tall') texName = 'tall_grass';
+            if (itemId === 'grass_tall') texName = 'grass';
             
             if (isTool) {
                 if (tool?.type && TOOL_MAP[tool.type]) texName = TOOL_MAP[tool.type];
                 else if (tool?.id && TOOL_MAP[tool.id]) texName = TOOL_MAP[tool.id];
             }
 
-            const url = ITEM_TEXTURES.get(texName) || ITEM_TEXTURES.get(itemId);
+            const url = ITEM_TEXTURES.get(texName) || ITEM_TEXTURES.get(itemId) || BLOCK_TEXTURES.get(texName);
 
             if (url || isDeco) {
                 let texture;

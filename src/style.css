@@ -99,6 +99,12 @@ canvas { display: block; }
     filter: brightness(0.9) sepia(1) hue-rotate(65deg) saturate(2.5);
 }
 
+.tint-grass-sprite {
+    background-color: rgba(121, 192, 90, 0.78);
+    background-blend-mode: multiply;
+    filter: brightness(0.9) saturate(1.05);
+}
+
 .iso-face.tint-grass-face {
     background-color: rgba(121, 192, 90, 0.55);
     background-blend-mode: multiply;
