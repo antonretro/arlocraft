@@ -11,7 +11,7 @@ export const RECIPE_BOOK = [
             'WW',
             'WW'
         ],
-        key: { W: 'oak_log' },
+        key: { W: 'oak_planks' },
         result: { id: 'crafting_table', count: 1, kind: 'block' }
     },
     {

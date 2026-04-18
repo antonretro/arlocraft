@@ -102,6 +102,7 @@ export class World {
 
     setRenderDistance(d) { this.chunkManager.setRenderDistance(d); }
     isPositionInWater(x, y, z) { return this.terrain.isPositionInWater(x, y, z); }
+    getWaterSurfaceYAt(x, z) { return this.terrain.getWaterSurfaceYAt(x, z); }
     getSafeSpawnPoint(x, z, r) { return this.terrain.getSafeSpawnPoint(x, z, r); }
     digDownFrom(x, z) { return this.terrain.digDownFrom(x, z); }
     

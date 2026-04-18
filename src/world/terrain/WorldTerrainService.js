@@ -132,9 +132,18 @@ export class WorldTerrainService {
         return { x: Math.floor(x + 0.5), y: height, z: Math.floor(z + 0.5) };
     }
 
+    getWaterSurfaceYAt(x, z) {
+        const biome = this.getBiomeAt(x, z);
+        const waterLevel = this.world.seaLevel + (biome.waterLevelOffset ?? 0);
+        const terrainHeight = this.getTerrainHeight(x, z);
+        if (terrainHeight >= waterLevel) return null;
+        return waterLevel + 0.5;
+    }
+
     isPositionInWater(x, y, z) {
-        const height = this.getTerrainHeight(x, z);
-        return y <= this.world.seaLevel && y > height;
+        const terrainHeight = this.getTerrainHeight(x, z);
+        const waterSurfaceY = this.getWaterSurfaceYAt(x, z);
+        return waterSurfaceY !== null && y <= waterSurfaceY && y > terrainHeight;
     }
 
     getSafeSpawnPoint(x, z, radius = 50) {

@@ -27,6 +27,9 @@ export class Physics {
         this.swimRiseSpeed = 5.4;
         this.swimSinkSpeed = -4.8;
         this.buoyancy = 1.2;
+        this.waterExitBoost = 7.6;
+        this.waterSurfaceExitWindow = 0.95;
+        this.waterExitStepHeight = 1.15;
         this.feetOffset = 0.3;
         this.maxStepHeight = 0.62;
         this.playerRadius = 0.32;
@@ -334,6 +337,8 @@ export class Physics {
         const keys = input?.keys ?? Object.create(null);
 
         const inWater = this.world.isPositionInWater(this.position.x, this.position.y, this.position.z);
+        const waterSurfaceY = inWater ? this.world.getWaterSurfaceYAt(this.position.x, this.position.z) : null;
+        const nearWaterSurface = waterSurfaceY !== null && (waterSurfaceY - this.position.y) <= this.waterSurfaceExitWindow;
         const grounded = !inWater && this.mode === 'SURVIVAL' && this.isGrounded();
 
         let wantsToCrouch = this.mode === 'SURVIVAL' && (keys['ShiftLeft'] || keys['ShiftRight']);
@@ -433,6 +438,9 @@ export class Physics {
                     targetY = this.swimSinkSpeed;
                 }
                 this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, targetY, delta * 9.5);
+                if (spaceTapped && nearWaterSurface) {
+                    this.velocity.y = Math.max(this.velocity.y, this.waterExitBoost);
+                }
             } else if (grounded) {
                 if (this.velocity.y < 0) this.velocity.y = 0;
                 const bufferedJump = this.jumpBufferTimer > 0 && this.coyoteTimer > 0;
@@ -472,6 +480,8 @@ export class Physics {
 
         for (let i = 0; i < steps; i++) {
             const inWater = this.world.isPositionInWater(this.position.x, this.position.y, this.position.z);
+            const waterSurfaceY = inWater ? this.world.getWaterSurfaceYAt(this.position.x, this.position.z) : null;
+            const nearWaterSurface = waterSurfaceY !== null && (waterSurfaceY - this.position.y) <= this.waterSurfaceExitWindow;
             const grounded = !inWater && this.mode === 'SURVIVAL' && this.isGrounded();
             const oldX = this.position.x;
             const oldY = this.position.y;
@@ -498,9 +508,10 @@ export class Physics {
                     const groundNext = this.getGroundYAt(this.position.x, oldZ, this.position.y);
                     const stepUp = groundNext - groundCurrent;
                     const stepCandidateY = Math.max(this.position.y, groundNext);
+                    const maxStepHeight = (inWater && nearWaterSurface) ? this.waterExitStepHeight : this.maxStepHeight;
 
-                    const canStep = grounded && this.velocity.y <= 0.2;
-                    if (canStep && stepUp > 0 && stepUp <= this.maxStepHeight && this.canOccupyAt(this.position.x, stepCandidateY, oldZ)) {
+                    const canStep = this.velocity.y <= 0.2 && (grounded || (inWater && nearWaterSurface));
+                    if (canStep && stepUp > 0 && stepUp <= maxStepHeight && this.canOccupyAt(this.position.x, stepCandidateY, oldZ)) {
                         this.position.y = stepCandidateY;
                     } else {
                         // Can't step, so block X
@@ -525,9 +536,10 @@ export class Physics {
                     const groundNext = this.getGroundYAt(this.position.x, this.position.z, this.position.y);
                     const stepUp = groundNext - groundCurrent;
                     const stepCandidateY = Math.max(this.position.y, groundNext);
+                    const maxStepHeight = (inWater && nearWaterSurface) ? this.waterExitStepHeight : this.maxStepHeight;
 
-                    const canStep = grounded && this.velocity.y <= 0.2;
-                    if (canStep && stepUp > 0 && stepUp <= this.maxStepHeight && this.canOccupyAt(this.position.x, stepCandidateY, this.position.z)) {
+                    const canStep = this.velocity.y <= 0.2 && (grounded || (inWater && nearWaterSurface));
+                    if (canStep && stepUp > 0 && stepUp <= maxStepHeight && this.canOccupyAt(this.position.x, stepCandidateY, this.position.z)) {
                         this.position.y = stepCandidateY;
                     } else {
                         // Can't step, so block Z
