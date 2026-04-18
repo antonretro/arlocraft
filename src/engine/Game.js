@@ -20,14 +20,14 @@ import { FEATURES } from '../data/features.js';
 import { PlayerHand } from '../entities/PlayerHand.js';
 import { AudioSystem } from './AudioSystem.js';
 import { migrateInventoryItem } from '../data/blockMigrations.js';
-import appPackage from '../../package.json';
-
-const LOCAL_APP_VERSION = `v${appPackage?.version ?? '0.0.0'}`;
+import { SkinLoader } from '../utils/SkinLoader.js';
+const LOCAL_APP_VERSION = 'v0.0.0';
 const GITHUB_REPO_OWNER = 'antonretro';
 const GITHUB_REPO_NAME = 'arlocraft';
 
 export class Game {
     constructor() {
+        console.log("[ArloCraft] Game constructor starting...");
         this.settings = this.loadSettings();
         this.selectedStartMode = this.settings.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
         this.selectedWorldSlot = this.settings.selectedWorldSlot ?? 'slot-1';
@@ -54,6 +54,11 @@ export class Game {
 
         this.hasStarted = false;
         this.isPaused = false;
+
+        // Pre-allocated vectors to avoid per-frame GC pressure
+        this._camHead = new THREE.Vector3();
+        this._camLook = new THREE.Vector3();
+        this._camDesired = new THREE.Vector3();
         this.lastKnownPosition = new THREE.Vector3(0, 70, 0);
         this.resumeGraceFrames = 0;
 
@@ -83,6 +88,7 @@ export class Game {
         this.audio = new AudioSystem();
         this.audio.applyFromSettings(this.settings);
         this.audio.installAutoUnlock(document);
+        this.skinLoader = new SkinLoader();
 
         this.clock = new THREE.Clock();
         this.bindEvents();
@@ -137,6 +143,7 @@ export class Game {
 
         group.visible = false;
         this.playerVisual = group;
+        this.playerParts = { torso, head, armL, armR, legL, legR, face: facePlane };
         this.renderer.scene.add(this.playerVisual);
     }
 
@@ -210,12 +217,13 @@ export class Game {
             preferredMode: 'SURVIVAL',
             autoJump: true,
             autoQuality: false,
+            fpsCap: 30,
             renderDistance: 2,
             selectedWorldSlot: 'slot-1',
             shadowsEnabled: true,
             fogDensityScale: 1.0,
             perfPanelVisible: false,
-            resolutionScale: 1.0,
+            resolutionScale: 0.5,
             audioMuted: false,
             audioMaster: 0.82,
             audioSfx: 0.9,
@@ -236,6 +244,7 @@ export class Game {
                 preferredMode: parsed.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL',
                 autoJump: parsed.autoJump !== undefined ? Boolean(parsed.autoJump) : defaults.autoJump,
                 autoQuality: parsed.autoQuality !== undefined ? Boolean(parsed.autoQuality) : defaults.autoQuality,
+                fpsCap: [30, 60, 90, 120, 144, 999].includes(Number(parsed.fpsCap)) ? Number(parsed.fpsCap) : defaults.fpsCap,
                 renderDistance: Number.isFinite(parsed.renderDistance)
                     ? Math.max(2, Math.min(6, Math.round(parsed.renderDistance)))
                     : defaults.renderDistance,
@@ -810,20 +819,28 @@ export class Game {
         this.gameState.setPaused(false);
         this.idleWorldTick = 0;
 
-        this.showTitle(false);
+        this.showLoadingScreen('Generating World...', 'Building terrain and structures...');
         this.showPause(false);
         this.showSettings(false);
         this.helpPanel.setState('playing');
 
-        if (this.touchControls) {
-            this.touchControls.show(true);
-        } else {
-            this.input.setPointerLock();
-        }
+        setTimeout(() => {
+            const overlay = document.getElementById('overlay');
+            if (overlay) overlay.style.display = 'none';
+            if (this._loadingInterval) { clearInterval(this._loadingInterval); this._loadingInterval = null; }
+            const bar = document.getElementById('loading-progress');
+            if (bar) bar.style.width = '100%';
 
-        document.getElementById('crosshair')?.classList.add('active');
-        const hud = document.getElementById('hud');
-        if (hud) hud.style.display = 'flex';
+            if (this.touchControls) {
+                this.touchControls.show(true);
+            } else {
+                this.input.setPointerLock();
+            }
+
+            document.getElementById('crosshair')?.classList.add('active');
+            const hud = document.getElementById('hud');
+            if (hud) hud.style.display = 'flex';
+        }, 1800);
     }
 
     returnToTitle() {
@@ -895,16 +912,43 @@ export class Game {
     }
 
     setMenuScreen(screen) {
-        // Updated
-        const screenIds = ['screen-title', 'screen-world-select', 'screen-world-create'];
-        const nextId = screen === 'world-select'
-            ? 'screen-world-select'
-            : (screen === 'world-create' ? 'screen-world-create' : 'screen-title');
+        const screenIds = ['screen-booting', 'screen-title', 'screen-world-select', 'screen-world-create', 'screen-loading'];
+        const nextId = screen === 'booting' ? 'screen-booting'
+            : screen === 'world-select' ? 'screen-world-select'
+            : screen === 'world-create' ? 'screen-world-create'
+            : screen === 'loading' ? 'screen-loading'
+            : 'screen-title';
         for (const id of screenIds) {
             const node = document.getElementById(id);
             if (!node) continue;
             node.classList.toggle('ni-screen-active', id === nextId);
         }
+    }
+
+    showLoadingScreen(statusText = 'Generating World...', subText = 'Building terrain and structures...') {
+        const overlay = document.getElementById('overlay');
+        if (overlay) overlay.style.display = 'flex';
+        const status = document.getElementById('loading-status');
+        const sub = document.getElementById('loading-subtext');
+        const bar = document.getElementById('loading-progress');
+        if (status) status.textContent = statusText;
+        if (sub) sub.textContent = subText;
+        if (bar) bar.style.width = '0%';
+        this.setMenuScreen('loading');
+        // Animate progress bar
+        if (this._loadingInterval) clearInterval(this._loadingInterval);
+        let pct = 0;
+        this._loadingInterval = setInterval(() => {
+            pct = Math.min(pct + Math.random() * 8, 90);
+            if (bar) bar.style.width = pct + '%';
+        }, 120);
+    }
+
+    hideLoadingScreen() {
+        if (this._loadingInterval) { clearInterval(this._loadingInterval); this._loadingInterval = null; }
+        const bar = document.getElementById('loading-progress');
+        if (bar) bar.style.width = '100%';
+        setTimeout(() => this.setMenuScreen('title'), 350);
     }
 
     isSettingsOpen() {
@@ -1223,6 +1267,16 @@ export class Game {
             });
         }
 
+        const fpsCapSelect = document.getElementById('setting-fps-cap');
+        if (fpsCapSelect) {
+            fpsCapSelect.value = String(this.settings.fpsCap ?? 60);
+            fpsCapSelect.addEventListener('change', () => {
+                this.settings.fpsCap = Number(fpsCapSelect.value);
+                this.saveSettings();
+                this.setStatus(`FPS Cap: ${this.settings.fpsCap === 999 ? 'Uncapped' : this.settings.fpsCap + ' FPS'}`);
+            });
+        }
+
         if (btnOptions) {
             btnOptions.addEventListener('click', () => {
                 this.showSettings(true);
@@ -1324,6 +1378,7 @@ export class Game {
         // --- Resolution ---
         if (resolutionInput) {
             resolutionInput.value = String(this.settings.resolutionScale);
+            this.renderer.setResolutionScale(this.settings.resolutionScale);
             if (resolutionLabel) resolutionLabel.textContent = `${Number(this.settings.resolutionScale).toFixed(1)}x`;
             resolutionInput.addEventListener('input', () => {
                 const val = Number(resolutionInput.value);
@@ -1411,7 +1466,9 @@ export class Game {
         this.setMenuScreen('title');
     }
     async init() {
+        console.log("[ArloCraft] Starting engine init...");
         await this.physics.init();
+        console.log("[ArloCraft] Physics initialized.");
         this.applyQualityTier(this.settings.qualityTierPref ?? 'low');
         this.camera.instance.fov = this.settings.fov ?? 75;
         this.camera.instance.updateProjectionMatrix();
@@ -1431,14 +1488,16 @@ export class Game {
             this.touchControls = new TouchControls(this);
         }
 
+        console.log("[ArloCraft] Initializing UI elements...");
+        this.onResize();
+        this.animate();
+        window.addEventListener('resize', () => this.onResize());
+
+        console.log("[ArloCraft] Transitioning to Title Screen...");
         this.showTitle(true);
         this.showPause(false);
         this.showSettings(false);
         this.helpPanel.setState('title');
-
-        this.onResize();
-        this.animate();
-        window.addEventListener('resize', () => this.onResize());
     }
 
     resetEntities() {
@@ -1504,32 +1563,46 @@ export class Game {
         const pos = positionOverride ?? this.physics.playerBody.translation();
         const eyeHeight = this.physics?.eyeHeight ?? this.camera?.eyeHeight ?? 1.32;
         const feetOffset = this.physics?.feetOffset ?? 0.3;
-        const head = new THREE.Vector3(pos.x, pos.y + eyeHeight, pos.z);
 
-        const lookDir = new THREE.Vector3(
-            -Math.sin(this.viewYaw) * Math.cos(this.viewPitch),
+        const cy = Math.cos(this.viewPitch);
+        this._camHead.set(pos.x, pos.y + eyeHeight, pos.z);
+        this._camLook.set(
+            -Math.sin(this.viewYaw) * cy,
             Math.sin(this.viewPitch),
-            -Math.cos(this.viewYaw) * Math.cos(this.viewPitch)
-        ).normalize();
-        const shakeAmount = this.screenShake;
-        const shakeX = (Math.random() - 0.5) * shakeAmount;
-        const shakeY = (Math.random() - 0.5) * shakeAmount;
-        const shakeZ = (Math.random() - 0.5) * shakeAmount;
+            -Math.cos(this.viewYaw) * cy
+        );
 
-        this.playerVisual.visible = true;
-        this.playerVisual.position.set(pos.x, pos.y - feetOffset, pos.z);
-        this.playerVisual.rotation.set(0, this.viewYaw, 0);
+        const shakeAmount = this.screenShake;
+        const shakeX = shakeAmount > 0 ? (Math.random() - 0.5) * shakeAmount : 0;
+        const shakeY = shakeAmount > 0 ? (Math.random() - 0.5) * shakeAmount : 0;
+        const shakeZ = shakeAmount > 0 ? (Math.random() - 0.5) * shakeAmount : 0;
 
         const cameraMode = this.cameraModes[this.cameraModeIndex];
-        const isFront = cameraMode === 'THIRD_PERSON_FRONT';
-        const distance = isFront ? 3.8 : -4.1;
-        const desired = head.clone().addScaledVector(lookDir, distance).add(new THREE.Vector3(0, isFront ? 0.3 : 1.1, 0));
-        desired.add(new THREE.Vector3(shakeX, shakeY, shakeZ));
-        this.camera.instance.position.lerp(desired, 0.4);
-        if (isFront) {
-            this.camera.instance.lookAt(head);
+
+        if (cameraMode === 'FIRST_PERSON') {
+            this.playerVisual.visible = false;
+            this.camera.instance.position.set(
+                this._camHead.x + shakeX,
+                this._camHead.y + shakeY,
+                this._camHead.z + shakeZ
+            );
+            this._camDesired.copy(this._camHead).add(this._camLook);
+            this.camera.instance.lookAt(this._camDesired);
         } else {
-            this.camera.instance.lookAt(head);
+            this.playerVisual.visible = true;
+            this.playerVisual.position.set(pos.x, pos.y - feetOffset, pos.z);
+            const isFront = cameraMode === 'THIRD_PERSON_FRONT';
+            this.playerVisual.rotation.y = isFront ? this.viewYaw : (this.viewYaw + Math.PI);
+
+            const distance = isFront ? 3.8 : -4.2;
+            const yOff = isFront ? 0.3 : 1.1;
+            this._camDesired.copy(this._camHead)
+                .addScaledVector(this._camLook, distance);
+            this._camDesired.x += shakeX;
+            this._camDesired.y += yOff + shakeY;
+            this._camDesired.z += shakeZ;
+            this.camera.instance.position.lerp(this._camDesired, 0.4);
+            this.camera.instance.lookAt(this._camHead);
         }
     }
 
@@ -1652,18 +1725,40 @@ export class Game {
         const now = performance.now();
         if ((now - this.performanceSampler.lastAdjust) < 2600) return;
 
+        const cap = this.settings.fpsCap === 999 ? 144 : (this.settings.fpsCap || 60);
+        const lowThreshold = cap * 0.62;   // e.g. <37 for 60fps cap
+        const highThreshold = cap * 0.92;  // e.g. >55 for 60fps cap
+
+        // Quality tiers also drive resolution scale and render distance
+        const AUTO_PROFILE = {
+            low:      { resolution: 0.6, renderDist: 2 },
+            balanced: { resolution: 0.85, renderDist: 3 },
+            high:     { resolution: 1.0, renderDist: 4 }
+        };
+
         let target = this.qualityTier;
         const idx = this.qualityOrder.indexOf(this.qualityTier);
-        if (fps < 40 && idx > 0) {
+        if (fps < lowThreshold && idx > 0) {
             target = this.qualityOrder[idx - 1];
-        } else if (fps > 58 && idx >= 0 && idx < (this.qualityOrder.length - 1)) {
+        } else if (fps > highThreshold && idx < (this.qualityOrder.length - 1)) {
             target = this.qualityOrder[idx + 1];
         }
 
         if (target === this.qualityTier) return;
         this.applyQualityTier(target);
+
+        const profile = AUTO_PROFILE[target];
+        if (profile) {
+            this.renderer.setResolutionScale(profile.resolution);
+            this.settings.resolutionScale = profile.resolution;
+            const resInput = document.getElementById('setting-resolution');
+            const resLabel = document.getElementById('setting-resolution-value');
+            if (resInput) resInput.value = profile.resolution;
+            if (resLabel) resLabel.textContent = profile.resolution.toFixed(1) + 'x';
+        }
+
         this.performanceSampler.lastAdjust = now;
-        this.setStatus(`Auto quality: ${target.toUpperCase()} (${Math.round(fps)} FPS, render ${this.getEffectiveRenderDistanceForTier(target)})`);
+        this.setStatus(`Auto: ${target.toUpperCase()} | ${Math.round(fps)} FPS | res ${((profile?.resolution || 1) * 100).toFixed(0)}% | rd ${this.getEffectiveRenderDistanceForTier(target)}`);
     }
 
     handlePrimaryAction(delta) {
@@ -1755,8 +1850,15 @@ export class Game {
         this.survival.update(delta);
     }
 
-    animate() {
-        requestAnimationFrame(() => this.animate());
+    animate(timestamp = 0) {
+        requestAnimationFrame((ts) => this.animate(ts));
+
+        // FPS cap
+        const targetMs = 1000 / (this.settings.fpsCap || 60);
+        const elapsed = timestamp - (this._lastFrameTs || 0);
+        if (elapsed < targetMs - 1) return;
+        this._lastFrameTs = timestamp - (elapsed % targetMs);
+
         if (this.framePanel) this.framePanel.begin();
         const delta = Math.min(this.clock.getDelta(), 0.1);
         const frameStart = performance.now();
@@ -1787,6 +1889,7 @@ export class Game {
             const worldStart = performance.now();
             this.world.update(playerPos, delta);
             this.profiler.worldMs = performance.now() - worldStart;
+            runWorldThisFrame = false;
             this.updateSurvivalSystems(delta);
             this.animatePlayer(delta);
             this.updateDebugHUD(delta);
@@ -1831,7 +1934,7 @@ export class Game {
         const isGrounded = this.physics.isGrounded() && !inWater;
         
         if (isGrounded && speed > 0.1) {
-            this.bobCycle = (this.bobCycle || 0) + delta * 12;
+            this.bobCycle = (this.bobCycle || 0) + delta * 8.5;
         } else if (inWater) {
             this.bobCycle = (this.bobCycle || 0) + delta * 4;
         } else {
@@ -1985,13 +2088,30 @@ export class Game {
             if (!this.skinLoader) throw new Error('skinLoader not initialized');
             const { materials } = await this.skinLoader.loadSkin(username);
             if (this.playerParts) {
-                Object.assign(this.playerParts.head.material, materials.head);
-                Object.assign(this.playerParts.torso.material, materials.torso);
+                this.playerParts.head.material = materials.head;
+                materials.head.forEach(m => { m.needsUpdate = true; });
+                this.playerParts.torso.material = materials.torso;
+                materials.torso.forEach(m => { m.needsUpdate = true; });
+                this.playerParts.armL.material = materials.armL;
+                materials.armL.forEach(m => { m.needsUpdate = true; });
+                this.playerParts.armR.material = materials.armR;
+                materials.armR.forEach(m => { m.needsUpdate = true; });
+                this.playerParts.legL.material = materials.legL;
+                materials.legL.forEach(m => { m.needsUpdate = true; });
+                this.playerParts.legR.material = materials.legR;
+                materials.legR.forEach(m => { m.needsUpdate = true; });
                 if (this.playerParts.face) this.playerParts.face.visible = false;
             }
             if (this.hand) this.hand.updateArmSkin(materials.armR);
             const h = document.getElementById('arlo-face-image');
-            if (h && username) h.src = `https://crafatar.com/avatars/${username}?size=64&overlay`;
+            if (h) {
+                // If we have local materials (offline or custom), use the head front face
+                if (materials.head && materials.head[4]?.map?.image) {
+                    h.src = materials.head[4].map.image.toDataURL();
+                } else if (username) {
+                    h.src = `https://crafatar.com/avatars/${username}?size=64&overlay`;
+                }
+            }
             this.settings.skinUsername = username;
             this.saveSettings();
         } catch (e) { console.error('[ArloCraft] Skin Error:', e); }

@@ -17,8 +17,8 @@ export class Renderer {
         document.getElementById('app').appendChild(this.instance.domElement);
 
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87ceeb);
-        this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.012);
+        this.scene.background = new THREE.Color(0x7ec8f0);
+        this.scene.fog = new THREE.FogExp2(0x7ec8f0, 0.012);
 
         this.daylight = 1;
         this.submerged = false;
@@ -41,6 +41,9 @@ export class Renderer {
         this.hemiLight = new THREE.HemisphereLight(0xcce8ff, 0x4a402f, 0.95);
         this.scene.add(this.hemiLight);
 
+        this.ambientFill = new THREE.AmbientLight(0xf4ead8, 0.38);
+        this.scene.add(this.ambientFill);
+
         this.sun = new THREE.DirectionalLight(0xfffff5, 1.25);
         this.sun.position.set(20, 100, 20);
         this.sun.castShadow = true;
@@ -60,10 +63,12 @@ export class Renderer {
         const skyGeo = new THREE.SphereGeometry(450, 64, 32);
         const skyMat = new THREE.ShaderMaterial({
             uniforms: {
-                top: { value: new THREE.Color(0x1a72f5) },
-                bottom: { value: new THREE.Color(0x6fb8ff) },
-                offset: { value: 33 },
-                exponent: { value: 0.6 }
+                top:      { value: new THREE.Color(0x0d5fd6) },
+                bottom:   { value: new THREE.Color(0x7ec8f0) },
+                horizon:  { value: new THREE.Color(0xffd090) },
+                horizonStrength: { value: 0.0 },
+                offset:   { value: 0 },
+                exponent: { value: 1.8 }
             },
             vertexShader: `
                 varying vec3 vLocalPos;
@@ -75,18 +80,23 @@ export class Renderer {
             fragmentShader: `
                 uniform vec3 top;
                 uniform vec3 bottom;
+                uniform vec3 horizon;
+                uniform float horizonStrength;
                 uniform float offset;
                 uniform float exponent;
                 varying vec3 vLocalPos;
                 void main() {
                     float h = normalize(vLocalPos).y;
-                    // Clamp top/bottom mix to prevent color overshooting at horizons
-                    float factor = clamp(pow(max(h + offset / 100.0, 0.0), exponent), 0.0, 1.0);
-                    gl_FragColor = vec4(mix(bottom, top, factor), 1.0);
+                    float factor = clamp(pow(h * 0.5 + 0.5, exponent), 0.0, 1.0);
+                    vec3 sky = mix(bottom, top, factor);
+                    // Horizon glow band: brightest right at h=0
+                    float horizonBand = pow(1.0 - abs(h), 6.0) * horizonStrength;
+                    sky = mix(sky, horizon, clamp(horizonBand, 0.0, 1.0));
+                    gl_FragColor = vec4(sky, 1.0);
                 }
             `,
             side: THREE.BackSide,
-            depthTest: false     // always render as background behind everything
+            depthTest: false
         });
         this.skyDome = new THREE.Mesh(skyGeo, skyMat);
         this.scene.add(this.skyDome);
@@ -167,11 +177,11 @@ export class Renderer {
         if (forcedDepthBlend === null && playerPos) {
             const surfaceY = 64; 
             const depth = surfaceY - playerPos.y;
-            depthBlend = Math.max(0, Math.min(0.85, depth / 128));
+            depthBlend = Math.max(0, Math.min(0.55, depth / 180));
         }
 
         if (depthBlend > 0) {
-            const caveTint = new THREE.Color(0x0a1018); // Slightly lighter than pure black
+            const caveTint = new THREE.Color(0x1f2c38);
             bottom.lerp(caveTint, depthBlend);
             top.lerp(caveTint, depthBlend);
         }
@@ -179,6 +189,13 @@ export class Renderer {
         if (this.skyDome) {
             this.skyDome.material.uniforms.top.value.copy(top);
             this.skyDome.material.uniforms.bottom.value.copy(bottom);
+            // Horizon glow: strong at dawn/dusk, none at day/night
+            const horizonGlowColor = state === 'DUSK' ? new THREE.Color(0xff4400)
+                                   : state === 'DAWN' ? new THREE.Color(0xff8833)
+                                   : new THREE.Color(0xffd0a0);
+            const horizonStr = state === 'DAWN' || state === 'DUSK' ? 0.85 : (state === 'DAY' ? 0.12 : 0.0);
+            this.skyDome.material.uniforms.horizon.value.copy(horizonGlowColor);
+            this.skyDome.material.uniforms.horizonStrength.value = horizonStr;
         }
         this.scene.background.copy(bottom);
         
@@ -186,11 +203,15 @@ export class Renderer {
         this.scene.fog.color.copy(fogCol);
         this.scene.fog.density = computeFogDensity(daylight, this.submerged) * (this.fogDensityScale || 1.0);
 
-        this.sun.intensity = 0.3 + (clamped * 1.15);
+        this.sun.intensity = 0.45 + (clamped * 1.05);
         this.sun.color.copy(sunCol);
-        this.hemiLight.intensity = 0.8 + (clamped * 0.45);
+        this.hemiLight.intensity = 0.95 + (clamped * 0.5);
         this.hemiLight.color.set(top);
-        this.hemiLight.groundColor.set(0x3e362d);
+        this.hemiLight.groundColor.set(0x6d6253);
+        if (this.ambientFill) {
+            this.ambientFill.intensity = 0.34 + (clamped * 0.16);
+            this.ambientFill.color.copy(sunCol).lerp(new THREE.Color(0xffffff), 0.35);
+        }
 
         // Stars & Moon
         if (this.stars) {
@@ -208,8 +229,11 @@ export class Renderer {
 
     setDaylightLevel(daylight) {
         this.daylight = Math.max(0, Math.min(1, daylight));
-        this.hemiLight.intensity = 0.6 + this.daylight * 0.6;
-        this.sun.intensity = this.daylight * 1.35;
+        this.hemiLight.intensity = 0.85 + this.daylight * 0.55;
+        this.sun.intensity = 0.4 + this.daylight * 1.05;
+        if (this.ambientFill) {
+            this.ambientFill.intensity = 0.32 + this.daylight * 0.18;
+        }
         
         // Sky colors mix - use THREE.Color to wrap the hex constants from RenderConfig
         const dayTop = new THREE.Color(ATMOSPHERIC_COLORS.DAY.top);
@@ -253,6 +277,14 @@ export class Renderer {
 
     setUnderwaterState(submerged) {
         this.submerged = Boolean(submerged);
+        if (submerged) {
+            // Deep teal-blue underwater fog
+            this.scene.fog.color.setHex(0x0a3d5a);
+            this.scene.background.setHex(0x061e2e);
+            if (this.skyDome) this.skyDome.visible = false;
+        } else {
+            if (this.skyDome) this.skyDome.visible = true;
+        }
         this.scene.fog.density = computeFogDensity(this.daylight, this.submerged) * (this.fogDensityScale || 1.0);
     }
 

@@ -1,6 +1,20 @@
 const configModules = import.meta.glob('../content/blocks/*/config.json', { eager: true });
 import { blockIdToDisplayName } from './blockIds.js';
 
+function inferRenderType(block) {
+    if (typeof block.renderType === 'string' && block.renderType.trim()) {
+        return block.renderType.trim();
+    }
+
+    const hasPairId = typeof block.pairId === 'string' && block.pairId.trim().length > 0;
+    if (hasPairId) return 'paired_plant';
+    if (block.flat) return 'flat';
+    if (block.slab || block.id.includes('_slab')) return 'slab';
+    if (block.id.includes('_stairs')) return 'stairs';
+    if (block.deco) return 'plant';
+    return 'cube';
+}
+
 function normalizeBlock(folderId, raw) {
     if (!raw || typeof raw !== 'object') return null;
 
@@ -17,6 +31,7 @@ function normalizeBlock(folderId, raw) {
 
     normalized.hardness = Number.isFinite(Number(raw.hardness)) ? Number(raw.hardness) : 1;
     normalized.xp = Number.isFinite(Number(raw.xp)) ? Number(raw.xp) : 0;
+    normalized.renderType = inferRenderType(normalized);
 
     return normalized;
 }

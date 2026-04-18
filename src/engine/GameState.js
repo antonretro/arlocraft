@@ -22,10 +22,11 @@ export class GameState {
     }
 
     initStartingInventory() {
-        this.inventory[0] = { id: 'stone', count: 64, kind: 'block' };
-        this.inventory[1] = { id: 'grass_block', count: 64, kind: 'block' };
-        this.inventory[2] = { id: 'oak_log', count: 48, kind: 'block' };
-        this.inventory[3] = { id: 'pick_wood', count: 1, kind: 'tool' };
+        this.inventory[0] = { id: 'sword_wood', count: 1, kind: 'tool' };
+        this.inventory[1] = { id: 'pick_wood', count: 1, kind: 'tool' };
+        this.inventory[2] = { id: 'axe_wood', count: 1, kind: 'tool' };
+        this.inventory[3] = { id: 'oak_log', count: 64, kind: 'block' };
+        this.inventory[4] = { id: 'grass_block', count: 64, kind: 'block' };
     }
 
     setMode(mode) {

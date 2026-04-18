@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { STRUCTURES } from './structures/StructureRegistry.js';
-import { RENDER_LAYERS, materialIsTransparent } from '../rendering/RenderConfig.js';
+import { rebuildChunkInstancedMeshes } from './mesh/ChunkMeshBuilder.js';
 
 const CORRUPTION_STRUCTURE_KEYS = new Set([
     'virus_nexus',
@@ -28,27 +28,30 @@ const CIVIC_STRUCTURE_POOL = [
 ];
 
 const BIOME_GROUND_LIFE = {
-    plains: ['short_grass', 'short_grass', 'short_grass', 'short_grass', 'dandelion', 'poppy', 'red_tulip', 'tall_grass'],
-    forest: ['short_grass', 'short_grass', 'short_grass', 'fern', 'fern', 'mushroom_brown', 'mushroom_red', 'blueberry', 'strawberry', 'poppy', 'tall_grass'],
-    meadow: ['short_grass', 'short_grass', 'tall_grass', 'tall_grass', 'dandelion', 'poppy', 'orange_tulip', 'red_tulip', 'pink_tulip', 'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium', 'blueberry', 'lilac', 'peony', 'rose_bush'],
-    swamp: ['fern', 'fern', 'short_grass', 'mushroom_brown', 'mushroom_red', 'blueberry'],
+    plains: ['short_grass', 'short_grass', 'short_grass', 'short_grass', 'short_grass', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'tall_grass_bottom', 'dandelion', 'poppy', 'red_tulip'],
+    forest: ['short_grass', 'short_grass', 'short_grass', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'fern', 'fern', 'fern', 'mushroom_brown', 'mushroom_red', 'blueberry', 'strawberry', 'poppy'],
+    meadow: ['short_grass', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'tall_grass_bottom', 'tall_grass_bottom', 'dandelion', 'poppy', 'orange_tulip', 'red_tulip', 'pink_tulip', 'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium', 'blueberry', 'lilac', 'peony', 'rose_bush'],
+    swamp: ['fern', 'fern', 'fern', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'mushroom_brown', 'mushroom_red', 'blueberry'],
     desert: ['tomato'],
     badlands: ['carrot'],
     canyon: ['carrot'],
-    highlands: ['potato', 'short_grass'],
+    highlands: ['short_grass', 'short_grass', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'potato'],
     alpine: ['potato'],
     tundra: ['potato']
 };
 
 const TREE_PROFILES = {
-    oak: { trunk: 'oak_log', leaves: 'oak_leaves', height: 5, radius: 2, style: 'round' },
-    birch: { trunk: 'birch_log', leaves: 'birch_leaves', height: 6, radius: 2, style: 'round' },
-    pine: { trunk: 'spruce_log', leaves: 'spruce_leaves', height: 7, radius: 2, style: 'cone' },
-    palm: { trunk: 'jungle_log', leaves: 'jungle_leaves', height: 6, radius: 3, style: 'palm' },
-    willow: { trunk: 'mangrove_log', leaves: 'mangrove_leaves', height: 5, radius: 3, style: 'willow' },
-    cherry: { trunk: 'cherry_log', leaves: 'cherry_leaves', height: 5, radius: 3, style: 'round' },
-    redwood: { trunk: 'redwood_log', leaves: 'redwood_leaves', height: 11, radius: 2, style: 'spire' },
-    crystal: { trunk: 'crystal_log', leaves: 'crystal_leaves', height: 7, radius: 2, style: 'crystal' }
+    oak:      { trunk: 'oak_log',       leaves: 'oak_leaves',       height: 5,  radius: 2, style: 'round' },
+    birch:    { trunk: 'birch_log',     leaves: 'birch_leaves',     height: 7,  radius: 2, style: 'round' },
+    pine:     { trunk: 'spruce_log',    leaves: 'spruce_leaves',    height: 8,  radius: 2, style: 'cone' },
+    palm:     { trunk: 'jungle_log',    leaves: 'jungle_leaves',    height: 7,  radius: 3, style: 'palm' },
+    jungle:   { trunk: 'jungle_log',    leaves: 'jungle_leaves',    height: 10, radius: 3, style: 'round' },
+    willow:   { trunk: 'mangrove_log',  leaves: 'mangrove_leaves',  height: 5,  radius: 3, style: 'willow' },
+    acacia:   { trunk: 'acacia_log',    leaves: 'acacia_leaves',    height: 5,  radius: 3, style: 'acacia' },
+    dark_oak: { trunk: 'dark_oak_log',  leaves: 'dark_oak_leaves',  height: 7,  radius: 3, style: 'dark_oak' },
+    cherry:   { trunk: 'cherry_log',    leaves: 'cherry_leaves',    height: 5,  radius: 3, style: 'round' },
+    redwood:  { trunk: 'redwood_log',   leaves: 'redwood_leaves',   height: 14, radius: 3, style: 'spire' },
+    crystal:  { trunk: 'crystal_log',   leaves: 'crystal_leaves',   height: 7,  radius: 2, style: 'crystal' }
 };
 
 export class Chunk {
@@ -75,116 +78,20 @@ export class Chunk {
         this.generating = false;
     }
 
-
-    handleMaterialSpecialization(baseMaterial) {
-        if (!baseMaterial) return null;
-        
-        const isTintable = (mat) => mat && mat.userData && mat.userData.tintable;
-        let needsSpecialization = false;
-
-        if (Array.isArray(baseMaterial)) {
-            needsSpecialization = baseMaterial.some(isTintable);
-        } else {
-            needsSpecialization = isTintable(baseMaterial);
-        }
-
-        if (!needsSpecialization) return baseMaterial;
-
-        // Clone the material so each chunk can have its own vertex color state
-        // without corrupting the shared registry material.
-        const material = Array.isArray(baseMaterial) 
-            ? baseMaterial.map(m => m ? m.clone() : null)
-            : baseMaterial.clone();
-
-        // Don't enable vertexColors — we tint by setting material.color on tintable faces
-        // (instance colors via setColorAt affect all faces, which would tint sides too)
-
-        return material;
-    }
-
-    disableMaterialInstanceColors(material) {
-        // Obsolete
-    }
-
-    materialHasVertexColors(material) {
-        if (Array.isArray(material)) {
-            for (const mat of material) {
-                if (mat?.vertexColors) return true;
-            }
-            return false;
-        }
-        return Boolean(material?.vertexColors);
-    }
-
-    cloneMaterial(material) {
-        if (Array.isArray(material)) {
-            return material.map((mat) => (mat?.clone ? mat.clone() : mat));
-        }
-        return material?.clone ? material.clone() : material;
-    }
-
-    resolveBiomeTintHex(biome) {
-        const fallback = 0x91bd59;
-        const raw = biome?.color;
-        const normalize = (hex) => {
-            const value = Math.max(0, Math.min(0xffffff, Math.floor(hex)));
-            let r = (value >> 16) & 0xff;
-            let g = (value >> 8) & 0xff;
-            let b = value & 0xff;
-
-            // Safety clamp: prevent accidental near-black biome tint from nuking grass color.
-            const minChannel = 58;
-            if (r < minChannel) r = minChannel;
-            if (g < minChannel) g = minChannel;
-            if (b < minChannel) b = minChannel;
-
-            const sum = r + g + b;
-            const minLumaSum = 230;
-            if (sum < minLumaSum && sum > 0) {
-                const scale = minLumaSum / sum;
-                r = Math.min(255, Math.round(r * scale));
-                g = Math.min(255, Math.round(g * scale));
-                b = Math.min(255, Math.round(b * scale));
-            }
-
-            return (r << 16) | (g << 8) | b;
-        };
-
-        if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
-            return normalize(raw);
-        }
-        if (typeof raw === 'string') {
-            const text = raw.trim();
-            if (text) {
-                const parsed = text.toLowerCase().startsWith('0x')
-                    ? Number(text)
-                    : Number.parseInt(text, 16);
-                if (Number.isFinite(parsed) && parsed > 0) return normalize(parsed);
-            }
-        }
-        return normalize(fallback);
-    }
-
-    getRenderOrder(id, material) {
-        if (id === 'water') return RENDER_LAYERS.WATER;
-        if (materialIsTransparent(material)) return RENDER_LAYERS.TRANSPARENT;
-        return RENDER_LAYERS.OPAQUE;
-    }
-
     addGeneratedBlock(x, y, z, id) {
         const key = this.world.getKey(x, y, z);
-        if (this.world.changedBlocks.get(key) === null) return;
+        if (this.world.state.changedBlocks.get(key) === null) return;
 
-        const override = this.world.changedBlocks.get(key);
+        const override = this.world.state.changedBlocks.get(key);
         const finalId = override ?? id;
         this.world.addBlock(x, y, z, finalId, this.key);
     }
 
     addGeneratedStructureBlock(x, y, z, id) {
         const key = this.world.getKey(x, y, z);
-        if (this.world.changedBlocks.get(key) === null) return;
+        if (this.world.state.changedBlocks.get(key) === null) return;
 
-        const override = this.world.changedBlocks.get(key);
+        const override = this.world.state.changedBlocks.get(key);
         const finalId = override ?? id;
         this.world.addBlock(x, y, z, finalId, this.key, false, { allowCorruption: true });
     }
@@ -195,8 +102,10 @@ export class Chunk {
         const pairOffsetY = Number(blockData?.pairOffsetY);
         if (pairId && Number.isFinite(pairOffsetY) && pairOffsetY !== 0) {
             const pairKey = this.world.getKey(x, y + pairOffsetY, z);
-            const pairExistingId = this.world.blockMap.get(pairKey);
-            if (pairExistingId && !this.world.isReplaceableForPlacement(pairExistingId)) return false;
+            const pairExistingId = this.world.state.blockMap.get(pairKey);
+            // Height fix: Allow overwriting non-solid blocks (like air or other deco) 
+            // to ensure tall grass top always spawns correctly.
+            if (pairExistingId && this.world.isBlockSolid(pairExistingId)) return false;
             this.addGeneratedBlock(x, y, z, id);
             this.addGeneratedBlock(x, y + pairOffsetY, z, pairId);
             return true;
@@ -204,6 +113,56 @@ export class Chunk {
 
         this.addGeneratedBlock(x, y, z, id);
         return true;
+    }
+
+    selectUndergroundBlock(wx, y, wz, biome) {
+        const minY = this.world.minTerrainY; // -64
+
+        // Bedrock: bottom 3 layers with some randomness
+        if (y <= minY + 2) return 'bedrock';
+
+        const h1 = this.world.hash3D(wx,       y * 7 + 3,  wz);
+        const h2 = this.world.hash3D(wx + 97,  y * 7 + 11, wz - 63);
+        const h3 = this.world.hash3D(wx - 31,  y * 7 + 19, wz + 71);
+
+        const isDeep = y < -32;
+
+        // ── Ores ─────────────────────────────────────────────────
+        // Diamond  (y < -45, deepslate only)
+        if (y < -45 && h1 < 0.0022) return 'deepslate_diamond_ore';
+        // Redstone (y < -35)
+        if (y < -35 && h1 < 0.0045) return isDeep ? 'deepslate_redstone_ore' : 'redstone_ore';
+        // Gold     (y -50..−10)
+        if (y > -50 && y < -10 && h1 < 0.006) return isDeep ? 'deepslate_gold_ore' : 'gold';
+        // Lapis    (y -40..+5)
+        if (y > -40 && y < 5 && h2 < 0.004) return isDeep ? 'deepslate_lapis_ore' : 'lapis_ore';
+        // Iron     (y -30..+25)
+        if (y > -30 && y < 25 && h1 < 0.014) return isDeep ? 'deepslate_iron_ore' : 'iron';
+        // Copper   (y -16..+48)
+        if (y > -16 && y < 48 && h3 < 0.009) return isDeep ? 'deepslate_copper_ore' : 'copper';
+        // Coal     (y > -15)
+        if (y > -15 && h2 < 0.024) return 'coal';
+        // Emerald  (highlands only, y > -20)
+        if (biome?.id === 'highlands' && y > -20 && h3 < 0.001) return 'emerald_ore';
+
+        // ── Deep layer: deepslate variants ───────────────────────
+        if (isDeep) {
+            if (h2 < 0.07) return 'cobbled_deepslate';
+            if (h3 < 0.04) return 'tuff';
+            if (h3 < 0.06) return 'calcite';
+            return 'deepslate';
+        }
+
+        // ── Stone variants ────────────────────────────────────────
+        if (h2 < 0.07) return 'andesite';
+        if (h2 < 0.13) return 'diorite';
+        if (h2 < 0.19) return 'granite';
+        if (h3 < 0.05 && y < 15) return 'gravel';
+        if (h3 < 0.025 && y < 5) return 'tuff';
+        // Clay pockets near sea level
+        if (y > -4 && y < 3 && h1 < 0.06) return 'clay';
+
+        return 'stone';
     }
 
     // ... existing terrain gen methods ...
@@ -247,12 +206,34 @@ export class Chunk {
             const y = terrainHeight - d;
             if (y < this.world.minTerrainY) break;
             if (this.world.shouldCarveCave(wx, y, wz, terrainHeight)) continue;
-            this.addGeneratedBlock(wx, y, wz, 'stone');
+            this.addGeneratedBlock(wx, y, wz, this.selectUndergroundBlock(wx, y, wz, biome));
         }
 
         if (!inForcedSpawnZone) {
             for (let y = terrainHeight + 1; y <= waterLevel; y++) {
                 this.addGeneratedBlock(wx, y, wz, 'water');
+            }
+
+            // --- UNDERWATER DECO: Kelp & Coral ---
+            if (terrainHeight < waterLevel && (surfaceId === 'sand' || surfaceId === 'gravel')) {
+                const uwHash = this.world.hash2D(wx + 31, wz - 57);
+                if (uwHash < 0.08) {
+                    // Kelp (stacks 1-3 high)
+                    const kelpHeight = 1 + Math.floor(this.world.hash2D(wx + 11, wz + 89) * 3);
+                    for (let k = 1; k <= kelpHeight && terrainHeight + k < waterLevel; k++) {
+                        this.addGeneratedBlock(wx, terrainHeight + k, wz, 'kelp');
+                    }
+                } else if (uwHash < 0.11) {
+                    this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'tube_coral_block');
+                } else if (uwHash < 0.135) {
+                    this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'brain_coral_block');
+                } else if (uwHash < 0.155) {
+                    this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'bubble_coral_block');
+                } else if (uwHash < 0.17) {
+                    this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'horn_coral_block');
+                } else if (uwHash < 0.185) {
+                    this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'sea_pickle');
+                }
             }
         }
 
@@ -280,12 +261,9 @@ export class Chunk {
         }
 
         // --- DECO & GROUND LIFE ---
-        if (!inForcedSpawnZone && !isHighAltitude && terrainHeight > waterLevel && this.world.blockMap.get(this.world.getKey(wx, terrainHeight, wz)) !== 'water') {
+        if (!inForcedSpawnZone && !isHighAltitude && terrainHeight > waterLevel && this.world.state.blockMap.get(this.world.getKey(wx, terrainHeight, wz)) !== 'water') {
             const decoHash = this.world.hash2D(wx * 22, wz * 33);
-            if (decoHash < 0.08) {
-                const decoId = decoHash < 0.045 ? 'short_grass' : (decoHash < 0.065 ? 'tall_grass_bottom' : (decoHash < 0.073 ? 'poppy' : 'dandelion'));
-                this.addGeneratedPlant(wx, terrainHeight + 1, wz, decoId);
-            } else {
+            if (decoHash < 0.72) {
                 this.placeGroundLife(wx, terrainHeight, wz, biome);
             }
         }
@@ -312,6 +290,37 @@ export class Chunk {
                 this.world.registerLandmark(wx, dy, 'Ancient Dungeon');
             }
         }
+    }
+
+    isLandSuitable(x, z, minDryRadius = 4) {
+        for (let dx = -minDryRadius; dx <= minDryRadius; dx += 2) {
+            for (let dz = -minDryRadius; dz <= minDryRadius; dz += 2) {
+                const h = this.world.getColumnHeight(x + dx, z + dz);
+                const biome = this.world.getBiomeAt(x + dx, z + dz);
+                const wl = this.world.seaLevel + (biome.waterLevelOffset ?? 0);
+                if (h <= wl) return false;
+            }
+        }
+        return true;
+    }
+
+    placeUnderwaterStructure(centerX, centerZ) {
+        const roll = this.world.hash2D(this.cx * 7 + 401, this.cz * 11 - 293);
+        if (roll > 0.035) return; // ~3.5% of underwater chunks get a structure
+
+        const h = this.world.getColumnHeight(centerX, centerZ);
+        const biome = this.world.getBiomeAt(centerX, centerZ);
+        const wl = this.world.seaLevel + (biome.waterLevelOffset ?? 0);
+        if (h >= wl - 2) return; // must be properly submerged
+
+        const pool = ['ocean_ruins', 'sunken_ship'];
+        const pick = pool[Math.floor(this.world.hash2D(this.cx - 77, this.cz + 33) * pool.length)];
+        const struct = STRUCTURES[pick];
+        if (!struct) return;
+
+        const blocks = struct.blueprints(centerX, h, centerZ);
+        for (const b of blocks) this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
+        if (struct.name) this.world.registerLandmark(centerX, centerZ, struct.name);
     }
 
     placeRandomStructure(x, y, z, biome) {
@@ -359,13 +368,15 @@ export class Chunk {
     chooseTreeType(x, z, biome) {
         const hash = this.world.hash2D(x, z);
         if (this.world.isCorruptedAt(x, z)) return 'crystal';
-        if (biome.id === 'desert') return 'palm';
-        if (biome.id === 'forest') return hash > 0.6 ? 'birch' : (hash > 0.3 ? 'oak' : 'pine');
-        if (biome.id === 'swamp') return 'willow';
-        if (biome.id === 'plains' || biome.id === 'meadow') return hash > 0.8 ? 'cherry' : 'oak';
-        if (biome.id === 'highlands') return hash > 0.6 ? 'redwood' : 'pine';
-        if (biome.id === 'alpine' || biome.id === 'tundra') return 'pine';
-        if (biome.id === 'badlands' || biome.id === 'canyon') return 'palm';
+        if (biome.id === 'desert')    return hash > 0.6 ? 'palm' : 'acacia';
+        if (biome.id === 'badlands' || biome.id === 'canyon') return hash > 0.5 ? 'acacia' : 'palm';
+        if (biome.id === 'forest')    return hash > 0.65 ? 'birch' : (hash > 0.35 ? 'oak' : (hash > 0.15 ? 'pine' : 'dark_oak'));
+        if (biome.id === 'swamp')     return hash > 0.6 ? 'willow' : 'dark_oak';
+        if (biome.id === 'plains')    return hash > 0.8 ? 'cherry' : (hash > 0.4 ? 'oak' : 'birch');
+        if (biome.id === 'meadow')    return hash > 0.75 ? 'cherry' : (hash > 0.5 ? 'birch' : 'oak');
+        if (biome.id === 'highlands') return hash > 0.65 ? 'redwood' : (hash > 0.3 ? 'pine' : 'dark_oak');
+        if (biome.id === 'alpine' || biome.id === 'tundra') return hash > 0.5 ? 'pine' : 'spruce';
+        if (biome.id === 'jungle')    return hash > 0.5 ? 'jungle' : 'palm';
         return 'oak';
     }
 
@@ -373,14 +384,15 @@ export class Chunk {
         const choices = BIOME_GROUND_LIFE[biome.id];
         if (!choices || choices.length === 0) return;
 
-        const supportId = this.world.blockMap.get(this.world.getKey(x, surfaceY, z));
+        const supportId = this.world.state.blockMap.get(this.world.getKey(x, surfaceY, z));
         if (!supportId || supportId === 'water' || supportId === 'path_block' || supportId === 'cobblestone') return;
 
         const roll = this.world.hash2D((x * 53) + 17, (z * 61) - 29);
-        if (roll > 0.045) return;
+        if (roll > 0.65) return;
 
         const pick = Math.floor(this.world.hash2D(x - 919, z + 771) * choices.length);
-        this.addGeneratedPlant(x, surfaceY + 1, z, choices[pick]);
+        const plantId = choices[pick];
+        this.addGeneratedPlant(x, surfaceY + 1, z, plantId);
     }
 
     placeLeafBlob(x, y, z, radius, leafId, yRadius = 1) {
@@ -462,6 +474,29 @@ export class Chunk {
             this.placeConeCanopy(x, topY - 1, z, config.radius + 1, config.leaves);
             return;
         }
+        if (config.style === 'acacia') {
+            // Acacia: short trunk, flat wide canopy offset to one side
+            const offX = this.world.hash2D(x + 3, z + 7) > 0.5 ? 1 : -1;
+            const offZ = this.world.hash2D(x - 5, z + 2) > 0.5 ? 1 : -1;
+            this.placeLeafBlob(x + offX, topY, z + offZ, config.radius, config.leaves, 0);
+            this.placeLeafBlob(x + offX * 2, topY - 1, z + offZ * 2, config.radius - 1, config.leaves, 0);
+            this.addGeneratedBlock(x + offX, topY + 1, z + offZ, config.leaves);
+            return;
+        }
+        if (config.style === 'dark_oak') {
+            // Dark oak: thick 2x2 trunk, large dense canopy
+            this.addGeneratedBlock(x + 1, y, z, config.trunk);
+            this.addGeneratedBlock(x, y, z + 1, config.trunk);
+            this.addGeneratedBlock(x + 1, y, z + 1, config.trunk);
+            for (let i = 1; i < trunkHeight; i++) {
+                this.addGeneratedBlock(x + 1, y + i, z, config.trunk);
+                this.addGeneratedBlock(x, y + i, z + 1, config.trunk);
+                this.addGeneratedBlock(x + 1, y + i, z + 1, config.trunk);
+            }
+            this.placeLeafBlob(x, topY, z, config.radius, config.leaves, 2);
+            this.placeLeafBlob(x, topY + 2, z, config.radius - 1, config.leaves, 1);
+            return;
+        }
         if (config.style === 'crystal') {
             this.placeLeafBlob(x, topY - 1, z, config.radius, config.leaves, 1);
             this.addGeneratedBlock(x, topY + 1, z, config.leaves);
@@ -478,7 +513,7 @@ export class Chunk {
     }
 
     applyPlayerOverrides() {
-        for (const [key, id] of this.world.changedBlocks.entries()) {
+        for (const [key, id] of this.world.state.changedBlocks.entries()) {
             const [x, y, z] = this.world.keyToCoords(key);
             if (this.world.getChunkCoord(x) !== this.cx || this.world.getChunkCoord(z) !== this.cz) continue;
 
@@ -505,9 +540,9 @@ export class Chunk {
                 const wz = startZ + lz;
                 for (let y = minY; y <= maxY; y++) {
                     const key = this.world.getKey(wx, y, wz);
-                    if (!this.world.blockMap.has(key)) continue;
+                    if (!this.world.state.blockMap.has(key)) continue;
                     this.blockKeys.add(key);
-                    this.world.blockOwners.set(key, this.key);
+                    this.world.state.blockOwners.set(key, this.key);
                     recovered++;
                 }
             }
@@ -527,167 +562,7 @@ export class Chunk {
         if (this.destroyed) return;
         
         try {
-            this.resyncBlockKeysFromWorld();
-
-            // 1. Clear old instances
-        for (const mesh of this.instancedMeshes.values()) {
-            this.group.remove(mesh);
-            if (mesh.userData?.ownedMaterial) {
-                if (Array.isArray(mesh.material)) {
-                    for (const mat of mesh.material) {
-                        if (typeof mat?.dispose === 'function') mat.dispose();
-                    }
-                } else if (typeof mesh.material?.dispose === 'function') {
-                    mesh.material.dispose();
-                }
-            }
-            if (typeof mesh.dispose === 'function') mesh.dispose();
-        }
-        this.instancedMeshes.clear();
-
-        // 2. Sort current blocks by type for instancing
-        const byType = new Map();
-        for (const key of this.blockKeys) {
-            const id = this.world.blockMap.get(key);
-            if (!id) continue;
-            if (!byType.has(id)) byType.set(id, []);
-            byType.get(id).push(key);
-        }
-
-        // 3. Create InstancedMesh for each type found
-        const temp = new THREE.Object3D();
-        const worldX = this.cx * this.world.chunkSize;
-        const worldZ = this.cz * this.world.chunkSize;
-        
-        // Stability Fix: Determine if chunk is 'Near' for occlusion bypass and culling
-        const camPos = this.world.game.camera.instance.position;
-        const isNear = Math.abs(this.cx - this.world.getChunkCoord(camPos.x)) <= 2 &&
-                       Math.abs(this.cz - this.world.getChunkCoord(camPos.z)) <= 2;
-
-        for (const [id, keys] of byType.entries()) {
-            const count = keys.length;
-            const blockData = this.world.getBlockData(id);
-            const baseMaterial = this.world.blockRegistry.getMaterial(id);
-            const isWater = id === 'water';
-            const isDeco = blockData?.deco;
-            const material = this.handleMaterialSpecialization(baseMaterial);
-            const isCloned = material !== baseMaterial;
-            const isTintable = (mat) => mat && mat.userData && mat.userData.tintable;
-            const tintable = Array.isArray(material) ? material.some(isTintable) : isTintable(material);
-            
-            let geometry; 
-            if (isWater) {
-                geometry = this.world.sharedChunkGeometries.water;
-            } else if (id === 'path_block') {
-                geometry = this.world.sharedChunkGeometries.path;
-            } else if (isDeco) {
-                geometry = this.world.sharedChunkGeometries.deco;
-            } else if (id.includes('_stairs')) {
-                geometry = this.world.sharedChunkGeometries.stair;
-            } else if (id.includes('_slab')) {
-                geometry = this.world.sharedChunkGeometries.slab;
-            } else {
-                geometry = this.world.sharedChunkGeometries.solid;
-            }
-            
-            const im = new THREE.InstancedMesh(geometry, material, count); if (isCloned) im.userData.ownedMaterial = true;
-            im.frustumCulled = false; // Never cull chunks; handled by World visibility
-            im.matrixAutoUpdate = false; 
-            im.instanceMatrix.setUsage(THREE.StaticDrawUsage);
-            im.renderOrder = this.getRenderOrder(id, material);
-            
-            // Avoid black slab shadows from cutout/transparent materials (leaves, flowers, etc.).
-            const transparentMaterial = materialIsTransparent(material);
-            if (!isWater && !isDeco && !transparentMaterial) im.castShadow = true;
-            else im.castShadow = false;
-            // Allow shadows on grass blocks (previously disabled due to shadow acne concerns)
-            const receivesShadow = !transparentMaterial;
-            im.receiveShadow = receivesShadow;
-            if (tintable) {
-                const cx = this.cx * this.world.chunkSize + Math.floor(this.world.chunkSize / 2);
-                const cz = this.cz * this.world.chunkSize + Math.floor(this.world.chunkSize / 2);
-                const chunkTintHex = this.resolveBiomeTintHex(this.world.getBiomeAt(cx, cz));
-                // Apply tint only to tintable faces via material.color (not instanceColor which affects all faces)
-                const tintColor = new THREE.Color(chunkTintHex);
-                if (Array.isArray(material)) {
-                    for (const m of material) {
-                        if (isTintable(m)) { m.color.copy(tintColor); m.needsUpdate = true; }
-                    }
-                } else if (isTintable(material)) {
-                    material.color.copy(tintColor);
-                    material.needsUpdate = true;
-                }
-            }
-
-            let renderCount = 0;
-            for (let i = 0; i < count; i++) {
-                const [ax, ay, az] = this.world.keyToCoords(keys[i]);
-                
-                // Water surface pass: 
-                // Only render water if there's air (or non-water) above it.
-                if (isWater) {
-                    const above = this.world.blockMap.get(this.world.getKey(ax, ay + 1, az));
-                    if (above === 'water') continue; // Submerged - skip rendering
-                }
-
-                // Occlusion check: skip rendering if fully surrounded by solid blocks
-                // Stability Fix: Bypass occlusion for nearby chunks to prevent 'void lines' at boundaries
-                if (!isNear) {
-                    const nx = this.world.blockMap.get(this.world.getKey(ax + 1, ay, az));
-                    const px = this.world.blockMap.get(this.world.getKey(ax - 1, ay, az));
-                    const ny = this.world.blockMap.get(this.world.getKey(ax, ay + 1, az));
-                    const py = this.world.blockMap.get(this.world.getKey(ax, ay - 1, az));
-                    const nz = this.world.blockMap.get(this.world.getKey(ax, ay, az + 1));
-                    const pz = this.world.blockMap.get(this.world.getKey(ax, ay, az - 1));
-
-                    if (nx && px && ny && py && nz && pz) {
-                        if (this.world.isBlockSolid(nx) && this.world.isBlockSolid(px) && 
-                            this.world.isBlockSolid(ny) && this.world.isBlockSolid(py) && 
-                            this.world.isBlockSolid(nz) && this.world.isBlockSolid(pz)) {
-                            continue; 
-                        }
-                    }
-                }
-
-                const lx = ax - worldX;
-                const ly = ay;
-                const lz = az - worldZ;
-                temp.position.set(lx, ly, lz);
-                temp.rotation.set(0, 0, 0);
-                
-                if (isWater) {
-                    temp.position.y += 0.49;
-                    temp.scale.set(1, 1, 1);
-                } else {
-                    temp.scale.set(1, 1, 1);
-                    if (id.includes('_stairs')) {
-                        if (id.endsWith('_n')) temp.rotation.y = Math.PI;
-                        else if (id.endsWith('_e')) temp.rotation.y = Math.PI / 2;
-                        else if (id.endsWith('_w')) temp.rotation.y = -Math.PI / 2;
-                    }
-                }
-                
-                temp.updateMatrix();
-                im.setMatrixAt(renderCount, temp.matrix);
-                
-                renderCount++;
-            }
-
-            if (renderCount === 0) {
-                continue;
-            }
-            im.count = renderCount;
-            im.instanceMatrix.needsUpdate = true;
-            this.instancedMeshes.set(id, im);
-            this.group.add(im);
-        }
-        
-        // 4. Update group bounding for raycasting and final visibility pass
-        for (const mesh of this.instancedMeshes.values()) {
-            mesh.computeBoundingSphere();
-            // Force all chunk meshes to stay visible to prevent camera-math gaps
-            mesh.frustumCulled = false;
-        }
+            rebuildChunkInstancedMeshes(this);
         } catch (e) {
             console.error('[ArloCraft] rebuildMeshes failed:', this.key, e);
         }
@@ -711,8 +586,8 @@ export class Chunk {
                             const id = palette[paletteIndex];
                             
                             const key = this.world.getKey(x, y, z);
-                            if (this.world.changedBlocks.get(key) === null) continue;
-                            const override = this.world.changedBlocks.get(key);
+                            if (this.world.state.changedBlocks.get(key) === null) continue;
+                            const override = this.world.state.changedBlocks.get(key);
                             const finalId = override ?? id;
                             this.world.addBlock(x, y, z, finalId, this.key);
                         }
@@ -723,17 +598,16 @@ export class Chunk {
                         const centerZ = startZ + Math.floor(this.world.chunkSize * 0.5);
 
                         this.registerRoadLandmark(startX, startZ);
-                        if (this.world.shouldPlaceStructureChunk(this.cx, this.cz)) {
+                        if (this.world.shouldPlaceStructureChunk(this.cx, this.cz) && this.isLandSuitable(centerX, centerZ)) {
                             const sy = this.world.getColumnHeight(centerX, centerZ) + 1;
                             const biome = this.world.getBiomeAt(centerX, centerZ);
                             this.placeRandomStructure(centerX, sy, centerZ, biome);
                         }
-                        if (this.world.shouldPlaceVillageChunk(this.cx, this.cz)) {
-                            const vx = centerX;
-                            const vz = centerZ;
-                            const vy = this.world.getColumnHeight(vx, vz) + 1;
-                            this.placeVillageCluster(vx, vy, vz);
+                        if (this.world.shouldPlaceVillageChunk(this.cx, this.cz) && this.isLandSuitable(centerX, centerZ, 8)) {
+                            const vy = this.world.getColumnHeight(centerX, centerZ) + 1;
+                            this.placeVillageCluster(centerX, vy, centerZ);
                         }
+                        this.placeUnderwaterStructure(centerX, centerZ);
                         this.applyPlayerOverrides();
                         return;
                     }
@@ -760,17 +634,16 @@ export class Chunk {
             }
         }
         this.registerRoadLandmark(startX, startZ);
-        if (this.world.shouldPlaceStructureChunk(this.cx, this.cz)) {
+        if (this.world.shouldPlaceStructureChunk(this.cx, this.cz) && this.isLandSuitable(centerX, centerZ)) {
             const sy = this.world.getColumnHeight(centerX, centerZ) + 1;
             const biome = this.world.getBiomeAt(centerX, centerZ);
             this.placeRandomStructure(centerX, sy, centerZ, biome);
         }
-        if (this.world.shouldPlaceVillageChunk(this.cx, this.cz)) {
-            const vx = centerX;
-            const vz = centerZ;
-            const vy = this.world.getColumnHeight(vx, vz) + 1;
-            this.placeVillageCluster(vx, vy, vz);
+        if (this.world.shouldPlaceVillageChunk(this.cx, this.cz) && this.isLandSuitable(centerX, centerZ, 8)) {
+            const vy = this.world.getColumnHeight(centerX, centerZ) + 1;
+            this.placeVillageCluster(centerX, vy, centerZ);
         }
+        this.placeUnderwaterStructure(centerX, centerZ);
         this.applyPlayerOverrides();
         this.dirty = true;
     }
@@ -850,9 +723,9 @@ export class Chunk {
         for (let i = 0; i < 3; i++) {
             this.addGeneratedBlock(x, baseY + i, z, 'oak_planks');
         }
-        this.addGeneratedBlock(x, baseY + 3, z, 'lantern');
-        this.addGeneratedBlock(x + 1, baseY + 2, z, 'lantern');
-        this.addGeneratedBlock(x - 1, baseY + 2, z, 'lantern');
+        this.addGeneratedBlock(x, baseY + 3, z, 'sea_lantern');
+        this.addGeneratedBlock(x + 1, baseY + 2, z, 'sea_lantern');
+        this.addGeneratedBlock(x - 1, baseY + 2, z, 'sea_lantern');
     }
 
     setVisible(visible) {

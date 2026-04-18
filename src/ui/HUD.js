@@ -4,6 +4,7 @@ import { CraftingSystem } from '../engine/CraftingSystem.js';
 
 const itemTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/item/*.png', { eager: true, query: '?url' });
 const blockTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/block/*.png', { eager: true, query: '?url' });
+const contentBlockAllModules = import.meta.glob('../content/blocks/*/all.png', { eager: true, query: '?url' });
 const GRASS_PREVIEW_TINT_CLASS = 'tint-grass-face';
 
 export class HUD {
@@ -24,6 +25,11 @@ export class HUD {
         for (const [path, module] of Object.entries(blockTextureModules)) {
             const fileName = path.split('/').pop().replace('.png', '');
             this.blockTextures[fileName] = module.default || module;
+        }
+        for (const [path, module] of Object.entries(contentBlockAllModules)) {
+            const parts = path.split('/');
+            const folderId = parts[parts.length - 2];
+            this.blockTextures[folderId] = module.default || module;
         }
 
         

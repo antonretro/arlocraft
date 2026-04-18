@@ -72,7 +72,7 @@ export class ExplosionSystem {
                         const by = Math.round(y + dy);
                         const bz = Math.round(z + dz);
                         const key = this.world.getKey(bx, by, bz);
-                        const blockId = this.world.blockMap.get(key);
+                        const blockId = this.world.state.blockMap.get(key);
                         if (blockId && blockId !== 'bedrock') {
                             blocksToRemove.push({ x: bx, y: by, z: bz, id: blockId, key });
                         }
@@ -240,11 +240,18 @@ export class ExplosionSystem {
         mesh.scale.set(1, 1, 1);
         this.scene.add(mesh);
 
+        const popForce = 1.5;
         this.pickupEffects.push({
             mesh,
             age: 0,
-            life: attract ? 0.55 : 0.24,
-            attract
+            life: attract ? 0.8 : 0.3,
+            attract,
+            vx: (Math.random() - 0.5) * popForce,
+            vy: 2.5 + Math.random() * 2,
+            vz: (Math.random() - 0.5) * popForce,
+            rvx: (Math.random() - 0.5) * 10,
+            rvy: (Math.random() - 0.5) * 10,
+            rvz: (Math.random() - 0.5) * 10
         });
     }
 
@@ -259,26 +266,42 @@ export class ExplosionSystem {
                 fx.mesh.scale.set(shrink, shrink, shrink);
             }
 
-            if (fx.attract && playerPosition && fx.age >= 0.12) {
-                const tx = playerPosition.x;
-                const ty = playerPosition.y + 0.65;
-                const tz = playerPosition.z;
-                const dx = tx - fx.mesh.position.x;
-                const dy = ty - fx.mesh.position.y;
-                const dz = tz - fx.mesh.position.z;
-                const dist = Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
-                if (dist > 0.0001) {
-                    const speed = 8.5;
-                    const step = Math.min(dist, speed * delta);
-                    fx.mesh.position.x += (dx / dist) * step;
-                    fx.mesh.position.y += (dy / dist) * step;
-                    fx.mesh.position.z += (dz / dist) * step;
+            if (fx.attract && playerPosition) {
+                // Initial pop phase
+                if (fx.age < 0.25) {
+                    fx.vy -= 12 * delta;
+                    fx.mesh.position.x += fx.vx * delta;
+                    fx.mesh.position.y += fx.vy * delta;
+                    fx.mesh.position.z += fx.vz * delta;
+                } else {
+                    // Magnet phase
+                    const tx = playerPosition.x;
+                    const ty = playerPosition.y + 0.65;
+                    const tz = playerPosition.z;
+                    const dx = tx - fx.mesh.position.x;
+                    const dy = ty - fx.mesh.position.y;
+                    const dz = tz - fx.mesh.position.z;
+                    const dist = Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
+                    
+                    if (dist > 0.0001) {
+                        const ageFactor = Math.min(1.0, (fx.age - 0.25) * 2);
+                        const speed = 6.0 + (ageFactor * 14.0); // Accelerate
+                        const step = Math.min(dist, speed * delta);
+                        fx.mesh.position.x += (dx / dist) * step;
+                        fx.mesh.position.y += (dy / dist) * step;
+                        fx.mesh.position.z += (dz / dist) * step;
+                    }
+
+                    if (dist < 0.45) fx.life = 0;
                 }
 
-                const pullScale = Math.max(0.25, fx.mesh.scale.x * 0.92);
-                fx.mesh.scale.set(pullScale, pullScale, pullScale);
+                // Smoothly spin items
+                fx.mesh.rotation.x += fx.rvx * delta;
+                fx.mesh.rotation.y += fx.rvy * delta;
+                fx.mesh.rotation.z += fx.rvz * delta;
 
-                if (dist < 0.35) fx.life = 0;
+                const pullScale = Math.max(0.15, fx.mesh.scale.x * 0.95);
+                fx.mesh.scale.set(pullScale, pullScale, pullScale);
             }
 
             fx.mesh.material.opacity = Math.max(0, fx.life / (fx.attract ? 0.55 : 0.24));

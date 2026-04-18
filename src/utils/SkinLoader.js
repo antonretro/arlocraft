@@ -7,15 +7,15 @@ import * as THREE from 'three';
 export class SkinLoader {
     constructor() {
         this.loader = new THREE.TextureLoader();
-        this.defaultSteve = 'Igneous 1.19.4/assets/minecraft/textures/entity/player/wide/steve.png';
-        this.defaultAlex = 'Igneous 1.19.4/assets/minecraft/textures/entity/player/slim/alex.png';
+        this.defaultSteve = '/assets/steve.png';
+        this.defaultAlex = '/assets/alex.png';
     }
 
     async loadSkin(username) {
-        // Crafatar is generally more reliable for modern skins
-        const url = username === 'Steve' || username === 'Alex' || !username 
+        // Minotar accepts usernames directly (no UUID lookup needed) and has CORS enabled
+        const url = username === 'Steve' || username === 'Alex' || !username
             ? (username === 'Alex' ? this.defaultAlex : this.defaultSteve)
-            : `https://crafatar.com/skins/${username}`;
+            : `https://minotar.net/skin/${username}`;
         
         return new Promise((resolve, reject) => {
             this.loader.load(url, (texture) => {

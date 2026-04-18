@@ -1,0 +1,8 @@
+{
+  
+  "block.minecraft.sweet_berry_bush": "Strayberry Bush",
+  "death.attack.sweetBerryBush": "%1$s was poked to death by a strawberry bush",
+  "death.attack.sweetBerryBush.player": "%1$s was poked to death by a strawberry bush whilst trying to escape %2$s",
+  "item.minecraft.sweet_berries": "Strawberry",
+  "subtitles.block.sweet_berry_bush.pick_berries": "Strawberries pop"
+}

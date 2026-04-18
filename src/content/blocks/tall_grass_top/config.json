@@ -1,9 +1,10 @@
 {
-  "name": "Tall Grass",
+  "name": "Tall Grass Top",
   "hardness": 0,
   "xp": 0,
   "deco": true,
   "transparent": true,
+  "renderShape": "paired_cross_tall",
   "pairId": "tall_grass_bottom",
   "pairOffsetY": -1,
   "dropId": "tall_grass_bottom",

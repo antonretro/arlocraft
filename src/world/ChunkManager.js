@@ -44,6 +44,52 @@ export class ChunkManager {
         return this.chunks.get(key);
     }
 
+    getChunk(cx, cz) {
+        return this.chunks.get(this.world.getChunkKey(cx, cz));
+    }
+
+    getBlockAt(x, y, z) {
+        return this.world.state.blockMap.get(this.world.getKey(Math.round(x), Math.round(y), Math.round(z))) ?? null;
+    }
+
+    updateNeighborsDirty(x, y, z) {
+        const cs = this.world.chunkSize;
+        const lx = ((x % cs) + cs) % cs;
+        const lz = ((z % cs) + cs) % cs;
+
+        // Only dirty neighbors if we are on the edge of a chunk
+        if (lx === 0) this._dirtyChunkAt(x - 1, z);
+        if (lx === cs - 1) this._dirtyChunkAt(x + 1, z);
+        if (lz === 0) this._dirtyChunkAt(x, z - 1);
+        if (lz === cs - 1) this._dirtyChunkAt(x, z + 1);
+    }
+
+    _dirtyChunkAt(wx, wz) {
+        const cx = this.world.getChunkCoord(wx);
+        const cz = this.world.getChunkCoord(wz);
+        const chunk = this.getChunk(cx, cz);
+        if (chunk) {
+            chunk.dirty = true;
+            this.priorityDirtyChunkKeys.add(chunk.key);
+        }
+    }
+
+    markChunksWithinBlockRadiusDirty(x, z, radius, prioritize = false) {
+        const minCx = this.world.getChunkCoord(x - radius);
+        const maxCx = this.world.getChunkCoord(x + radius);
+        const minCz = this.world.getChunkCoord(z - radius);
+        const maxCz = this.world.getChunkCoord(z + radius);
+        for (let cx = minCx; cx <= maxCx; cx++) {
+            for (let cz = minCz; cz <= maxCz; cz++) {
+                const key = this.world.getChunkKey(cx, cz);
+                const chunk = this.chunks.get(key);
+                if (!chunk) continue;
+                chunk.dirty = true;
+                if (prioritize) this.priorityDirtyChunkKeys.add(key);
+            }
+        }
+    }
+
     getByCoord(cx, cz) {
         return this.chunks.get(this.world.getChunkKey(cx, cz));
     }
@@ -127,6 +173,12 @@ export class ChunkManager {
         }
     }
 
+    setRenderDistance(distance) {
+        const val = Math.max(2, Math.min(6, Math.round(distance)));
+        this.world.renderDistance = val;
+        this.world.config.renderDistance = val;
+    }
+
     // ─── Queued loading ───────────────────────────────────────────────
 
     queueChunkLoad(cx, cz) {
@@ -202,7 +254,7 @@ export class ChunkManager {
 
     // ─── Dirty-mesh rebuilds ──────────────────────────────────────────
 
-    flushPriorityChunkRebuilds(limit = 12) {
+    flushPriorityChunkRebuilds(limit = 4) {
         if (this.priorityDirtyChunkKeys.size === 0) return;
         let rebuilt = 0;
         const keys = Array.from(this.priorityDirtyChunkKeys);
@@ -232,9 +284,9 @@ export class ChunkManager {
         let rebuildsDone = 0;
         const maxRebuildsPerFrame = 2;
 
-        for (let dx = -2; dx <= 2; dx++) {
+        for (let dx = -1; dx <= 1; dx++) {
             if (rebuildsDone >= maxRebuildsPerFrame) break;
-            for (let dz = -2; dz <= 2; dz++) {
+            for (let dz = -1; dz <= 1; dz++) {
                 if (rebuildsDone >= maxRebuildsPerFrame) break;
                 const key = this.world.getChunkKey(pcx + dx, pcz + dz);
                 const chunk = this.chunks.get(key);
@@ -267,36 +319,43 @@ export class ChunkManager {
             }
         }
 
-        this.flushPriorityChunkRebuilds(32); 
+        this.flushPriorityChunkRebuilds(2); 
 
-        const chunks = Array.from(this.chunks.values())
-            .filter(c => c.dirty && !c.destroyed);
-
-        const total = chunks.length;
-        if (total === 0) return;
-
-        // Prioritize by distance
         const cs = this.world.chunkSize;
-        chunks.sort((a, b) => {
-            const distA = (a.cx * cs - playerPosition.x) ** 2 + (a.cz * cs - playerPosition.z) ** 2;
-            const distB = (b.cx * cs - playerPosition.x) ** 2 + (b.cz * cs - playerPosition.z) ** 2;
-            return distA - distB;
-        });
+        const px = playerPosition.x, py = playerPosition.y, pz = playerPosition.z;
 
-        const tier = this.world.game?.qualityTier ?? 'balanced';
-        const rebuildBudget = tier === 'low' ? 12 : (tier === 'high' ? 64 : 32);
+        // Precompute sort keys — avoids getTerrainHeight calls inside comparator
+        const chunks = [];
+        for (const c of this.chunks.values()) {
+            if (!c.dirty || c.destroyed) continue;
+            const wx = c.cx * cs, wz = c.cz * cs;
+            const h = this.world.getTerrainHeight(wx, wz);
+            const dSq = (wx - px) ** 2 + (h - py) ** 2 + (wz - pz) ** 2;
+            chunks.push({ chunk: c, dSq });
+        }
+
+        if (chunks.length === 0) return;
+        chunks.sort((a, b) => a.dSq - b.dSq);
+
+        const startTime = performance.now();
+        const frameBudgetMs = 3.5; // Strict budget for chunk meshing per frame
         let rebuilt = 0;
 
-        for (let i = 0; i < chunks.length && rebuilt < rebuildBudget; i++) {
-            chunks[i].update();
+        for (let i = 0; i < chunks.length; i++) {
+            if (performance.now() - startTime > frameBudgetMs) break;
+            chunks[i].chunk.update();
             rebuilt += 1;
+        }
+        
+        if (rebuilt > 0) {
+            // console.debug(`[ChunkManager] Rebuilt ${rebuilt} chunks in ${(performance.now() - startTime).toFixed(2)}ms`);
         }
     }
 
     // ─── Mesh-color sanity audit ──────────────────────────────────────
 
     ensureChunkMeshColorSanity(limit = 10) {
-        this.colorSanityTick = (this.colorSanityTick + 1) % 30;
+        this.colorSanityTick = (this.colorSanityTick + 1) % 60;
         if (this.colorSanityTick !== 0) return;
 
         let flagged = 0;
@@ -389,9 +448,9 @@ export class ChunkManager {
             this.unloadFarChunks(playerCx, playerCz);
             this.ensureChunksAround(playerCx, playerCz);
             
-            // Boundary Flush: Force remesh 5x5 area to prevent voids during movement
-            for (let dx = -2; dx <= 2; dx++) {
-                for (let dz = -2; dz <= 2; dz++) {
+            // Boundary Flush: Force remesh 3x3 area to prevent voids during movement
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dz = -1; dz <= 1; dz++) {
                     const ck = this.world.getChunkKey(playerCx + dx, playerCz + dz);
                     const c = this.chunks.get(ck);
                     if (c) c.dirty = true;

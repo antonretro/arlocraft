@@ -24,7 +24,7 @@ export class ChunkGenerator {
 
     getChangedEntriesForChunk(cx, cz) {
         const out = [];
-        for (const [key, id] of this.world.changedBlocks.entries()) {
+        for (const [key, id] of this.world.state.changedBlocks.entries()) {
             const [x, , z] = this.world.keyToCoords(key);
             const ccx = this.world.getChunkCoord(x);
             const ccz = this.world.getChunkCoord(z);

@@ -27,24 +27,24 @@ export const FOG_SETTINGS = {
 
 export const ATMOSPHERIC_COLORS = {
     DAY: {
-        top: 0x1a72f5,
-        bottom: 0x6fb8ff,
-        sun: 0xffffd0
+        top:    0x0d5fd6,  // Deep rich sky blue at zenith
+        bottom: 0x7ec8f0,  // Lighter blue at horizon
+        sun:    0xfffae8   // Warm pale yellow sunlight
     },
     NIGHT: {
-        top: 0x041029,
-        bottom: 0x05070f,
-        sun: 0x334466 // Moon light
+        top:    0x020812,  // Near-black deep space
+        bottom: 0x08132a,  // Dark navy at horizon
+        sun:    0x2a3d66   // Cold blue moonlight
     },
     DAWN: {
-        top: 0x2b3d68,
-        bottom: 0xff9a5c, // Orange horizon
-        sun: 0xffccaa
+        top:    0x1a3060,  // Cool dark blue upper sky
+        bottom: 0xff7733,  // Vivid amber-orange horizon
+        sun:    0xffddaa   // Warm golden dawn light
     },
     DUSK: {
-        top: 0x1a1a3a,
-        bottom: 0xcc6633, // Deep sunset
-        sun: 0xff7733
+        top:    0x12103a,  // Deep purple upper sky
+        bottom: 0xe84f1a,  // Fiery red-orange horizon
+        sun:    0xff6622   // Orange sunset light
     }
 };
 
@@ -64,4 +64,15 @@ export function materialIsTransparent(material) {
         return false;
     }
     return Boolean(material?.transparent || isCutout(material));
+}
+
+export function materialUsesBlendTransparency(material) {
+    const isBlended = (mat) => Boolean(mat?.transparent) && !(Number(mat?.alphaTest) > 0.001 || Boolean(mat?.userData?.alphaCutout));
+    if (Array.isArray(material)) {
+        for (let i = 0; i < material.length; i++) {
+            if (isBlended(material?.[i])) return true;
+        }
+        return false;
+    }
+    return isBlended(material);
 }

@@ -105,8 +105,21 @@
     <!-- ═══════════════════ MENU OVERLAY ═══════════════════ -->
     <div id="overlay" style="display:block; position:fixed; inset:0; z-index:100;">
 
+        <!-- ── SCREEN: Booting ───────────────────────────────── -->
+        <div id="screen-booting" class="ni-screen ni-screen-active">
+            <div class="ni-boot-container">
+                <div class="ni-boot-logo-wrapper">
+                    <h1 class="ni-title mc-logo" data-text="ARLOCRAFT"><span>ARLOCRAFT</span></h1>
+                </div>
+                <div class="ni-boot-spinner-row">
+                    <div class="ni-boot-spinner"></div>
+                    <div id="boot-status" class="ni-boot-status">Initializing Engine...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- ── SCREEN: Title ─────────────────────────────────── -->
-        <div id="screen-title" class="ni-screen ni-screen-active">
+        <div id="screen-title" class="ni-screen">
             <div class="mc-bg-orb mc-orb-a"></div>
             <div class="mc-bg-orb mc-orb-b"></div>
             <div class="mc-bg-orb mc-orb-c"></div>
@@ -147,7 +160,9 @@
                     <button class="ni-btn ni-btn-sm" id="btn-open-repo">GitHub Repo</button>
                 </div>
             </section>
-            <div class="ni-footer-hint">ArloCraft Alpha · antonretro</div>
+            <footer class="ni-title-footer">
+                <div class="ni-footer-hint">ArloCraft Alpha · antonretro</div>
+            </footer>
         </div>
 
         <!-- ── SCREEN: World Select ──────────────────────────── -->
@@ -347,6 +362,17 @@
                             <label class="ni-label">Auto Quality</label>
                             <input id="setting-auto-quality" type="checkbox" class="ni-check" />
                         </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">FPS Cap</label>
+                            <select id="setting-fps-cap" class="ni-input-modern" style="width:100%;margin-top:6px;">
+                                <option value="30" selected>30 FPS</option>
+                                <option value="60">60 FPS (Moderate)</option>
+                                <option value="90">90 FPS</option>
+                                <option value="120">120 FPS</option>
+                                <option value="144">144 FPS</option>
+                                <option value="999">Uncapped</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -373,6 +399,7 @@
 
     <pre id="debug-overlay"></pre>
 
+    <div id="break-overlay" style="display:none; position:fixed; pointer-events:none; z-index:200;"></div>
     <script type="module" src="src/main.js"></script>
 </body>
 </html>

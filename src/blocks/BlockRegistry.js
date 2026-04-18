@@ -33,8 +33,8 @@ export class BlockRegistry {
             'leaves_palm': 'jungle_leaves',
             'wood_willow': 'mangrove_log',
             'leaves_willow': 'mangrove_leaves',
-            'short_grass': 'grass',
             'tall_grass': 'tall_grass_bottom',
+            'tall_grass_top': 'tall_grass_top',
             'mushroom_red': 'red_mushroom',
             'mushroom_brown': 'brown_mushroom'
         };
@@ -43,13 +43,17 @@ export class BlockRegistry {
 
     init() {
         this.blockTextures = new Map();
+        const igneousOwnedBlocks = new Set();
         
-        // Sort paths to process Igneous assets last so they overwrite default ones
+        // Sort: Igneous loads first (base), content folder loads last (wins over Igneous).
+        // This ensures custom per-block textures in content/blocks/ override animated
+        // Igneous sprite sheets that would otherwise display squished/tiled.
         const entries = Object.entries(textureModules).sort((a, b) => {
             const aIsIgneous = a[0].includes('Igneous');
             const bIsIgneous = b[0].includes('Igneous');
-            if (aIsIgneous && !bIsIgneous) return 1;
-            if (!aIsIgneous && bIsIgneous) return -1;
+            // Igneous assets (the pack) should come FIRST so that custom blocks in /content/ override them
+            if (aIsIgneous && !bIsIgneous) return -1;
+            if (!aIsIgneous && bIsIgneous) return 1;
             return 0;
         });
 
@@ -69,22 +73,31 @@ export class BlockRegistry {
                     continue;
                 }
 
-                if (baseName.endsWith('_top')) {
+                // Igneous tall foliage handling: keep _top and _bottom suffixes for distinct IDs
+                const isTallFoliage = /tall_grass|sunflower|rose_bush|lilac|peony/.test(baseName);
+                
+                if (baseName.endsWith('_top') && !isTallFoliage) {
                     blockId = baseName.substring(0, baseName.length - 4);
                     fileName = 'top.png';
-                } else if (baseName.endsWith('_side')) {
+                } else if (baseName.endsWith('_side') && !isTallFoliage) {
                     blockId = baseName.substring(0, baseName.length - 5);
                     fileName = 'side.png';
-                } else if (baseName.endsWith('_bottom')) {
+                } else if (baseName.endsWith('_bottom') && !isTallFoliage) {
                     blockId = baseName.substring(0, baseName.length - 7);
                     fileName = 'bottom.png';
-                } else if (baseName.endsWith('_front')) {
+                } else if (baseName.endsWith('_front') && !isTallFoliage) {
                     blockId = baseName.substring(0, baseName.length - 6);
                     fileName = 'front.png';
                 } else {
                     blockId = baseName;
                     fileName = 'all.png';
                 }
+            }
+
+            if (isIgneous) {
+                igneousOwnedBlocks.add(blockId);
+            } else if (igneousOwnedBlocks.has(blockId)) {
+                continue;
             }
 
             if (!this.blockTextures.has(blockId)) this.blockTextures.set(blockId, {});
@@ -138,12 +151,64 @@ export class BlockRegistry {
             } else {
                 this.materialCache.set(id, new THREE.MeshLambertMaterial({
                     map: tex,
-                    transparent: true,
-                    alphaTest: 0.1,
-                    depthWrite: false
+                    transparent: false,
+                    alphaTest: 0.08,
+                    depthWrite: true
                 }));
             }
         }
+    }
+
+    enhanceFaceShading(material, options = {}) {
+        if (!material) return;
+        if (Array.isArray(material)) {
+            for (const entry of material) this.enhanceFaceShading(entry, options);
+            return;
+        }
+        if (!material.isMeshLambertMaterial) return;
+        if (material.userData?.alphaCutout) return;
+        if (material.transparent) return;
+        if (material.userData?.faceAoEnhanced) return;
+
+        const strength = Number.isFinite(options.strength) ? options.strength : 0.12;
+        const edgeWidth = Number.isFinite(options.edgeWidth) ? options.edgeWidth : 0.22;
+
+        material.userData.faceAoEnhanced = true;
+        material.onBeforeCompile = (shader) => {
+            shader.uniforms.uFaceAoStrength = { value: strength };
+            shader.uniforms.uFaceAoEdgeWidth = { value: edgeWidth };
+
+            shader.vertexShader = shader.vertexShader
+                .replace(
+                    '#include <common>',
+                    `#include <common>
+varying vec2 vFaceAoUv;`
+                )
+                .replace(
+                    '#include <uv_vertex>',
+                    `#include <uv_vertex>
+vFaceAoUv = uv;`
+                );
+
+            shader.fragmentShader = shader.fragmentShader
+                .replace(
+                    '#include <common>',
+                    `#include <common>
+varying vec2 vFaceAoUv;
+uniform float uFaceAoStrength;
+uniform float uFaceAoEdgeWidth;`
+                )
+                .replace(
+                    '#include <map_fragment>',
+                    `#include <map_fragment>
+float faceAoEdgeDist = min(min(vFaceAoUv.x, 1.0 - vFaceAoUv.x), min(vFaceAoUv.y, 1.0 - vFaceAoUv.y));
+float faceAoMask = 1.0 - smoothstep(0.0, uFaceAoEdgeWidth, faceAoEdgeDist);
+float faceAoCorner = pow(faceAoMask, 1.35);
+diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
+                );
+        };
+        material.customProgramCacheKey = () => `face-ao:${strength.toFixed(3)}:${edgeWidth.toFixed(3)}`;
+        material.needsUpdate = true;
     }
 
     configureTransparentMaterial(material) {
@@ -156,11 +221,11 @@ export class BlockRegistry {
         }
         const alphaCutout = Number(material.alphaTest) > 0.001 || Boolean(material.userData?.alphaCutout);
         if (alphaCutout) {
-            // Cutout textures (foliage/flowers) render most reliably as alpha-test only,
-            // not blended transparency.
+            // Cutout foliage should render in the opaque queue with alpha testing.
+            // That keeps thin sprites stable and avoids transparent-object sorting bugs.
             material.transparent = false;
             material.opacity = 1;
-            material.alphaToCoverage = true;
+            material.alphaToCoverage = false;
             material.depthWrite = true;
             return;
         }
@@ -176,6 +241,23 @@ export class BlockRegistry {
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
         texture.colorSpace = THREE.SRGBColorSpace;
+        
+        // SURGICAL FIX: Handle Igneous animated strips (like sea_lantern.png)
+        // If the texture is a vertical strip, we only show the first frame to prevent 'squishing'.
+        if (src.includes('sea_lantern')) {
+            texture.wrapS = THREE.ClampToEdgeWrapping;
+            texture.wrapT = THREE.RepeatWrapping; // Use repeat for the strip but set repeat.y to a slice
+            
+            // Note: Since load is async, we set up a callback or just set immediate safe repeats
+            // For Sea Lantern in Igneous, it's usually 5 or more frames. 
+            // Setting repeat.y to 0.2 (1/5) is a safe bet for most animated Minecraft textures 
+            // to show at least one frame normally instead of squishing all of them.
+            // Better: We check if it's from Igneous and an animated block.
+            if (src.includes('Igneous')) {
+                texture.repeat.set(1, 0.2); 
+            }
+        }
+
         this.textureCache.set(src, texture);
         return texture;
     }
@@ -287,6 +369,9 @@ export class BlockRegistry {
         return (
             isDeco ||
             id === 'mushroom_brown' ||
+            id === 'brown_mushroom' ||
+            id === 'red_mushroom' ||
+            id.endsWith('_mushroom') ||
             id.includes('leaves') ||
             id.startsWith('mushroom_') ||
             id === 'fern' ||
@@ -334,10 +419,12 @@ export class BlockRegistry {
             const url = textures[name];
             if (url) return this.loadTexture(url);
             
-            // IGNEOUS FALLBACK: Check if filename exists without 'all.png' 
-            // Often blocks in packs are named {id}.png (e.g. stone.png)
-            const fallbackKey = `${textureId}.png`;
-            const fallbackUrl = textures[fallbackKey];
+            // IGNEOUS FALLBACK: Check if filename exists without 'all.png' or 'bottom.png' etc
+            // Handle both {id}.png and {textureId}_{suffix}.png (e.g. tall_grass_bottom.png)
+            const baseFallback = `${textureId}.png`;
+            const suffixFallback = name !== 'all.png' ? `${textureId}_${name.replace('.png','')}.png` : baseFallback;
+            
+            const fallbackUrl = textures[baseFallback] || textures[suffixFallback] || textures[name];
             if (fallbackUrl) return this.loadTexture(fallbackUrl);
 
             return null;
@@ -347,17 +434,18 @@ export class BlockRegistry {
         const sideTex = load('side.png') || allTex;
         const topTex = load('top.png') || allTex;
         const bottomTex = load('bottom.png') || allTex;
-        // For decals/sprites in texture packs, they often only provide one of these fileName patterns.
-        // If we still have no textures but found one specific one, use that as the master sprite.
-        const masterTex = topTex || bottomTex || sideTex || allTex;
         
-        const frontTex = load('front.png') || masterTex;
-        const backTex = load('back.png') || masterTex;
-        const leftTex = load('left.png') || masterTex;
-        const rightTex = load('right.png') || masterTex;
+        // For decals/sprites in texture packs (like grass), they often only provide one of these fileName patterns.
+        // We define a decoTex fallback but ensure it doesn't override specific block sides like log bark.
+        const decoTex = allTex || sideTex || bottomTex || topTex;
         
-        const finalTopTex = topTex || masterTex;
-        const finalBottomTex = bottomTex || masterTex;
+        const frontTex = load('front.png') || sideTex || decoTex;
+        const backTex = load('back.png') || sideTex || decoTex;
+        const leftTex = load('left.png') || sideTex || decoTex;
+        const rightTex = load('right.png') || sideTex || decoTex;
+        
+        const finalTopTex = topTex || decoTex;
+        const finalBottomTex = bottomTex || decoTex;
 
         let material = null;
 
@@ -373,9 +461,9 @@ export class BlockRegistry {
             const isTransparent = Boolean(config.transparent) && !isCutout;
             const matConfig = {
                 transparent: isTransparent,
-                opacity: isTransparent ? 0.82 : 1,
-                alphaTest: isCutout ? 0.05 : 0,
-                depthWrite: isCutout ? true : !isTransparent,
+                opacity: 1,
+                alphaTest: isCutout ? 0.08 : 0,
+                depthWrite: true,
                 side: isDeco ? THREE.DoubleSide : THREE.FrontSide
             };
 
@@ -427,8 +515,13 @@ export class BlockRegistry {
                     },
                     vertexShader: `
                         varying vec2 vUv;
+                        varying vec3 vColor;
                         void main() {
                             vUv = uv;
+                            vColor = vec3(1.0);
+                            #ifdef USE_INSTANCING_COLOR
+                                vColor = instanceColor;
+                            #endif
                             vec4 local = vec4(position, 1.0);
                             #ifdef USE_INSTANCING
                                 local = instanceMatrix * local;
@@ -440,22 +533,22 @@ export class BlockRegistry {
                     fragmentShader: `
                         uniform float uTime;
                         varying vec2 vUv;
+                        varying vec3 vColor;
                         void main() {
                             float waveA = sin((vUv.x * 18.0) + (uTime * 1.8)) * 0.08;
                             float waveB = cos((vUv.y * 22.0) - (uTime * 1.4)) * 0.07;
                             float wave = clamp((waveA + waveB) * 0.5 + 0.5, 0.0, 1.0);
-                            vec3 deep = vec3(0.18, 0.36, 0.74);
-                            vec3 shallow = vec3(0.34, 0.60, 0.94);
+                            vec3 deep = vColor * 0.8;
+                            vec3 shallow = vColor * 1.2;
                             vec3 color = mix(deep, shallow, wave);
-                            float alpha = 0.84 + (wave * 0.12);
-                            gl_FragColor = vec4(color, alpha);
+                            gl_FragColor = vec4(color, 0.82);
                         }
                     `,
-                    transparent: true,
-                    depthTest: true,
-                    depthWrite: false,
-                    side: THREE.DoubleSide
+                    side: THREE.FrontSide
                 });
+                material.userData.tintable = true;
+                material.transparent = true;
+                material.opacity = 0.55; // Lower opacity to make 'walls' less prominent
             } else {
                 const isDeco = Boolean(config.deco);
                 const cutoutBlock = this.isCutoutBlockId(id, isDeco);
@@ -465,8 +558,9 @@ export class BlockRegistry {
                     color: config.color ? parseInt(config.color) : 0x9c9c9c,
                     transparent: isTransparent,
                     opacity: isTransparent ? 0.82 : 1,
-                    alphaTest: isCutout ? 0.33 : 0,
-                    depthWrite: isCutout ? true : !isTransparent
+                    alphaTest: isCutout ? 0.08 : 0,
+                    depthWrite: isCutout ? true : !isTransparent,
+                    side: isDeco ? THREE.DoubleSide : THREE.FrontSide
                 });
                 if (isCutout) material.userData.alphaCutout = true;
             }
@@ -481,9 +575,13 @@ export class BlockRegistry {
             }
         }
 
+        const shouldEnhanceFaceShading = !config?.deco && id !== 'water' && id !== 'path_block' && id !== 'grass_block';
+        if (shouldEnhanceFaceShading) {
+            this.enhanceFaceShading(material);
+        }
+
         this.configureTransparentMaterial(material);
         this.materialCache.set(id, material);
         return material;
     }
 }
-

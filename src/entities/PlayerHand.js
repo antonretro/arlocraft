@@ -16,11 +16,45 @@ for (const [path, module] of Object.entries(blockTextureModules)) {
 }
 
 const TOOL_MAP = {
+    // Basic Tools (ArloCraft IDs)
+    'pick_wood': 'wooden_pickaxe',
+    'axe_wood': 'wooden_axe',
+    'sword_wood': 'wooden_sword',
+    'shovel_wood': 'wooden_shovel',
+    'hoe_wood': 'wooden_hoe',
+    'pick_stone': 'stone_pickaxe',
+    'axe_stone': 'stone_axe',
+    'sword_stone': 'stone_sword',
+    
+    // Feature Tools / Tech Gear
+    'sledge_iron': 'iron_pickaxe',
+    'iron_pick': 'iron_pickaxe',
+    'iron_sword': 'iron_sword',
+    'power_blade': 'netherite_sword',
+    'glitch_saber': 'diamond_sword',
+    'byte_axe': 'diamond_axe',
+    'echo_dagger': 'iron_sword',
+    'arc_spear': 'trident',
+    'plasma_hammer': 'netherite_axe',
+    'data_drill': 'diamond_pickaxe',
+    
+    // Legacy / Type Fallbacks
     'pick': 'wooden_pickaxe',
     'sword': 'wooden_sword',
     'axe': 'wooden_axe',
     'shovel': 'wooden_shovel',
-    'hoe': 'wooden_hoe'
+    'hoe': 'wooden_hoe',
+
+    // Items & Food
+    'tomato': 'apple',
+    'blueberry': 'sweet_berries',
+    'strawberry': 'sweet_berries',
+    'carrot': 'carrot',
+    'potato': 'potato',
+    'iron_ingot': 'iron_ingot',
+    'gold_ingot': 'gold_ingot',
+    'diamond': 'diamond',
+    'stick': 'stick'
 };
 const GRASS_PREVIEW_TINT = 0x79c05a;
 
@@ -34,11 +68,14 @@ export class PlayerHand {
         this.group.position.set(0.65, -0.55, -0.75); // Natural FPS position
         this.group.rotation.set(0.1, -0.4, 0);
 
-        // Arm Mesh (Textured with Player Skin)
-        this.armGeometry = new THREE.BoxGeometry(0.24, 0.24, 0.9);
+        // Arm Mesh (Textured with Player Skin) - Proportions: 4x12x4 (Minecraft ratio)
+        this.armGeometry = new THREE.BoxGeometry(0.21, 0.63, 0.21);
+        this.armGeometry.rotateX(Math.PI / 2); // Map Top (Shoulder) to Z+ and Bottom (Hand) to Z-
+        
         this.armMaterial = new THREE.MeshLambertMaterial({ color: 0x4a9eff }); // Initial Arlo Blue
         this.arm = new THREE.Mesh(this.armGeometry, this.armMaterial);
-        this.arm.position.set(0, 0, 0.35);
+        this.arm.rotation.y = Math.PI; // Flip to show correct outer face
+        this.arm.position.set(0, 0, 0.3); // Push forward
         this.group.add(this.arm);
 
         // Item Slot (Where blocks/tools are held)
@@ -289,9 +326,7 @@ export class PlayerHand {
 
     updateArmSkin(armMaterials) {
         if (!armMaterials) return;
-        // Three.js BoxGeometry materials order: px, nx, py, ny, pz, nz
-        // The SkinLoader returns them in this order.
         this.arm.material = armMaterials;
-        this.arm.material.needsUpdate = true;
+        armMaterials.forEach(m => { m.needsUpdate = true; });
     }
 }

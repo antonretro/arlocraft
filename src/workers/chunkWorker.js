@@ -24,17 +24,19 @@ const TREE_CONFIGS = {
 };
 
 const BIOME_GROUND_LIFE = {
-    plains: ['short_grass', 'dandelion', 'poppy', 'red_tulip', 'tall_grass_bottom', 'fern'],
+    plains: ['short_grass', 'dandelion', 'poppy', 'red_tulip', 'tall_grass_bottom', 'fern', 'wheat'],
     forest: ['short_grass', 'fern', 'mushroom_brown', 'mushroom_red', 'poppy', 'blueberry', 'strawberry', 'tall_grass_bottom'],
-    meadow: ['short_grass', 'tall_grass_bottom', 'dandelion', 'poppy', 'orange_tulip', 'red_tulip', 'pink_tulip', 'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium', 'blueberry', 'lilac', 'peony', 'rose_bush'],
+    meadow: ['short_grass', 'tall_grass_bottom', 'dandelion', 'poppy', 'orange_tulip', 'red_tulip', 'pink_tulip', 'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium', 'blueberry', 'lilac', 'peony', 'rose_bush', 'wheat'],
     swamp: ['mushroom_brown', 'mushroom_red', 'fern', 'blueberry'],
     desert: ['dead_bush', 'tomato', 'fern'],
     badlands: ['dead_bush', 'carrot', 'fern'],
     canyon: ['dead_bush', 'carrot'],
     highlands: ['potato', 'fern', 'poppy'],
-    alpine: ['potato', 'fern'],
+    alpine: ['potato', 'fern', 'wheat'],
     tundra: ['potato', 'fern']
 };
+
+const STAGED_CROPS = ['blueberry', 'strawberry', 'tomato', 'potato', 'carrot', 'wheat'];
 
 let workerRouter = null;
 let workerNoise = null;
@@ -155,18 +157,24 @@ function isHighwayAt(x, z) {
     return corridorA < 0.015 || corridorB < 0.018;
 }
 
+function getClumpedDensityMask(x, z, type = 'trees') {
+    if (!workerNoise) return 0.5;
+    const freq = type === 'trees' ? 0.02 : 0.04;
+    const n = (workerNoise.simplex2D(x * freq, z * freq) * 0.5) + 0.5;
+    return Math.pow(n, 1.3) > 0.4 ? 1.0 : 0.0;
+}
+
 function shouldPlaceTree(x, z, height, biome) {
     if (height <= SEA_LEVEL + 1) return false;
-    if ((biome.treeDensity ?? 0) <= 0) return false;
+    const density = biome.treeDensity ?? 0.05;
+    if (density <= 0) return false;
+    
+    // Feature: Clumped Generation (groves vs clearings)
+    const clumpMask = getClumpedDensityMask(x, z, 'trees');
+    if (clumpMask < 0.5) return false;
 
-    const openZone = valueNoise2D(x + 1433, z - 977, 190, currentSeed) > 0.67
-        && valueNoise2D(x - 621, z + 299, 72, currentSeed) > 0.55;
-    if (openZone) return false;
-
-    const density = hash2D((x * 2) + 11, (z * 2) - 9, currentSeed);
-    const spacing = hash2D(x + 301, z - 173, currentSeed);
-    const threshold = 1 - Math.max(0, Math.min(0.5, biome.treeDensity ?? 0.08));
-    return density > threshold && spacing > 0.55;
+    const n = valueNoise2D(x, z, 1.8, currentSeed + 555);
+    return n < density * 1.5; // Slightly buffed since we are masking large areas
 }
 
 function shouldCarveCave(x, y, z, terrainHeight, cavesEnabled) {
@@ -252,12 +260,26 @@ function addTree(planMap, changedMap, x, y, z, biome, corruptionEnabled) {
 }
 
 function addGroundLife(planMap, changedMap, x, y, z, biome) {
-    const lifeChoices = BIOME_GROUND_LIFE[biome.id];
-    if (!lifeChoices || lifeChoices.length === 0) return;
-    const roll = hash2D((x * 53) + 17, (z * 61) - 29, currentSeed);
-    if (roll > 0.045) return;
-    const pick = Math.floor(hash2D(x - 919, z + 771, currentSeed) * lifeChoices.length);
-    setPlannedPlant(planMap, changedMap, x, y + 1, z, lifeChoices[pick]);
+    const lifeList = BIOME_GROUND_LIFE[biome.id] || [];
+    if (lifeList.length === 0) return;
+
+    // Feature: Clumped Generation for deco plants
+    const clumpMask = getClumpedDensityMask(x, z, 'plants');
+    
+    const noise = valueNoise2D(x, z, 1.2, currentSeed + 999);
+    // Reduced base density for more natural clearings
+    if (noise < 0.12 * clumpMask) {
+        const idx = Math.floor(noise * 100) % lifeList.length;
+        let decoId = lifeList[idx];
+        
+        // Feature: Staged Crops (0-3)
+        if (STAGED_CROPS.includes(decoId)) {
+            const stage = Math.floor(hash2D(x, z, currentSeed + 444) * 4);
+            decoId = `${decoId}_stage${stage}`;
+        }
+
+        setPlannedPlant(planMap, changedMap, x, y + 1, z, decoId);
+    }
 }
 
 function chunkCoord(worldValue, chunkSize) {
@@ -359,13 +381,7 @@ const api = {
                 }
 
                 if (!surfaceCarved && !inForcedSpawnZone && !isHighAltitude && terrainHeight > waterLevel) {
-                    const decoHash = hash2D(wx * 22, wz * 33, currentSeed);
-                    if (decoHash < 0.08) {
-                        const decoId = decoHash < 0.045 ? 'short_grass' : (decoHash < 0.065 ? 'tall_grass_bottom' : (decoHash < 0.073 ? 'poppy' : 'dandelion'));
-                        setPlannedPlant(planMap, changedMap, wx, terrainHeight + 1, wz, decoId);
-                    } else {
-                        addGroundLife(planMap, changedMap, wx, terrainHeight, wz, biome);
-                    }
+                    addGroundLife(planMap, changedMap, wx, terrainHeight, wz, biome);
                 }
             }
         }

@@ -21,6 +21,10 @@ export class Input {
         return Boolean(this.keys[code]);
     }
 
+    isJustPressed(code) {
+        return Boolean(this.justPressed[code]);
+    }
+
     consumeKeyPress(code) {
         if (!this.justPressed[code]) return false;
         delete this.justPressed[code];
@@ -107,7 +111,8 @@ export class Input {
                 return;
             }
 
-            if (event.code === 'KeyE') {
+            if (event.code === 'KeyE' || event.code === 'KeyI') {
+                event.preventDefault(); // Force browser to yield key to the game
                 this.game.toggleInventory();
                 return;
             }
@@ -137,8 +142,10 @@ export class Input {
 
         document.addEventListener('mousemove', (event) => {
             if (!this.isLocked || this.game.isPaused || this.game.gameState.isInventoryOpen) return;
-            const sensitivity = this.game.settings?.sensitivity ?? 0.00145;
+            const sensitivity = (this.game.settings?.sensitivity ?? 0.00145) * 0.85; // Slight reduction for smoothing
             const invertFactor = this.game.settings?.invertY ? -1 : 1;
+            
+            // Raw movement with slight dampening for 30fps stability
             this.game.adjustLook(-event.movementX * sensitivity, -event.movementY * sensitivity * invertFactor);
         });
 

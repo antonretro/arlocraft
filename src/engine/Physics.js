@@ -360,7 +360,7 @@ export class Physics {
         const ctrlPressed = keys['ControlLeft'] || keys['ControlRight'];
 
         // Double-tap W sprints (Minecraft Java edition style)
-        if (input?.consumeKeyPress?.('KeyW') || input?.consumeKeyPress?.('ArrowUp')) {
+        if (input?.isJustPressed?.('KeyW') || input?.isJustPressed?.('ArrowUp')) {
             if (this.wPressTimer > 0 && this.wPressTimer < 0.28) {
                 this.isSprinting = true;
             }
@@ -440,9 +440,9 @@ export class Physics {
                     this.velocity.y = this.jumpSpeed;
                     this.jumpBufferTimer = 0;
                     this.coyoteTimer = 0;
-                } else if (!this.isCrouching && this.autoJumpEnabled && this.autoJumpCooldown <= 0 && this.shouldAutoJump()) {
+                } else if (!this.isCrouching && this.autoJumpEnabled && this.autoJumpCooldown <= 0 && wPressed && this.shouldAutoJump()) {
                     this.velocity.y = this.jumpSpeed;
-                    this.autoJumpCooldown = 0.2;
+                    this.autoJumpCooldown = 0.4;
                 }
             } else {
                 this.velocity.y += this.gravity * delta;
