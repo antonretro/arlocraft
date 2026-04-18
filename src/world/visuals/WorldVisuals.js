@@ -120,7 +120,7 @@ export class WorldVisuals {
                 geo.translate(0, -0.49, 0);
                 return withWhiteVertexColors(geo);
             })(),
-            grass_block_sides: (() => {
+            solid_no_top: (() => {
                 const geo = new THREE.BoxGeometry(1, 1, 1);
                 // BoxGeometry has 12 triangles (2 per face, 36 indices total).
                 //py (top) is the 3rd face. Indices 12-17.

@@ -140,7 +140,7 @@ function collectBlocksByType(chunk) {
         }
 
         // Feature: Split Grass Block to allow independent tinting of sides vs top
-        if (id === 'grass_block' || id === 'grass') {
+        if (id === 'grass_block') {
             add('grass_block_top', key);
             add('grass_block_sides', key);
             continue;
