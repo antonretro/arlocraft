@@ -40,7 +40,7 @@ export class WorldVisuals {
                 return withWhiteVertexColors(geo);
             })(),
             water_side: (() => {
-                const geo = new THREE.PlaneGeometry(1, 0.9375);
+                const geo = new THREE.PlaneGeometry(1.002, 0.9385); // Tiny inflate to hide seams
                 geo.translate(0, -0.03125, 0);
                 geo.translate(0, 0, 0.5);
                 return withWhiteVertexColors(geo);
@@ -108,11 +108,34 @@ export class WorldVisuals {
                 geo.translate(0, -0.25, 0);
                 return withWhiteVertexColors(geo);
             })(),
+            grass_block_top: (() => {
+                const geo = new THREE.PlaneGeometry(1.002, 1.002);
+                geo.rotateX(-Math.PI / 2);
+                geo.translate(0, 0.5002, 0); // Tiny lift to eliminate seams and Z-fighting
+                return withWhiteVertexColors(geo);
+            })(),
             flat: (() => {
                 const geo = new THREE.PlaneGeometry(1, 1);
                 geo.rotateX(-Math.PI / 2);
                 geo.translate(0, -0.49, 0);
                 return withWhiteVertexColors(geo);
+            })(),
+            grass_block_sides: (() => {
+                const geo = new THREE.BoxGeometry(1, 1, 1);
+                // BoxGeometry has 12 triangles (2 per face, 36 indices total).
+                //py (top) is the 3rd face. Indices 12-17.
+                const oldIndices = Array.from(geo.index.array);
+                const newIndices = [];
+                for (let i = 0; i < oldIndices.length; i += 6) {
+                    if (i === 12) continue; // Skip top face
+                    for (let j = 0; j < 6; j++) newIndices.push(oldIndices[i + j]);
+                }
+                const result = new THREE.BufferGeometry();
+                result.setAttribute('position', geo.attributes.position);
+                result.setAttribute('uv', geo.attributes.uv);
+                result.setAttribute('normal', geo.attributes.normal);
+                result.setIndex(newIndices);
+                return withWhiteVertexColors(result);
             })()
         };
     }

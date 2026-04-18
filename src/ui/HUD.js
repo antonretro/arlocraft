@@ -733,9 +733,11 @@ export class HUD {
             sledge_iron:    'iron_pickaxe',
             data_drill:     'netherite_pickaxe',
             // Swords / blades
+            sword_wood:     'wooden_sword',
             power_blade:    'iron_sword',
             glitch_saber:   'diamond_sword',
             // Axes
+            axe_wood:       'wooden_axe',
             byte_axe:       'diamond_axe',
             // Daggers → stone sword (closest short blade)
             echo_dagger:    'stone_sword',

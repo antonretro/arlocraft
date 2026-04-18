@@ -1,4 +1,6 @@
 export const TOOLS = [
+    { id: 'sword_wood', name: 'Wooden Sword', type: 'sword', efficiency: 1, damage: 4, range: 3.5, cooldown: 0.3, knockback: 0.4, critChance: 0.02 },
+    { id: 'axe_wood', name: 'Wooden Axe', type: 'axe', efficiency: 1, damage: 3, range: 3.5, cooldown: 0.35, knockback: 0.45, critChance: 0.02 },
     { id: 'pick_wood', name: 'Wooden Pickaxe', type: 'pick', efficiency: 1, damage: 2, range: 3.6, cooldown: 0.28, knockback: 0.4, critChance: 0.02 },
     { id: 'sledge_iron', name: 'Iron Sledge', type: 'pick', efficiency: 3, damage: 5, range: 3.8, cooldown: 0.3, knockback: 0.7, critChance: 0.04 },
     { id: 'power_blade', name: 'Power Blade', type: 'sword', efficiency: 1, damage: 10, range: 4.1, cooldown: 0.25, knockback: 0.95, critChance: 0.08 },

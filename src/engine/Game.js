@@ -2149,7 +2149,8 @@ export class Game {
         if (overlay) {
             const fps = Math.round(1 / Math.max(0.001, delta));
             const pos = this.physics.position;
-            overlay.textContent = `FPS: ${fps} | POS: ${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`;
+            const meshMs = (this._lastMeshMs || 0).toFixed(2);
+            overlay.textContent = `FPS: ${fps} | POS: ${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)} | MESH: ${meshMs}ms`;
         }
     }
 }

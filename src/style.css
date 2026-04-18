@@ -134,6 +134,121 @@ canvas { display: block; }
     filter: brightness(0.9) sepia(1) hue-rotate(65deg) saturate(2.5);
 }
 
+/* ─── INVENTORY & CRAFTING ────────────────────────────────── */
+#inventory-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(12px);
+    display: none; /* Controlled by JS */
+    align-items: center;
+    justify-content: center;
+    animation: ni-fade-in 0.25s ease-out;
+}
+
+#inventory-container {
+    width: min(94vw, 880px);
+    background: var(--ni-bg-alt);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--ni-radius-lg);
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#inventory-header {
+    padding: 24px 32px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#inventory-header h2 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--ni-blue);
+}
+
+#inventory-main {
+    padding: 32px;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 40px;
+}
+
+#crafting-section {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 24px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#crafting-section h3 {
+    width: 100%;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--ni-text-muted);
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.grid-3x3 {
+    display: grid;
+    grid-template-columns: repeat(3, 54px);
+    gap: 8px;
+}
+
+#crafting-arrow {
+    margin: 16px 0;
+    font-weight: 800;
+    color: var(--ni-blue);
+    opacity: 0.6;
+}
+
+.slot.large {
+    width: 72px;
+    height: 72px;
+    background: rgba(0, 195, 227, 0.1);
+    border-color: rgba(0, 195, 227, 0.3);
+}
+
+#storage-section h3 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--ni-text-muted);
+    margin: 0 0 12px;
+}
+
+.grid-9x3 {
+    display: grid;
+    grid-template-columns: repeat(9, 54px);
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.grid-9x1 {
+    display: grid;
+    grid-template-columns: repeat(9, 54px);
+    gap: 8px;
+}
+
+#crafting-hint {
+    margin-top: 20px;
+    font-size: 0.7rem;
+    color: var(--ni-text-muted);
+    text-align: center;
+}
+
 /* ── BLOCK BREAKING OVERLAY (Minecraft Style) ── */
 #break-overlay {
     width: 80px;

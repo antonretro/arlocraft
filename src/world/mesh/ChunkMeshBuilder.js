@@ -88,6 +88,14 @@ function clearInstancedMeshes(chunk) {
     chunk.instancedMeshes.clear();
 }
 
+// Reuse vectors and matrices to prevent GC thrashing during heavy chunk rebuilds
+const tempCoords = [0, 0, 0];
+const tempPos = new THREE.Vector3();
+const tempMatrix = new THREE.Matrix4();
+const tempQuat = new THREE.Quaternion();
+const tempEuler = new THREE.Euler();
+const tempScale = new THREE.Vector3(1, 1, 1);
+
 function collectBlocksByType(chunk) {
     const byType = new Map();
     const add = (id, key) => {
@@ -99,28 +107,42 @@ function collectBlocksByType(chunk) {
         const id = chunk.world.state.blockMap.get(key);
         if (!id) continue;
 
-        if (id === 'water') {
-            const [ax, ay, az] = chunk.world.keyToCoords(key);
+        if (id.startsWith('water')) {
+            const coords = chunk.world.keyToCoords(key);
+            const ax = coords[0], ay = coords[1], az = coords[2];
             
-            // Seamless water: Only add faces if neighbor is NOT water
-            const above = chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay + 1, az));
-            if (above !== 'water') add('water_top', key);
+            const isWater = (blockId) => blockId && blockId.startsWith('water');
 
-            const below = chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay - 1, az));
-            if (below !== 'water' && below !== 'bedrock' && below !== 'stone') add('water_bottom', key);
+            // Seamless water: Only add faces if neighbor is NOT water and is NOT solid opaque
+            const aboveId = chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay + 1, az));
+            if (!isWater(aboveId)) {
+                add('water_top', key);
+            }
 
-            const nx = chunk.world.state.blockMap.get(chunk.world.getKey(ax + 1, ay, az));
-            if (nx !== 'water' && !chunk.world.blocks.isSolid(nx)) add('water_side_nx', key);
+            const belowId = chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay - 1, az));
+            if (!isWater(belowId) && !chunk.world.blocks.isSolid(belowId)) {
+                add('water_bottom', key);
+            }
 
-            const px = chunk.world.state.blockMap.get(chunk.world.getKey(ax - 1, ay, az));
-            if (px !== 'water' && !chunk.world.blocks.isSolid(px)) add('water_side_px', key);
+            const nxId = chunk.world.state.blockMap.get(chunk.world.getKey(ax + 1, ay, az));
+            if (!isWater(nxId) && !chunk.world.blocks.isSolid(nxId)) add('water_side_nx', key);
 
-            const nz = chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay, az + 1));
-            if (nz !== 'water' && !chunk.world.blocks.isSolid(nz)) add('water_side_nz', key);
+            const pxId = chunk.world.state.blockMap.get(chunk.world.getKey(ax - 1, ay, az));
+            if (!isWater(pxId) && !chunk.world.blocks.isSolid(pxId)) add('water_side_px', key);
 
-            const pz = chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay, az - 1));
-            if (pz !== 'water' && !chunk.world.blocks.isSolid(pz)) add('water_side_pz', key);
+            const nzId = chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay, az + 1));
+            if (!isWater(nzId) && !chunk.world.blocks.isSolid(nzId)) add('water_side_nz', key);
+
+            const pzId = chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay, az - 1));
+            if (!isWater(pzId) && !chunk.world.blocks.isSolid(pzId)) add('water_side_pz', key);
             
+            continue;
+        }
+
+        // Feature: Split Grass Block to allow independent tinting of sides vs top
+        if (id === 'grass_block' || id === 'grass') {
+            add('grass_block_top', key);
+            add('grass_block_sides', key);
             continue;
         }
 
@@ -175,12 +197,12 @@ function finalizeInstancedMesh(mesh, id, blockData, material) {
 
 export function rebuildChunkInstancedMeshes(chunk) {
     if (chunk.destroyed) return;
+    const startTime = performance.now();
 
     chunk.resyncBlockKeysFromWorld();
     clearInstancedMeshes(chunk);
 
     const byType = collectBlocksByType(chunk);
-    const temp = new THREE.Object3D();
     const worldX = chunk.cx * chunk.world.chunkSize;
     const worldZ = chunk.cz * chunk.world.chunkSize;
     const cam = chunk.world?.game?.camera?.instance;
@@ -208,9 +230,12 @@ export function rebuildChunkInstancedMeshes(chunk) {
 
         let renderCount = 0;
         const color = new THREE.Color();
-        const property = baseId === 'water' ? 'waterColor' : 'color';
+        const property = (baseId === 'water' || id.startsWith('water_')) ? 'waterColor' : 'color'; 
+        
         for (const key of keys) {
-            const [ax, ay, az] = chunk.world.keyToCoords(key);
+            const coords = chunk.world.keyToCoords(key);
+            const ax = coords[0], ay = coords[1], az = coords[2];
+
             if (shouldSkipChunkBlockInstance({
                 world: chunk.world,
                 id: baseId,
@@ -223,36 +248,31 @@ export function rebuildChunkInstancedMeshes(chunk) {
                 continue;
             }
 
-            const lx = ax - worldX;
-            const ly = ay;
-            const lz = az - worldZ;
-            if (!Number.isFinite(lx) || !Number.isFinite(ly) || !Number.isFinite(lz)) continue;
-
-            temp.position.set(lx, ly, lz);
-            temp.rotation.set(0, 0, 0);
-            temp.scale.set(1, 1, 1);
+            tempPos.set(ax - worldX, ay, az - worldZ);
+            tempEuler.set(0, 0, 0);
 
             // Special Handle: Water orientations
-            if (id === 'water_side_nx') temp.rotation.y = Math.PI / 2;
-            else if (id === 'water_side_px') temp.rotation.y = -Math.PI / 2;
-            else if (id === 'water_side_nz') temp.rotation.y = Math.PI;
-            else if (id === 'water_bottom') temp.rotation.x = Math.PI / 2;
+            if (id === 'water_side_nx') tempEuler.y = Math.PI / 2;
+            else if (id === 'water_side_px') tempEuler.y = -Math.PI / 2;
+            else if (id === 'water_side_nz') tempEuler.y = Math.PI;
+            else if (id === 'water_bottom') tempEuler.x = Math.PI / 2;
             
             // Special Handle: Log Axis
             if (id.includes(':x')) {
-                temp.rotation.z = Math.PI / 2;
+                tempEuler.z = Math.PI / 2;
             } else if (id.includes(':z')) {
-                temp.rotation.x = Math.PI / 2;
+                tempEuler.x = Math.PI / 2;
             }
 
             if (id.includes('_stairs')) {
-                if (id.endsWith('_n')) temp.rotation.y = Math.PI;
-                else if (id.endsWith('_e')) temp.rotation.y = Math.PI / 2;
-                else if (id.endsWith('_w')) temp.rotation.y = -Math.PI / 2;
+                if (id.endsWith('_n')) tempEuler.y = Math.PI;
+                else if (id.endsWith('_e')) tempEuler.y = Math.PI / 2;
+                else if (id.endsWith('_w')) tempEuler.y = -Math.PI / 2;
             }
 
-            temp.updateMatrix();
-            mesh.setMatrixAt(renderCount, temp.matrix);
+            tempQuat.setFromEuler(tempEuler);
+            tempMatrix.compose(tempPos, tempQuat, tempScale);
+            mesh.setMatrixAt(renderCount, tempMatrix);
 
             if (isTintable) {
                 const hex = chunk.world.terrain.getBlendedColor(ax, az, property);
@@ -279,10 +299,16 @@ export function rebuildChunkInstancedMeshes(chunk) {
 
         mesh.count = renderCount;
         mesh.instanceMatrix.needsUpdate = true;
+        if (isTintable) mesh.instanceColor.needsUpdate = true;
+        
         mesh.computeBoundingBox();
         mesh.computeBoundingSphere();
         mesh.frustumCulled = false;
         chunk.instancedMeshes.set(id, mesh);
         chunk.group.add(mesh);
+    }
+    
+    if (chunk.world.game) {
+        chunk.world.game._lastMeshMs = performance.now() - startTime;
     }
 }

@@ -20,6 +20,13 @@ export function resolveChunkGeometry(world, id, blockData) {
         if (id.startsWith('water_side')) return world.sharedChunkGeometries.water_side;
         return world.sharedChunkGeometries.water;
     }
+    if (id === 'grass_block_top') {
+        const geo = world.sharedChunkGeometries.water_top.clone();
+        geo.translate(0, 0.0625, 0); // Offset upwards slightly to perfectly align with cube top (0.5 vs 0.4375 water)
+        return geo;
+    }
+    if (id === 'grass_block_sides') return world.sharedChunkGeometries.solid_no_top;
+    
     if (id === 'path_block') return world.sharedChunkGeometries.path;
     if (blockData?.renderType === 'flat' || blockData?.flat) return world.sharedChunkGeometries.flat;
     if (blockData?.renderType === 'plant' || blockData?.renderType === 'paired_plant' || blockData?.deco) {

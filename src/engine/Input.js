@@ -106,11 +106,6 @@ export class Input {
                 this.game.toggleGameMode();
             }
 
-            if (event.code === 'KeyI') {
-                this.game.toggleHelpPanel();
-                return;
-            }
-
             if (event.code === 'KeyE' || event.code === 'KeyI') {
                 event.preventDefault(); // Force browser to yield key to the game
                 this.game.toggleInventory();

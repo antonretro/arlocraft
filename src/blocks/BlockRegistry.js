@@ -409,6 +409,24 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             if (!this.blockTextures.has(targetId)) targetId = strippedId.replace('_slab', '');
         }
 
+        // Feature: Split Grass Block support for separate tinting
+        if (id === 'grass_block_top' || id === 'grass_block_sides') {
+            const baseMat = this.getMaterial('grass_block');
+            if (id === 'grass_block_top') return baseMat[2]; // Index 2 is TOP
+            
+            // For sides, we MUST ensure the array has no tintable materials,
+            // otherwise InstancedMesh.setColorAt will tint the whole block.
+            const sideMats = baseMat.map(m => {
+                if (m.userData?.tintable) {
+                    const clone = m.clone();
+                    clone.userData = { ...m.userData, tintable: false };
+                    return clone;
+                }
+                return m;
+            });
+            return sideMats;
+        }
+
         const config = this.blocks.get(id) || this.blocks.get(strippedId) || this.blocks.get(targetId) || { id, name: id, textureId: targetId };
         const textureId = config.textureId || targetId;
         const textures = this.blockTextures.get(textureId) || this.blockTextures.get(targetId) || this.blockTextures.get(id) || {};

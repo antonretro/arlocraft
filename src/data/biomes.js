@@ -143,6 +143,20 @@ export const BIOMES = [
         treeDensity: 0.02,
         color: 0x80b497,
         waterColor: 0x3d57d6
+    },
+    {
+        id: 'snow',
+        name: 'Snow',
+        surfaceBlock: 'snow_block',
+        fillerBlock: 'dirt',
+        mcDepth: 4,
+        mcScale: 0.15,
+        ridgeStrength: 0.25,
+        detailStrength: 0.6,
+        waterLevelOffset: -1,
+        treeDensity: 0.05,
+        color: 0xffffff,
+        waterColor: 0x3d57d6
     }
 ];
 

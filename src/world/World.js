@@ -127,27 +127,42 @@ export class World {
             [x + radius, z + radius]
         ];
 
-        let maxGroundY = -256; // Low default, must find a block or terrain fallback
+        let maxGroundY = -256; 
         const startY = Math.floor(y + 0.5);
 
         for (const [px, pz] of searchPoints) {
             const gx = Math.round(px);
             const gz = Math.round(pz);
+            
+            const cx = this.getChunkCoord(gx);
+            const cz = this.getChunkCoord(gz);
+            const chunk = this.chunkManager.getChunk(cx, cz);
+            // If the chunk exists and is NOT destroyed, we trust its blockMap data.
+            // If it doesn't exist yet, we must fall back to noise height to prevent falling thru void.
+            const isChunkReady = chunk && !chunk.destroyed;
+            
             const terrainY = this.terrain.getColumnHeight(px, pz);
             
             // Search from player's feet downwards
-            for (let gy = startY; gy > terrainY - 16; gy--) {
+            for (let gy = startY; gy > -128; gy--) {
                 const key = this.coords.getKey(gx, gy, gz);
                 const id = this.state.blockMap.get(key);
+                
                 if (id && this.blocks.isSolid(id)) {
                     const blockTopY = gy + 0.5;
                     if (blockTopY > maxGroundY) maxGroundY = blockTopY;
                     break;
                 }
-                // Hard floor fallback only if we reach natural terrain and no block info exists
-                if (gy <= terrainY && !id) {
-                    if (terrainY > maxGroundY) maxGroundY = terrainY;
-                    break;
+
+                // Safety fallback: only if chunk isn't ready or we reach the edge of the world
+                if (gy <= terrainY) {
+                    if (!isChunkReady) {
+                        if (terrainY > maxGroundY) maxGroundY = terrainY;
+                        break;
+                    } else if (gy < terrainY - 32) {
+                        // Beyond reasonable digging depth and no blocks found in a loaded chunk
+                        break; 
+                    }
                 }
             }
         }
