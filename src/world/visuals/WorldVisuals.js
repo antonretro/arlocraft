@@ -122,19 +122,37 @@ export class WorldVisuals {
             })(),
             solid_no_top: (() => {
                 const geo = new THREE.BoxGeometry(1, 1, 1);
-                // BoxGeometry has 12 triangles (2 per face, 36 indices total).
-                //py (top) is the 3rd face. Indices 12-17.
+                // Preserve face groups so multi-material blocks like grass_block_sides
+                // still map the correct textures onto each remaining face.
                 const oldIndices = Array.from(geo.index.array);
+                const faces = [
+                    { materialIndex: 0, start: 0 },
+                    { materialIndex: 1, start: 6 },
+                    { materialIndex: 2, start: 12 }, // top
+                    { materialIndex: 3, start: 18 },
+                    { materialIndex: 4, start: 24 },
+                    { materialIndex: 5, start: 30 }
+                ];
                 const newIndices = [];
-                for (let i = 0; i < oldIndices.length; i += 6) {
-                    if (i === 12) continue; // Skip top face
-                    for (let j = 0; j < 6; j++) newIndices.push(oldIndices[i + j]);
+                const groups = [];
+
+                for (const face of faces) {
+                    if (face.materialIndex === 2) continue;
+                    const groupStart = newIndices.length;
+                    for (let j = 0; j < 6; j++) {
+                        newIndices.push(oldIndices[face.start + j]);
+                    }
+                    groups.push({ start: groupStart, count: 6, materialIndex: face.materialIndex });
                 }
+
                 const result = new THREE.BufferGeometry();
                 result.setAttribute('position', geo.attributes.position);
                 result.setAttribute('uv', geo.attributes.uv);
                 result.setAttribute('normal', geo.attributes.normal);
                 result.setIndex(newIndices);
+                for (const group of groups) {
+                    result.addGroup(group.start, group.count, group.materialIndex);
+                }
                 return withWhiteVertexColors(result);
             })()
         };
