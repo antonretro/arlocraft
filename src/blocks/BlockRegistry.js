@@ -35,7 +35,6 @@ export class BlockRegistry {
             'wood_willow': 'mangrove_log',
             'leaves_willow': 'mangrove_leaves',
             'tall_grass': 'tall_grass_bottom',
-            'tall_grass_top': 'tall_grass_top',
             'mushroom_red': 'red_mushroom',
             'mushroom_brown': 'brown_mushroom'
         };
@@ -389,7 +388,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         if (this.materialCache.has(id)) return this.materialCache.get(id);
         
         const alias = this.idAliases[id];
-        if (alias) {
+        if (alias && alias !== id) {
             const material = this.getMaterial(alias);
             this.materialCache.set(id, material);
             return material;
