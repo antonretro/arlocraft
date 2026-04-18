@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BLOCKS } from '../data/blocks.js';
+import { normalizeBlockVariantId } from '../data/blockIds.js';
 
 const textureModules = import.meta.glob([
     '../content/blocks/*/*.png', 
@@ -393,11 +394,12 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             this.materialCache.set(id, material);
             return material;
         }
-        let targetId = id;
+        const normalizedId = normalizeBlockVariantId(id);
+        let targetId = normalizedId || id;
         const stairMatch = id.match(/(.*_stairs)(_[nswe])$/);
         const slabMatch = id.match(/(.*_slab)(_[nswe])$/); // Slabs might have half-height positioning later
         
-        let strippedId = id;
+        let strippedId = normalizedId || id;
         if (stairMatch) strippedId = stairMatch[1];
         else if (slabMatch) strippedId = slabMatch[1];
 

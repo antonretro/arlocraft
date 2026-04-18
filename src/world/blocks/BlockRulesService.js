@@ -1,5 +1,6 @@
 import { BLOCKS } from '../../data/blocks.js';
 import { TOOLS } from '../../data/tools.js';
+import { normalizeBlockVariantId } from '../../data/blockIds.js';
 
 export class BlockRulesService {
     constructor(world) {
@@ -31,7 +32,7 @@ export class BlockRulesService {
 
     getBlockData(id) {
         if (!id) return null;
-        return this.blockDataById.get(id);
+        return this.blockDataById.get(normalizeBlockVariantId(id));
     }
 
     isBlockSolid(id) {
@@ -53,7 +54,7 @@ export class BlockRulesService {
     computeMineDuration(blockId, selectedItem, mode) {
         if (mode === 'CREATIVE') return 0;
 
-        const hardness = Math.max(0.15, Number(this.blockHardnessById.get(blockId) ?? 1));
+        const hardness = Math.max(0.15, Number(this.blockHardnessById.get(normalizeBlockVariantId(blockId)) ?? 1));
         let efficiency = 1;
         if (selectedItem?.id) {
             const tool = this.toolById.get(selectedItem.id);
@@ -68,14 +69,16 @@ export class BlockRulesService {
 
     isGravityBlock(id) {
         if (!id) return false;
-        if (this.gravityBlockIds.has(id)) return true;
-        if (id.includes('leaves')) return true;
+        const normalizedId = normalizeBlockVariantId(id);
+        if (this.gravityBlockIds.has(normalizedId)) return true;
+        if (normalizedId.includes('leaves')) return true;
         return false;
     }
 
     getBlockDropId(id) {
-        const data = this.getBlockData(id);
-        return data?.dropId || id;
+        const normalizedId = normalizeBlockVariantId(id);
+        const data = this.getBlockData(normalizedId);
+        return data?.dropId || normalizedId;
     }
 
     getBlockPairState(id, x, y, z) {
@@ -98,10 +101,12 @@ export class BlockRulesService {
     }
 
     getBlockXP(id) {
-        return this.blockXpById.get(id) ?? 0;
+        return this.blockXpById.get(normalizeBlockVariantId(id)) ?? 0;
     }
 
     getBlockPickId(id) {
-        return id;
+        const normalizedId = normalizeBlockVariantId(id);
+        const data = this.getBlockData(normalizedId);
+        return data?.pickId || normalizedId;
     }
 }

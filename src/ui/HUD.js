@@ -1,5 +1,6 @@
 import { BLOCKS } from '../data/blocks.js';
 import { TOOLS } from '../data/tools.js';
+import { blockIdToDisplayName, normalizeBlockVariantId } from '../data/blockIds.js';
 import { CraftingSystem } from '../engine/CraftingSystem.js';
 
 const itemTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/item/*.png', { eager: true, query: '?url' });
@@ -377,19 +378,20 @@ export class HUD {
     createItemElement(item) {
         const element = document.createElement('div');
         element.className = 'item-icon';
-        const block = this.blockById.get(item.id);
-        const textureKey = this.getDisplayTextureKey(item.id);
+        const normalizedId = normalizeBlockVariantId(item.id);
+        const block = this.blockById.get(normalizedId);
+        const textureKey = this.getDisplayTextureKey(normalizedId);
         const isDeco = Boolean(block?.deco);
-        const shouldTintGrassFace = item.id === 'grass_block';
+        const shouldTintGrassFace = normalizedId === 'grass_block';
         const shouldTintFoliageIcon = ((isDeco && (textureKey === 'grass' || textureKey.includes('grass') || textureKey === 'fern')) || textureKey.includes('leaves'));
-        const shouldUseGrassSpriteTint = isDeco && (textureKey === 'grass' || item.id === 'short_grass' || item.id === 'tall_grass');
+        const shouldUseGrassSpriteTint = isDeco && (textureKey === 'grass' || normalizedId === 'short_grass' || normalizedId === 'tall_grass');
         const isBlockItem = (block && !block.deco) || 
-                           item.id === 'wood' || item.id === 'leaves' || 
-                           item.id.startsWith('wood_') || item.id.startsWith('leaves_') ||
-                           item.id.includes('_stairs') || item.id.includes('_slab');
+                           normalizedId === 'wood' || normalizedId === 'leaves' || 
+                           normalizedId.startsWith('wood_') || normalizedId.startsWith('leaves_') ||
+                           normalizedId.includes('_stairs') || normalizedId.includes('_slab');
 
         if (isBlockItem) {
-             const set = this.getBlockTextureSet(item.id);
+             const set = this.getBlockTextureSet(normalizedId);
              if (set && (set.top || set.all || set.side || set.front || set.bottom)) {
                  const topTex = set.top || set.all || set.side || set.front || set.bottom;
                  const leftTex = set.front || set.side || set.all || set.top || set.bottom;
@@ -423,10 +425,10 @@ export class HUD {
 
                  element.appendChild(isoContainer);
              } else {
-                 element.textContent = String(item.id).slice(0, 2).toUpperCase();
+                 element.textContent = String(normalizedId).slice(0, 2).toUpperCase();
              }
         } else {
-             const icon = this.getIconPath(item.id);
+             const icon = this.getIconPath(normalizedId);
              if (icon) {
                  element.style.backgroundImage = `url('${icon}')`;
                  if (shouldUseGrassSpriteTint) {
@@ -438,7 +440,7 @@ export class HUD {
                      element.classList.add('generated');
                  }
              } else {
-                 element.textContent = String(item.id).slice(0, 2).toUpperCase();
+                 element.textContent = String(normalizedId).slice(0, 2).toUpperCase();
              }
         }
 
@@ -715,17 +717,18 @@ export class HUD {
     getIconPath(itemId) {
         if (!itemId) return this.getGeneratedIconPath('item');
 
-        const block = this.blockById.get(itemId);
+        const normalizedId = normalizeBlockVariantId(itemId);
+        const block = this.blockById.get(normalizedId);
         if (block?.deco) {
-            const textureKey = this.getDisplayTextureKey(itemId);
+            const textureKey = this.getDisplayTextureKey(normalizedId);
             return this.blockTextures?.[textureKey]
                 || this.blockTextures?.[`${textureKey}_front`]
                 || this.blockTextures?.[`${textureKey}_top`]
                 || this.blockTextures?.[`${textureKey}_bottom`]
-                || this.getGeneratedIconPath(itemId);
+                || this.getGeneratedIconPath(normalizedId);
         }
 
-        const alias = this.resolveIconAlias(itemId) || itemId;
+        const alias = this.resolveIconAlias(normalizedId) || normalizedId;
         
         const toolMap = {
             // Picks / drills
@@ -779,7 +782,7 @@ export class HUD {
         if (this.itemTextures && this.itemTextures[mcId]) return this.itemTextures[mcId];
         if (this.blockTextures && this.blockTextures[mcId]) return this.blockTextures[mcId];
 
-        return this.getGeneratedIconPath(itemId);
+        return this.getGeneratedIconPath(normalizedId);
     }
 
     getGeneratedIconPath(itemId) {
@@ -943,17 +946,18 @@ export class HUD {
 
     describeItem(item) {
         if (!item) return '';
-        const block = this.blockById.get(item.id);
+        const normalizedId = normalizeBlockVariantId(item.id);
+        const block = this.blockById.get(normalizedId);
         if (block) {
             return `${block.name} | Hardness ${block.hardness} | XP ${block.xp}`;
         }
 
-        const tool = this.toolById.get(item.id);
+        const tool = this.toolById.get(normalizedId);
         if (tool) {
             return `${tool.name} | Damage ${tool.damage} | Efficiency ${tool.efficiency}`;
         }
 
-        return item.id.toUpperCase();
+        return blockIdToDisplayName(normalizedId);
     }
 
     renderSelectedItem() {
@@ -970,7 +974,8 @@ export class HUD {
             return;
         }
 
-        const block = this.blockById.get(item.id);
+        const normalizedId = normalizeBlockVariantId(item.id);
+        const block = this.blockById.get(normalizedId);
         if (block) {
             name.textContent = `${block.name.toUpperCase()} x${item.count ?? 1}`;
             const offhand = this.gameState.getOffhandItem();
@@ -979,7 +984,7 @@ export class HUD {
             return;
         }
 
-        const tool = this.toolById.get(item.id);
+        const tool = this.toolById.get(normalizedId);
         if (tool) {
             name.textContent = `${tool.name.toUpperCase()} x${item.count ?? 1}`;
             const offhand = this.gameState.getOffhandItem();
@@ -988,8 +993,8 @@ export class HUD {
             return;
         }
 
-        name.textContent = `${item.id.toUpperCase()} x${item.count ?? 1}`;
-        stats.textContent = 'Unknown item stats';
+        name.textContent = `${blockIdToDisplayName(normalizedId).toUpperCase()} x${item.count ?? 1}`;
+        stats.textContent = `Item ID ${normalizedId}`;
     }
 
     generateHotbar() {

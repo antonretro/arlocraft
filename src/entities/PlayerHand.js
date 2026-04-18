@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TOOLS } from '../data/tools.js';
+import { normalizeBlockVariantId } from '../data/blockIds.js';
 
 const itemTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/item/*.png', { eager: true, query: '?url' });
 const ITEM_TEXTURES = new Map();
@@ -204,11 +205,12 @@ export class PlayerHand {
 
         if (!itemId) return;
 
-        const tool = this.toolById.get(itemId);
-        const blockConfig = registry.blocks.get(itemId);
+        const normalizedId = normalizeBlockVariantId(itemId);
+        const tool = this.toolById.get(normalizedId);
+        const blockConfig = registry.blocks.get(normalizedId);
         const isTool = selectedItem?.kind === 'tool' || Boolean(tool);
         const isDeco = blockConfig?.deco;
-        let textureKey = blockConfig?.textureId || itemId;
+        let textureKey = blockConfig?.textureId || normalizedId;
         if (blockConfig?.pairId && typeof textureKey === 'string' && textureKey.endsWith('_bottom')) {
             const pairTextureKey = registry.blocks.get(blockConfig.pairId)?.textureId;
             if (pairTextureKey) textureKey = pairTextureKey;
@@ -222,7 +224,7 @@ export class PlayerHand {
                 else if (tool?.id && TOOL_MAP[tool.id]) texName = TOOL_MAP[tool.id];
             }
 
-            const url = ITEM_TEXTURES.get(texName) || ITEM_TEXTURES.get(itemId) || BLOCK_TEXTURES.get(texName);
+            const url = ITEM_TEXTURES.get(texName) || ITEM_TEXTURES.get(normalizedId) || BLOCK_TEXTURES.get(texName);
 
             if (url || isDeco) {
                 let texture;
@@ -230,7 +232,7 @@ export class PlayerHand {
                     texture = new THREE.TextureLoader().load(url);
                 } else {
                     // Fallback to block texture if no item texture found
-                    const mat = registry.getMaterial(itemId);
+                    const mat = registry.getMaterial(normalizedId);
                     // Handle multi-texture materials (pick a side face usually)
                     texture = Array.isArray(mat) ? (mat[4].map || mat[0].map) : mat.map;
                     if (!texture && Array.isArray(mat)) {
@@ -267,7 +269,7 @@ export class PlayerHand {
             }
 
             if (isTool) {
-                const mesh = tool?.type === 'gun' ? this.buildGunMesh(tool) : this.buildToolMesh(tool ?? { id: itemId });
+                const mesh = tool?.type === 'gun' ? this.buildGunMesh(tool) : this.buildToolMesh(tool ?? { id: normalizedId });
                 this.itemSlot.add(mesh);
                 this.heldItemMesh = mesh;
                 return;
@@ -275,11 +277,11 @@ export class PlayerHand {
         }
 
         // Try to get a block mesh from the registry
-        const sourceMaterial = registry.getMaterial(itemId);
+        const sourceMaterial = registry.getMaterial(normalizedId);
         const material = Array.isArray(sourceMaterial)
             ? sourceMaterial.map((mat) => (mat?.clone ? mat.clone() : mat))
             : (sourceMaterial?.clone ? sourceMaterial.clone() : sourceMaterial);
-        if (Array.isArray(material) && itemId === 'grass_block' && material[2]?.color) {
+        if (Array.isArray(material) && normalizedId === 'grass_block' && material[2]?.color) {
             material[2].color.setHex(GRASS_PREVIEW_TINT);
         }
         const geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);

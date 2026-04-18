@@ -76,24 +76,60 @@ export class Chunk {
         this.dirty = false;
         this.destroyed = false;
         this.generating = false;
+        this.touchedGenerationChunks = new Map();
+    }
+
+    beginGenerationPass() {
+        this.touchedGenerationChunks.clear();
+        this.touchedGenerationChunks.set(this.key, { key: this.key, cx: this.cx, cz: this.cz });
+    }
+
+    getChunkTargetForWorldPos(x, z) {
+        const cx = this.world.getChunkCoord(x);
+        const cz = this.world.getChunkCoord(z);
+        return { cx, cz, key: this.world.getChunkKey(cx, cz) };
+    }
+
+    noteTouchedGenerationChunk(x, z) {
+        const target = this.getChunkTargetForWorldPos(x, z);
+        this.touchedGenerationChunks.set(target.key, target);
+
+        const loaded = this.world.chunkManager.getChunk(target.cx, target.cz);
+        if (loaded && !loaded.destroyed) {
+            loaded.dirty = true;
+            this.world.chunkManager.priorityDirtyChunkKeys.add(target.key);
+        } else if (Math.abs(target.cx - this.cx) <= 1 && Math.abs(target.cz - this.cz) <= 1) {
+            this.world.chunkManager.queueChunkLoad(target.cx, target.cz);
+        }
+
+        return target;
+    }
+
+    finalizeGenerationPass() {
+        for (const target of this.touchedGenerationChunks.values()) {
+            const chunk = this.world.chunkManager.getChunk(target.cx, target.cz);
+            if (!chunk || chunk.destroyed) continue;
+            chunk.dirty = true;
+            this.world.chunkManager.priorityDirtyChunkKeys.add(target.key);
+        }
+    }
+
+    applyGeneratedBlock(x, y, z, id, options = {}) {
+        const key = this.world.getKey(x, y, z);
+        if (this.world.state.changedBlocks.get(key) === null) return;
+
+        const override = this.world.state.changedBlocks.get(key);
+        const finalId = override ?? id;
+        const owner = this.noteTouchedGenerationChunk(x, z);
+        this.world.addBlock(x, y, z, finalId, owner.key, false, options);
     }
 
     addGeneratedBlock(x, y, z, id) {
-        const key = this.world.getKey(x, y, z);
-        if (this.world.state.changedBlocks.get(key) === null) return;
-
-        const override = this.world.state.changedBlocks.get(key);
-        const finalId = override ?? id;
-        this.world.addBlock(x, y, z, finalId, this.key);
+        this.applyGeneratedBlock(x, y, z, id);
     }
 
     addGeneratedStructureBlock(x, y, z, id) {
-        const key = this.world.getKey(x, y, z);
-        if (this.world.state.changedBlocks.get(key) === null) return;
-
-        const override = this.world.state.changedBlocks.get(key);
-        const finalId = override ?? id;
-        this.world.addBlock(x, y, z, finalId, this.key, false, { allowCorruption: true });
+        this.applyGeneratedBlock(x, y, z, id, { allowCorruption: true });
     }
 
     addGeneratedPlant(x, y, z, id) {
@@ -572,6 +608,7 @@ export class Chunk {
         if (this.generating || this.destroyed) return;
         this.generating = true;
         try {
+            this.beginGenerationPass();
             if (this.world.chunkGenerator && this.world.chunkGenerator.available) {
                 try {
                     const results = await this.world.chunkGenerator.generateChunk(this.cx, this.cz);
@@ -589,7 +626,8 @@ export class Chunk {
                             if (this.world.state.changedBlocks.get(key) === null) continue;
                             const override = this.world.state.changedBlocks.get(key);
                             const finalId = override ?? id;
-                            this.world.addBlock(x, y, z, finalId, this.key);
+                            const owner = this.noteTouchedGenerationChunk(x, z);
+                            this.world.addBlock(x, y, z, finalId, owner.key);
                         }
                         
                         const startX = this.cx * this.world.chunkSize;
@@ -609,6 +647,7 @@ export class Chunk {
                         }
                         this.placeUnderwaterStructure(centerX, centerZ);
                         this.applyPlayerOverrides();
+                        this.finalizeGenerationPass();
                         return;
                     }
                 } catch (error) {
@@ -624,6 +663,7 @@ export class Chunk {
 
     generateSync() {
         if (this.destroyed) return;
+        this.beginGenerationPass();
         const startX = this.cx * this.world.chunkSize;
         const startZ = this.cz * this.world.chunkSize;
         const centerX = startX + Math.floor(this.world.chunkSize * 0.5);
@@ -645,6 +685,7 @@ export class Chunk {
         }
         this.placeUnderwaterStructure(centerX, centerZ);
         this.applyPlayerOverrides();
+        this.finalizeGenerationPass();
         this.dirty = true;
     }
 
