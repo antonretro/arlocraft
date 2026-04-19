@@ -5,9 +5,11 @@ export class WorldVisuals {
         this.scene = scene;
         this.sharedChunkGeometries = this._initGeometries();
         this.hoverOutline = this._initHoverOutline();
+        this.placementOutline = this._initPlacementOutline();
         this.miningCracks = this._initMiningCracks();
         
         this.scene.add(this.hoverOutline);
+        this.scene.add(this.placementOutline);
         this.scene.add(this.miningCracks);
     }
 
@@ -23,8 +25,57 @@ export class WorldVisuals {
         return {
             solid: withWhiteVertexColors(new THREE.BoxGeometry(1, 1, 1)),
             path: (() => {
-                const geo = new THREE.BoxGeometry(1, 15/16, 1);
-                geo.translate(0, -0.03125, 0);
+                // Full-height sides eliminate the 1/16 black seam.
+                // Top face stays sunken at 15/16 for correct path look.
+                const topY = 7 / 16; // 0.4375 above center
+                const H = 0.5;
+                const hw = 0.5;
+
+                const positions = new Float32Array([
+                    // +X face (right): full height, x=+0.5
+                     hw,  H, -hw,   hw, -H, -hw,   hw, -H,  hw,   hw,  H,  hw,
+                    // -X face (left): full height, x=-0.5
+                    -hw,  H,  hw,  -hw, -H,  hw,  -hw, -H, -hw,  -hw,  H, -hw,
+                    // +Y face (top): sunken at topY
+                    -hw, topY,  hw,   hw, topY,  hw,   hw, topY, -hw,  -hw, topY, -hw,
+                    // -Y face (bottom): full depth, y=-0.5
+                    -hw, -H, -hw,   hw, -H, -hw,   hw, -H,  hw,  -hw, -H,  hw,
+                    // +Z face (front): full height, z=+0.5
+                     hw,  H,  hw,   hw, -H,  hw,  -hw, -H,  hw,  -hw,  H,  hw,
+                    // -Z face (back): full height, z=-0.5
+                    -hw,  H, -hw,  -hw, -H, -hw,   hw, -H, -hw,   hw,  H, -hw,
+                ]);
+
+                const uvs = new Float32Array([
+                    1,1, 1,0, 0,0, 0,1,
+                    1,1, 1,0, 0,0, 0,1,
+                    0,1, 1,1, 1,0, 0,0,
+                    0,1, 1,1, 1,0, 0,0,
+                    1,1, 1,0, 0,0, 0,1,
+                    1,1, 1,0, 0,0, 0,1,
+                ]);
+
+                const normals = new Float32Array([
+                    1,0,0, 1,0,0, 1,0,0, 1,0,0,
+                    -1,0,0,-1,0,0,-1,0,0,-1,0,0,
+                    0,1,0, 0,1,0, 0,1,0, 0,1,0,
+                    0,-1,0,0,-1,0,0,-1,0,0,-1,0,
+                    0,0,1, 0,0,1, 0,0,1, 0,0,1,
+                    0,0,-1,0,0,-1,0,0,-1,0,0,-1,
+                ]);
+
+                const indices = [];
+                for (let f = 0; f < 6; f++) {
+                    const b = f * 4;
+                    indices.push(b, b+1, b+2, b, b+2, b+3);
+                }
+
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+                geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                geo.setIndex(indices);
+                for (let f = 0; f < 6; f++) geo.addGroup(f * 6, 6, f);
                 return withWhiteVertexColors(geo);
             })(),
             water: (() => {
@@ -191,6 +242,21 @@ export class WorldVisuals {
         return mesh;
     }
 
+    _initPlacementOutline() {
+        const borderGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
+        const borderMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.5,
+            depthWrite: false
+        });
+        const mesh = new THREE.Mesh(borderGeo, borderMat);
+        mesh.visible = false;
+        mesh.renderOrder = 6;
+        return mesh;
+    }
+
     _initMiningCracks() {
         const crackGeo = new THREE.BoxGeometry(1.02, 1.02, 1.02);
         const mesh = new THREE.Mesh(
@@ -211,6 +277,11 @@ export class WorldVisuals {
     updateHover(x, y, z, visible) {
         this.hoverOutline.position.set(x, y, z);
         this.hoverOutline.visible = visible;
+    }
+
+    updatePlacement(x, y, z, visible) {
+        this.placementOutline.position.set(x, y, z);
+        this.placementOutline.visible = visible;
     }
 
     updateMiningCracks(x, y, z, visible, material) {

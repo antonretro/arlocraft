@@ -37,6 +37,9 @@ import { castle } from './defs/castle.js';
 import { ocean_ruins } from './defs/ocean_ruins.js';
 import { sunken_ship } from './defs/sunken_ship.js';
 import { village_farm } from './defs/village_farm.js';
+import { desert_hut } from './defs/desert_hut.js';
+import { desert_well } from './defs/desert_well.js';
+import { castle_wall } from './defs/castle_wall.js';
 
 export const STRUCTURES = {
     ruined_tower,
@@ -73,5 +76,8 @@ export const STRUCTURES = {
     castle,
     ocean_ruins,
     sunken_ship,
-    village_farm
+    village_farm,
+    desert_hut,
+    desert_well,
+    castle_wall
 };

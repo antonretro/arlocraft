@@ -261,8 +261,8 @@
             <div class="mc-bg-orb mc-orb-c"></div>
 
             <div class="ni-hero">
-                <h1 class="ni-title mc-logo" data-text="ANTONCRAFT"><span>ANTONCRAFT</span></h1>
-                <p class="ni-subtitle">Ported Beta 1.7.3 Terrain & Modern UI</p>
+                <h1 class="ni-title"><span>ArloCraft</span></h1>
+                <p class="ni-subtitle">The Grandmaster's Vanguard</p>
             </div>
 
             <nav class="ni-main-nav">
@@ -270,6 +270,10 @@
                     <button class="ni-tile ni-tile-blue" id="btn-to-worlds">
                         <div class="ni-tile-icon">&#128100;</div>
                         <span>Singleplayer</span>
+                    </button>
+                    <button class="ni-tile ni-tile-green" id="btn-to-skins">
+                        <div class="ni-tile-icon">&#128364;</div>
+                        <span>Skins</span>
                     </button>
                     <button class="ni-tile ni-tile-red" id="btn-to-settings">
                         <div class="ni-tile-icon">&#9881;</div>
@@ -354,11 +358,56 @@
             </div>
         </div>
 
+        <!-- ── SCREEN: Skin Library ──────────────────────────── -->
+        <div id="screen-skins" class="ni-screen ni-glass" style="display: none;">
+            <div class="ni-container">
+                <div class="ni-header">
+                    <h2 class="ni-heading">Skin Library</h2>
+                    <button class="ni-btn ni-btn-sm" id="btn-skins-back-top">Back</button>
+                </div>
+
+                <div class="ni-skin-layout">
+                    <div class="ni-skin-selector">
+                        <div class="ni-label">CUSTOM UPLOAD</div>
+                        <div class="ni-upload-box" id="skin-upload-area">
+                            <input type="file" id="skin-file-input" accept="image/png" style="display: none;" />
+                            <div class="ni-upload-hint">Drop .PNG skin here or click to browse</div>
+                        </div>
+
+                        <div class="ni-label" style="margin-top: 20px;">CLASSIC</div>
+                        <div id="classic-skins-grid" class="ni-skin-grid">
+                            <!-- Steve and Alex injected here -->
+                        </div>
+
+                        <div class="ni-label" style="margin-top: 20px;">RANDOM COLLECTION</div>
+                        <div id="random-skins-grid" class="ni-skin-grid">
+                            <!-- 10 Random skins injected here -->
+                        </div>
+                    </div>
+
+                    <div class="ni-skin-preview">
+                        <div class="ni-label">PREVIEW</div>
+                        <div id="skin-preview-viewport">
+                            <!-- 3D Preview Canvas injected here -->
+                        </div>
+                        <div id="selected-skin-name" class="ni-skin-info">Classic Steve</div>
+                    </div>
+                </div>
+
+                <div class="ni-footer-actions">
+                    <button class="ni-btn ni-btn-blue" id="btn-apply-skin">Save & Apply</button>
+                    <button class="ni-btn" id="btn-skins-back">Back</button>
+                </div>
+            </div>
+        </div>
+
         <!-- ── SCREEN: Loading ────────────────────────────────── -->
         <div id="screen-loading" class="ni-screen ni-glass" style="display: none;">
             <div class="ni-loading-content">
                 <div class="ni-loading-logo">
-                    <img src="faces/anton_happy.png" class="ni-loading-avatar" />
+                    <div id="loading-avatar-3d-container">
+                        <canvas id="loading-avatar-canvas"></canvas>
+                    </div>
                     <div class="ni-loading-spinner"></div>
                 </div>
                 <h2 id="loading-status" class="ni-loading-text">Generating Terrain...</h2>
@@ -366,6 +415,7 @@
                     <div id="loading-progress" class="ni-progress-fill" style="width: 0%"></div>
                 </div>
                 <div id="loading-subtext" class="ni-loading-subtext">Calculating voxel structures...</div>
+                <div id="loading-eta" class="ni-loading-eta">Estimated: <span id="eta-value">--s</span></div>
             </div>
         </div>
 

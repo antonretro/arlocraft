@@ -11,6 +11,12 @@ export class WorldMutationService {
         const gx = Math.round(x);
         const gy = Math.round(y);
         const gz = Math.round(z);
+
+        if (id === null || id === 'air') {
+            const key = this.world.coords.getKey(gx, gy, gz);
+            return this.removeBlockByKey(key, options);
+        }
+
         const allowCorruption = Boolean(options?.allowCorruption);
         if (!allowCorruption && !this.world.corruptionEnabled && (id === 'virus' || id === 'anton')) return null;
         

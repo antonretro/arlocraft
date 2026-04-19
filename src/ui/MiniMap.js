@@ -40,7 +40,7 @@ export class MiniMap {
             sandstone: '#cbbd8f'
         };
 
-        if (this.container) this.container.style.display = 'none';
+        this.visible = false;
     }
 
     toggle() {

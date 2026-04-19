@@ -14,6 +14,7 @@ import { WorldInteractionService } from './WorldInteractionService.js';
 import { WorldPersistenceService } from './WorldPersistenceService.js';
 import { FluidSystem } from './FluidSystem.js';
 import { getBlockHandler } from '../engine/BlockHandlerRegistry.js';
+import { rollLoot } from '../data/LootTables.js';
 
 export class World {
     constructor(scene, game) {
@@ -302,6 +303,14 @@ export class World {
         this.state.changedBlocks.set(key, null);
         this.removeBlockByKey(key, { skipChangeTracking: true });
         this.chunkManager.flushPriorityChunkRebuilds(20);
+        
+        // --- Special Igneous Particle Triggers ---
+        if (id.includes('virus')) {
+            this.explosions.spawnIgneousBurst(x, y, z, 'soul');
+        } else if (id.includes('ore') || id === 'diamond_block' || id === 'gold_block') {
+            this.explosions.spawnIgneousBurst(x, y, z, 'spark');
+        }
+        
         this.spawnBreakParticles(x, y, z, id);
         this.spawnPickupEffect(x, y, z, dropId, this.game?.getPlayerPosition?.());
         window.dispatchEvent(new CustomEvent('block-mined', { detail: { id: dropId, x, y, z } }));
@@ -365,6 +374,16 @@ export class World {
         if (existingId && !this.isReplaceableForPlacement(existingId)) return false;
         if (blockData?.deco && this.getBlockData(existingId)?.deco) return false;
         let finalId = blockId;
+        
+        // Plant placement restrictions (only on soil/path)
+        if (blockData?.deco && !blockId.includes('coral') && blockId !== 'sea_pickle') {
+            const groundId = this.state.blockMap.get(this.getKey(px, py - 1, pz));
+            const validSoil = ['grass_block', 'dirt', 'mycelium', 'path_block', 'podzol', 'coarse_dirt', 'moss_block', 'rooted_dirt'];
+            if (!validSoil.includes(groundId)) {
+                this.game?.hud?.flashPrompt?.("Can only place plants on soil!", "#ff9999");
+                return false;
+            }
+        }
         
         // Log rotation logic based on the face placed on
         const isLog = blockId.endsWith('_log') || blockId === 'wood' || blockId.includes('_stem') || blockId.includes('purpur_pillar') || blockId.includes('quartz_pillar');
@@ -488,13 +507,22 @@ export class World {
                 return true;
             }
         }
-        if (blockId === 'starter_chest') {
+        if (blockId === 'starter_chest' || blockId === 'chest') {
             const chestKey = this.getKey(cell.x, cell.y, cell.z);
             if (!this.state.openedChestKeys.has(chestKey)) {
                 this.state.openedChestKeys.add(chestKey);
-                this.state.starterChestClaimed = true;
-                this.game?.grantStarterChestLoot?.();
-                window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: 'STARTER CHEST LOOT' } }));
+                
+                // Determine loot table based on biome or structure context
+                const biomeId = this.getBiomeIdAt(cell.x, cell.z);
+                let tableId = 'common_village';
+                if (biomeId === 'desert') tableId = 'desert_loot';
+                if (this.getColumnHeight(cell.x, cell.z) > 100) tableId = 'castle_loot'; // High altitude/Castle context
+                
+                const loot = rollLoot(tableId, 4);
+                this.game?.state.grantLootRoll(loot);
+                
+                window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: 'LOOT DISCOVERED: ' + tableId.toUpperCase() } }));
+                window.dispatchEvent(new CustomEvent('action-success'));
             } else {
                 window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: 'CHEST EMPTY' } }));
             }

@@ -108,7 +108,7 @@ export class Game {
         this.notifications = new NotificationSystem();
 
         this.profiler = { physicsMs: 0, worldMs: 0, uiMs: 0, renderMs: 0 };
-        this.clock = new THREE.Clock();
+        this.clock = new THREE.Timer();
         this.bindEvents();
         this.setupUI();
         this.setupSkinListeners();
@@ -131,6 +131,11 @@ export class Game {
 
         this.ui.renderWorldList();
         this.ui.setMenuScreen('title');
+        
+        // Final polish for startup presentation
+        if (this.hud && this.hud.core) {
+            this.hud.core.loadFaceData(); 
+        }
     }
 
     setupPlayerVisual() {
@@ -308,6 +313,7 @@ export class Game {
     }
 
     startGame({ skipSeedApply = false, preserveCurrentMode = false } = {}) {
+        this.renderer.setVisible(true); // Show 3D world as we start generating/loading
         if (!skipSeedApply) {
             const seedInput = document.getElementById('seed-input');
             if (seedInput?.value.trim()) this.world.setSeed(seedInput.value.trim());
@@ -575,6 +581,7 @@ export class Game {
     }
 
     returnToTitle() {
+        this.renderer.setVisible(false); // Hide 3D world again
         this.hasStarted = false;
         this.isPaused = false;
         this.gameState.setPaused(false);
@@ -1008,8 +1015,20 @@ export class Game {
         const hit = this.world.raycastBlocks?.(this.camera.instance, 6, false);
         if (hit) {
             this.world.visuals.updateHover(hit.x, hit.y, hit.z, true);
+            
+            // Placement Ghost Logic
+            const item = this.gameState.inventory[this.gameState.selectedSlot];
+            if (item && item.kind === 'block') {
+                const px = hit.x + hit.normal.x;
+                const py = hit.y + hit.normal.y;
+                const pz = hit.z + hit.normal.z;
+                this.world.visuals.updatePlacement(px, py, pz, true);
+            } else {
+                this.world.visuals.updatePlacement(0, 0, 0, false);
+            }
         } else {
             this.world.visuals.updateHover(0, 0, 0, false);
+            this.world.visuals.updatePlacement(0, 0, 0, false);
         }
     }
 
@@ -1041,6 +1060,7 @@ export class Game {
         this._lastFrameTs = timestamp - (elapsed % targetMs);
 
         if (this.framePanel) this.framePanel.begin();
+        this.clock.update(timestamp);
         const delta = Math.min(this.clock.getDelta(), 0.1);
         const frameStart = performance.now();
 
@@ -1049,19 +1069,20 @@ export class Game {
         if (delta > 0.08) this.resumeGraceFrames = 3;
         if (this.resumeGraceFrames > 0) {
             this.resumeGraceFrames--;
-            this.world.blockRegistry.updateShaderMaterials(this.clock.getElapsedTime());
+            this.world.blockRegistry.updateShaderMaterials(this.clock.getElapsed());
             this.renderer.render(this.camera.instance);
             if (this.framePanel) this.framePanel.end();
             return;
         }
 
-        this.world.blockRegistry.updateShaderMaterials(this.clock.getElapsedTime());
+        this.world.blockRegistry.updateShaderMaterials(this.clock.getElapsed());
 
         let playerPos = this.getPlayerPosition();
         const canSimulate = this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen;
         const shouldRunPassiveWorld = !canSimulate;
         let worldDelta = delta;
         let runWorldThisFrame = canSimulate;
+        this.input.update();
 
         if (canSimulate) {
             this.touchControls?.tick();

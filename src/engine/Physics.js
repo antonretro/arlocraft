@@ -389,12 +389,16 @@ export class Physics {
             ? this.creativeSpeed
             : (this.isCrouching ? this.crouchSpeed : (sprinting ? this.sprintSpeed : this.walkSpeed));
 
-        let inputX = 0;
-        let inputZ = 0;
+        let inputX = input?.gamepadState?.lx || 0;
+        let inputZ = -(input?.gamepadState?.ly || 0);
         if (keys['KeyW'] || keys['ArrowUp'])    inputZ += 1;
         if (keys['KeyS'] || keys['ArrowDown'])   inputZ -= 1;
         if (keys['KeyA'] || keys['ArrowLeft'])   inputX -= 1;
         if (keys['KeyD'] || keys['ArrowRight'])  inputX += 1;
+        
+        // Clamp for keyboard+gamepad combined
+        inputX = Math.max(-1, Math.min(1, inputX));
+        inputZ = Math.max(-1, Math.min(1, inputZ));
 
         const yaw = Number.isFinite(lookYaw) ? lookYaw : 0;
         this.forward.set(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();

@@ -94,6 +94,7 @@ export class BlockRegistry {
                     map: tex,
                     transparent: true,
                     blending: THREE.MultiplyBlending,
+                    premultipliedAlpha: true,
                     side: THREE.FrontSide,
                     depthWrite: false,
                     polygonOffset: true,
@@ -316,13 +317,6 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         texture.minFilter = THREE.NearestFilter;
         texture.colorSpace = THREE.SRGBColorSpace;
         
-        if (src.includes('sea_lantern')) {
-            texture.wrapS = THREE.ClampToEdgeWrapping;
-            texture.wrapT = THREE.RepeatWrapping;
-            if (src.includes('Igneous')) {
-                texture.repeat.set(1, 0.2); 
-            }
-        }
 
         this.textureCache.set(src, texture);
         return texture;
@@ -459,6 +453,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             map: tex,
             transparent: true,
             blending: THREE.MultiplyBlending,
+            premultipliedAlpha: true,
             depthWrite: false,
             side: THREE.DoubleSide,
             polygonOffset: true,
@@ -696,19 +691,11 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
                     m.emissive = new THREE.Color(config.color ? parseInt(config.color) : 0x000000).multiplyScalar(0.08);
                 }
                 if (config.emissive) {
-                    m.emissive = new THREE.Color(0x662100);
+                    const emissiveHex = config.emissiveColor ? parseInt(config.emissiveColor) : 0x333333;
+                    m.emissive = new THREE.Color(emissiveHex);
                 }
             }
 
-            // Shade path block sides darker
-            if (id === 'path_block' && Array.isArray(material)) {
-                const sideColor = new THREE.Color(0x999999); // Darken by 35%
-                material[0].color.multiply(sideColor); // px
-                material[1].color.multiply(sideColor); // nx
-                material[3].color.multiply(sideColor); // bottom
-                material[4].color.multiply(sideColor); // pz
-                material[5].color.multiply(sideColor); // nz
-            }
         }
 
         const shouldEnhanceFaceShading = !config?.deco && id !== 'water' && id !== 'path_block' && id !== 'grass_block';

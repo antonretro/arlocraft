@@ -1,7 +1,6 @@
-/**
- * Notification System for AntonCraft.
- * Handles queueing and displaying "Discovery" toasts and Achievement medals.
- */
+import { iconService } from '../ui/IconService.js';
+import { RECIPE_BOOK } from '../data/recipeBook.js';
+
 export class NotificationSystem {
     constructor() {
         this.queue = [];
@@ -11,7 +10,6 @@ export class NotificationSystem {
     }
 
     init() {
-        // Create container if it doesn't exist
         let el = document.getElementById('notification-container');
         if (!el) {
             el = document.createElement('div');
@@ -19,15 +17,10 @@ export class NotificationSystem {
             document.body.appendChild(el);
         }
         this.container = el;
-
-        // Listen for discovery events
-        window.addEventListener('discovery-block', (e) => this.show('BLOCK DISCOVERED', e.detail.id, 'block'));
-        window.addEventListener('discovery-recipe', (e) => this.show('RECIPE UNLOCKED', e.detail.id, 'recipe'));
-        window.addEventListener('achievement-unlocked', (e) => this.show('ACHIEVEMENT UNLOCKED', e.detail.id, 'medal'));
     }
 
-    show(title, id, type) {
-        this.queue.push({ title, id, type });
+    show(title, rawId, type) {
+        this.queue.push({ title, id: rawId, type });
         this.processQueue();
     }
 
@@ -41,38 +34,56 @@ export class NotificationSystem {
         setTimeout(() => {
             this.active = false;
             this.processQueue();
-        }, 4000); // Wait for animation + buffer
+        }, 4000);
     }
 
     render(data) {
         const toast = document.createElement('div');
-        toast.className = `ni-notification-toast ni-glass type-${data.type}`;
+        toast.className = `ni-toast type-${data.type}`;
         
-        let iconHtml = '';
+        const iconContainer = document.createElement('div');
+        iconContainer.className = `ni-toast-icon ${data.type}-icon`;
+
         if (data.type === 'medal') {
-            iconHtml = '<div class="toast-icon medal-icon">🏅</div>';
+            const medalPath = iconService.getGeneratedIconPath('medal');
+            iconContainer.style.backgroundImage = `url('${medalPath}')`;
+            iconContainer.style.backgroundSize = 'contain';
+            iconContainer.classList.add('medal-icon');
         } else {
-            iconHtml = `<div class="toast-icon ${data.type}-icon"></div>`;
+            let iconId = data.id;
+            if (data.type === 'recipe') {
+                const recipe = RECIPE_BOOK.find(r => r.id === data.id);
+                if (recipe) iconId = recipe.result.id;
+            }
+            const iconEl = iconService.createItemElement({ id: iconId, count: 1 });
+            iconContainer.appendChild(iconEl);
         }
 
-        toast.innerHTML = `
-            ${iconHtml}
-            <div class="toast-content">
-                <div class="toast-title">${data.title}</div>
-                <div class="toast-name">${String(data.id).replace(/_/g, ' ').toUpperCase()}</div>
-            </div>
-        `;
+        const content = document.createElement('div');
+        content.className = 'ni-toast-content';
+        
+        const title = document.createElement('h4');
+        title.textContent = data.title;
+
+        const name = document.createElement('p');
+        name.textContent = String(data.id).replace(/_/g, ' ').toUpperCase();
+
+        content.appendChild(title);
+        content.appendChild(name);
+        
+        toast.appendChild(iconContainer);
+        toast.appendChild(content);
 
         this.container.appendChild(toast);
 
         // Animate in
         requestAnimationFrame(() => {
-            toast.classList.add('visible');
+            toast.classList.add('active');
         });
 
         // Animate out
         setTimeout(() => {
-            toast.classList.remove('visible');
+            toast.classList.remove('active');
             setTimeout(() => toast.remove(), 500);
         }, 3000);
     }

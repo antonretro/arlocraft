@@ -2,15 +2,10 @@ import * as THREE from 'three';
 
 const blockTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/block/*.png', { eager: true, query: '?url' });
 const contentBlockAllModules = import.meta.glob('../content/blocks/*/all.png', { eager: true, query: '?url' });
+const particleTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/particle/*.png', { eager: true, query: '?url' });
 
 /**
  * ExplosionSystem — manages all particle/debris effects for explosions and block breaking.
- *
- * Responsibilities:
- *   • Explosion logic (radius-based block removal + player knockback)
- *   • Flying block debris (physics-simulated spinning cubes)
- *   • Break particles (small cubes that pop out when mining)
- *   • Pickup magnet effects (blocks fly towards the player)
  */
 export class ExplosionSystem {
     constructor(world) {
@@ -23,6 +18,9 @@ export class ExplosionSystem {
         // Small break particles from mining
         this.breakParticles = [];
         this.breakParticleGeometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+
+        // Sprite particles (Igneous)
+        this.spriteParticles = [];
 
         // Pickup magnet effects
         this.pickupEffects = [];
@@ -39,8 +37,15 @@ export class ExplosionSystem {
             this.blockTextures[folderId] = module.default || module;
         }
 
+        this.particleTextures = {};
+        for (const [path, module] of Object.entries(particleTextureModules)) {
+            const fileName = path.split('/').pop().replace('.png', '');
+            this.particleTextures[fileName] = module.default || module;
+        }
+
         this.textureLoader = new THREE.TextureLoader();
         this.textureCache = new Map();
+        this.particleCache = new Map();
     }
 
     getTexture(id) {
@@ -357,6 +362,104 @@ export class ExplosionSystem {
         }
     }
 
+    getParticleTexture(id) {
+        if (this.particleCache.has(id)) return this.particleCache.get(id);
+        const path = this.particleTextures[id];
+        if (path) {
+            const tex = this.textureLoader.load(path);
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            this.particleCache.set(id, tex);
+            return tex;
+        }
+        return null;
+    }
+
+    // ─── Igneous Sprite Particles ──────────────────────────────────────
+
+    spawnIgneousBurst(x, y, z, type = 'soul') {
+        const textureNames = {
+            soul: Array.from({ length: 11 }, (_, i) => `soul_${i}`),
+            spark: Array.from({ length: 8 }, (_, i) => `spark_${i}`),
+            sweep: Array.from({ length: 8 }, (_, i) => `sweep_${i}`),
+            portal: ['glint', 'spark_0', 'spark_1', 'spark_2']
+        };
+
+        const names = textureNames[type] || textureNames.soul;
+        const count = type === 'sweep' ? 3 : 20;
+
+        for (let i = 0; i < count; i++) {
+            const texName = names[0]; // Start at 0 for animated
+            const tex = this.getParticleTexture(texName);
+            if (!tex) continue;
+
+            const material = new THREE.SpriteMaterial({ 
+                map: tex, 
+                transparent: true, 
+                color: type === 'soul' ? 0x8df6ff : (type === 'portal' ? 0xbc8bff : 0xffffff),
+                blending: THREE.AdditiveBlending
+            });
+            const sprite = new THREE.Sprite(material);
+            
+            const scale = (type === 'sweep' ? 1.5 : 0.4) + Math.random() * 0.6;
+            sprite.scale.set(scale, scale, 1);
+            sprite.position.set(
+                x + (Math.random() - 0.5) * 0.6,
+                y + (Math.random() - 0.5) * 0.6,
+                z + (Math.random() - 0.5) * 0.6
+            );
+            this.scene.add(sprite);
+
+            this.spriteParticles.push({
+                sprite,
+                type,
+                names,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() * 5) + 1.5,
+                vz: (Math.random() - 0.5) * 4,
+                life: 0.8 + Math.random() * 0.5,
+                maxLife: 1.5,
+                frame: 0,
+                frameTimer: 0
+            });
+        }
+    }
+
+    updateSpriteParticles(delta) {
+        for (let i = this.spriteParticles.length - 1; i >= 0; i--) {
+            const p = this.spriteParticles[i];
+            p.life -= delta;
+
+            p.sprite.position.x += p.vx * delta;
+            p.sprite.position.y += p.vy * delta;
+            p.sprite.position.z += p.vz * delta;
+
+            p.vy -= 8 * delta; // Gravity
+            p.vx *= 0.96;
+            p.vz *= 0.96;
+
+            // Simple frame animation (0.05s per frame)
+            if (p.names.length > 1) {
+                p.frameTimer += delta;
+                if (p.frameTimer > 0.05) {
+                    p.frameTimer = 0;
+                    p.frame = (p.frame + 1) % p.names.length;
+                    const nextTex = this.getParticleTexture(p.names[p.frame]);
+                    if (nextTex) p.sprite.material.map = nextTex;
+                }
+            }
+
+            const opacity = Math.min(1.0, p.life / 0.3);
+            p.sprite.material.opacity = opacity;
+
+            if (p.life <= 0) {
+                this.scene.remove(p.sprite);
+                p.sprite.material.dispose();
+                this.spriteParticles.splice(i, 1);
+            }
+        }
+    }
+
     // ─── Per-frame update ─────────────────────────────────────────────
 
     update(delta, playerPosition) {
@@ -364,6 +467,7 @@ export class ExplosionSystem {
         this.updateBreakParticles(dt);
         this.updatePickupEffects(dt, playerPosition);
         this.updateFlyingBlocks(dt);
+        this.updateSpriteParticles(dt);
     }
 
     // ─── Cleanup ──────────────────────────────────────────────────────
@@ -374,6 +478,12 @@ export class ExplosionSystem {
             particle.mesh.material.dispose();
         }
         this.breakParticles = [];
+
+        for (const sprite of this.spriteParticles) {
+            this.scene.remove(sprite.sprite);
+            sprite.sprite.material.dispose();
+        }
+        this.spriteParticles = [];
 
         for (const pickup of this.pickupEffects) {
             this.scene.remove(pickup.mesh);

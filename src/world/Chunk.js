@@ -400,45 +400,27 @@ export class Chunk {
 
         const blocks = struct.blueprints(x, y, z);
         
-        // --- FOUNDATION PASS ---
-        // For every structure, we ensure it has a solid foundation down to the ground.
-        // We track the lowest Y placed at each XZ coordinate to fill downwards.
-        const lowestYAtXZ = new Map();
-        for (const b of blocks) {
-            const xzKey = `${b.x},${b.z}`;
-            if (!lowestYAtXZ.has(xzKey) || b.y < lowestYAtXZ.get(xzKey)) {
-                lowestYAtXZ.set(xzKey, b.y);
-            }
-        }
+        // ─── VOLUME CLEARING PASS ───
+        // Ensures the structure generates in a pocket of air, preventing burial "dirt walls"
+        const sw = struct.width || 7;
+        const sh = struct.height || 6;
+        const sd = struct.depth || 7;
+        const skirt = 1; // cleared perimeter to prevent clashing on slopes
 
-        const terrainFiller = biome.fillerBlock || 'dirt';
-        for (const [xzStr, minY] of lowestYAtXZ.entries()) {
-            const [fx, fz] = xzStr.split(',').map(Number);
-            const groundY = this.world.getColumnHeight(fx, fz);
-            for (let fy = groundY; fy < minY; fy++) {
-                this.addGeneratedBlock(fx, fy, fz, terrainFiller);
-            }
-        }
-
-        for (const b of blocks) {
-            this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
-        }
-
-        // --- CLEARANCE PASS ---
-        // Clear any terrain blocks above the structure's floor level within its footprint
-        // to prevent burial in hills or slopes.
-        for (const [xzStr, minY] of lowestYAtXZ.entries()) {
-            const [fx, fz] = xzStr.split(',').map(Number);
-            const terrainHeight = this.world.getColumnHeight(fx, fz);
-            if (terrainHeight > minY) {
-                // Clear up to a reasonable structure height (e.g. 12 blocks)
-                for (let cy = minY + 1; cy <= minY + 12; cy++) {
-                    const existing = this.world.getBlockAt(fx, cy, fz);
-                    if (existing && this.world.isBlockSolid(existing)) {
-                        this.addGeneratedBlock(fx, cy, fz, 'air');
-                    }
+        for (let dx = -skirt; dx < sw + skirt; dx++) {
+            for (let dz = -skirt; dz < sd + skirt; dz++) {
+                for (let dy = 0; dy < sh; dy++) {
+                    const bx = x + dx;
+                    const by = y + dy;
+                    const bz = z + dz;
+                    // Pre-clear with air (overwritten by blueprint blocks later)
+                    this.addGeneratedStructureBlock(bx, by, bz, 'air');
                 }
             }
+        }
+        
+        for (const b of blocks) {
+            this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
         }
         if (struct.name) {
             this.world.registerLandmark(x, z, struct.name);
@@ -726,7 +708,7 @@ export class Chunk {
         }
         if (this.world.shouldPlaceVillageChunk(this.cx, this.cz) && this.isLandSuitable(centerX, centerZ, 8)) {
             const vy = this.world.getColumnHeight(centerX, centerZ) + 1;
-            this.placeVillageCluster(centerX, vy, centerZ);
+            this.placeSettlementCluster(centerX, vy, centerZ);
         }
         this.placeUnderwaterStructure(centerX, centerZ);
         this.applyPlayerOverrides();
@@ -742,81 +724,74 @@ export class Chunk {
         this.world.registerLandmark(midX, midZ, 'Abandoned Highway');
     }
 
-    placeVillageCluster(centerX, centerY, centerZ) {
+    placeSettlementCluster(centerX, centerY, centerZ) {
+        const biome = this.world.getBiomeAt(centerX, centerZ);
+        const biomeId = biome.id;
         const settlementName = this.world.getSettlementNameAt(centerX, centerZ);
+        
+        // Roll for settlement type
+        const rng = this.world.hash2D(centerX, centerZ);
+        let type = 'village';
+        if (biomeId === 'desert') type = 'desert_town';
+        else if (rng > 0.85) type = 'castle_outpost';
+        else if (rng > 0.70) type = 'town';
+
         this.world.registerLandmark(centerX, centerZ, settlementName, {
             baseName: settlementName,
-            category: 'settlement',
+            category: type,
             displayName: settlementName
         });
 
-        const hutOffsets = [
-            [-6, -4],
-            [6, -3],
-            [-5, 6],
-            [5, 5]
-        ];
+        let offsets = [[-6, -4], [6, -3], [-5, 6], [5, 5]];
+        let structures = [];
+
+        if (type === 'desert_town') {
+            structures = [STRUCTURES.desert_hut, STRUCTURES.desert_well, STRUCTURES.desert_hut, STRUCTURES.desert_hut];
+        } else if (type === 'castle_outpost') {
+            structures = [STRUCTURES.castle, STRUCTURES.castle_wall, STRUCTURES.castle_wall, STRUCTURES.blacksmith_forge];
+            offsets = [[0, 0], [0, 8], [0, -8], [8, 0]];
+        } else if (type === 'town') {
+            structures = [STRUCTURES.village_manor, STRUCTURES.village_manor, STRUCTURES.village_hut, STRUCTURES.village_well];
+        } else {
+            structures = [STRUCTURES.village_hut, STRUCTURES.village_hut, STRUCTURES.village_hut, STRUCTURES.market_stall];
+        }
 
         const placed = [];
-        for (let i = 0; i < hutOffsets.length; i++) {
-            const [dx, dz] = hutOffsets[i];
+        for (let i = 0; i < offsets.length; i++) {
+            const [dx, dz] = offsets[i];
             const hx = centerX + dx;
             const hz = centerZ + dz;
             const hy = this.world.getColumnHeight(hx, hz) + 1;
             
-            // Randomly choose between a hut and a manor for variety
-            const isManor = this.world.hash2D(hx + 77, hz - 33) > 0.7;
-            const houseType = isManor ? STRUCTURES.village_manor : STRUCTURES.village_hut;
+            const struct = structures[i % structures.length];
+            const blocks = struct.blueprints(hx, hy, hz);
             
-            const blocks = houseType.blueprints(hx, hy, hz);
-            
-            // --- VILLAGE FOUNDATION PASS ---
+            // Foundation
             const lowestYAtXZ = new Map();
             for (const b of blocks) {
                 const xzKey = `${b.x},${b.z}`;
-                if (!lowestYAtXZ.has(xzKey) || b.y < lowestYAtXZ.get(xzKey)) {
-                    lowestYAtXZ.set(xzKey, b.y);
-                }
+                if (!lowestYAtXZ.has(xzKey) || b.y < lowestYAtXZ.get(xzKey)) lowestYAtXZ.set(xzKey, b.y);
             }
-
-            const biome = this.world.getBiomeAt(hx, hz);
-            const terrainFiller = biome.fillerBlock || 'dirt';
+            const filler = biome.fillerBlock || 'dirt';
             for (const [xzStr, minY] of lowestYAtXZ.entries()) {
                 const [fx, fz] = xzStr.split(',').map(Number);
                 const groundY = this.world.getColumnHeight(fx, fz);
-                for (let fy = groundY; fy < minY; fy++) {
-                    this.addGeneratedBlock(fx, fy, fz, terrainFiller);
-                }
+                for (let fy = groundY; fy < minY; fy++) this.addGeneratedBlock(fx, fy, fz, filler);
             }
 
             for (const block of blocks) this.addGeneratedBlock(block.x, block.y, block.z, block.id);
             
-            // --- VILLAGE CLEARANCE PASS ---
-            for (const [xzStr, minY] of lowestYAtXZ.entries()) {
-                const [fx, fz] = xzStr.split(',').map(Number);
-                const terrainHeight = this.world.getColumnHeight(fx, fz);
-                if (terrainHeight > minY) {
-                    for (let cy = minY + 1; cy <= minY + 8; cy++) {
-                        const existing = this.world.getBlockAt(fx, cy, fz);
-                        if (existing && this.world.isBlockSolid(existing)) {
-                            this.addGeneratedBlock(fx, cy, fz, 'air');
-                        }
-                    }
-                }
-            }
             this.placeLampPost(hx + 2, hy, hz + 2);
-            if (this.world.game?.entities && this.world.game.entities.entities.length < this.world.game.entities.maxEntities) {
-                this.world.game.entities.spawn('villager_anton', hx + 0.5, hy + 1.2, hz + 0.5);
-            }
             placed.push({ x: hx, z: hz, y: hy });
         }
 
-        for (const hut of placed) {
-            this.placePathBetween(centerX, centerZ, hut.x, hut.z);
-        }
+        for (const hut of placed) this.placePathBetween(centerX, centerZ, hut.x, hut.z);
         this.placeLampPost(centerX, centerY, centerZ);
+        
+        // Spawn specialized villagers
         if (this.world.game?.entities && this.world.game.entities.entities.length < this.world.game.entities.maxEntities) {
-            this.world.game.entities.spawn('villager_anton', centerX + 0.5, centerY + 1.2, centerZ + 0.5);
+            const villagerType = type === 'desert_town' ? 'villager_desert' : (type === 'castle_outpost' ? 'knight' : 'villager_anton');
+            this.world.game.entities.spawn(villagerType, centerX + 0.5, centerY + 1.2, centerZ + 0.5);
         }
     }
 

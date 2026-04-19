@@ -144,16 +144,30 @@ export class WorldTerrainService {
         const waterSurfaceY = this.getWaterSurfaceYAt(x, z);
         if (waterSurfaceY === null || y > waterSurfaceY) return false;
 
-        // Check actual block at position to avoid "ghost water" in caves/holes
-        const blockId = this.world.getBlockAt(x, y, z);
-        if (!blockId) {
-            // Fallback for unloaded chunks: assume water if below terrain height (which shouldn't happen for isPositionInWater)
-            const terrainHeight = this.getTerrainHeight(x, z);
-            return y > terrainHeight;
+        // 2. Check actual block at position
+        const key = this.world.coords.getKey(Math.round(x), Math.round(y), Math.round(z));
+        const blockIdInMap = this.world.state.blockMap.get(key);
+        
+        if (blockIdInMap) {
+            return blockIdInMap === 'water' || blockIdInMap.startsWith('water') || blockIdInMap === 'lava';
         }
 
-        // Only water and lava blocks trigger "isPositionInWater" logic
-        return blockId === 'water' || blockId === 'lava';
+        // 3. Fallback for air/void
+        // If the chunk is loaded but the block is missing/null, it's AIR (or deleted by player).
+        // We should NOT assume it's water even if below sea level.
+        const cx = this.world.coords.getChunkCoord(x);
+        const cy = this.world.coords.getChunkCoord(y);
+        const cz = this.world.coords.getChunkCoord(z);
+        const chunk = this.world.chunkManager?.getChunk(cx, cy, cz);
+        
+        if (chunk && !chunk.destroyed) {
+            // Chunk is active and block is null/missing -> definitely air.
+            return false;
+        }
+
+        // 4. Final Fallback for unloaded chunks: assume water if between terrain and surface
+        const terrainHeight = this.getTerrainHeight(x, z);
+        return y > terrainHeight;
     }
 
     getSafeSpawnPoint(x, z, radius = 50) {
@@ -205,10 +219,25 @@ export class WorldTerrainService {
         const openZone = this.valueNoise2D(x + 1433, z - 977, 190) > 0.67
             && this.valueNoise2D(x - 621, z + 299, 72) > 0.55;
         if (openZone) return false;
-        const density = this.hash2D((x * 2) + 11, (z * 2) - 9);
-        const spacing = this.hash2D(x + 301, z - 173);
-        const threshold = 1 - Math.max(0, Math.min(0.5, b.treeDensity ?? 0.08));
-        return density > threshold && spacing > 0.55;
+        // --- JITTERED GRID TREE PLACEMENT ---
+        // Prevents clumping by ensuring at most 1 tree per NxN cell with mandatory gaps.
+        const gridSize = 5; 
+        const cellX = Math.floor(x / gridSize);
+        const cellZ = Math.floor(z / gridSize);
+        
+        // Compute the "chosen" point for this cell based on its coordinates
+        // Use a 1-block inner padding to ensure trees in adjacent cells are never neighbors
+        const cellHashX = this.hash2D(cellX * 131, cellZ * 71);
+        const cellHashZ = this.hash2D(cellX * 17, cellZ * 91);
+        const chosenX = cellX * gridSize + 1 + Math.floor(cellHashX * (gridSize - 2));
+        const chosenZ = cellZ * gridSize + 1 + Math.floor(cellHashZ * (gridSize - 2));
+
+        // Only allow tree if this is the chosen coordinate for its grid cell
+        if (Math.floor(x) !== chosenX || Math.floor(z) !== chosenZ) return false;
+
+        const density = this.hash2D(x + 11, z - 9);
+        const threshold = 1 - Math.max(0, Math.min(0.8, b.treeDensity ?? 0.08));
+        return density > threshold;
     }
 
     shouldPlaceVirus(x, z, height) {
@@ -291,6 +320,7 @@ export class WorldTerrainService {
         if (Math.abs(cx) <= 2 && Math.abs(cz) <= 2) return false;
         if (this.shouldPlaceVillageChunk(cx, cz)) return false;
         if (this.getStructureChunkScore(cx, cz) < 0.82) return false;
-        return this.isStructureChunkAnchor(cx, cz, 2);
+        // Increased radius from 2 to 3 (7x7 chunks or ~112x112 blocks) to prevent clumping
+        return this.isStructureChunkAnchor(cx, cz, 3);
     }
 }

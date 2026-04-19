@@ -259,4 +259,13 @@ export class GameState {
     addBlockToInventory(blockId, count = 1) {
         return this.addItemToInventory(blockId, count, 'block');
     }
+
+    grantLootRoll(lootItems) {
+        if (!Array.isArray(lootItems)) return;
+        lootItems.forEach(item => {
+            // Determine kind: tools end in specific suffixes or are defined in tools.js
+            const kind = (item.id.includes('sword') || item.id.includes('pick') || item.id.includes('axe') || item.id.includes('sledge') || item.id.includes('blade') || item.id.includes('saber') || item.id.includes('dagger') || item.id.includes('gun') || item.id.includes('wand')) ? 'tool' : 'block';
+            this.addItemToInventory(item.id, item.count, kind);
+        });
+    }
 }

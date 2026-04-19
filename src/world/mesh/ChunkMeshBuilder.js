@@ -232,6 +232,11 @@ export function rebuildChunkInstancedMeshes(chunk) {
             if (shouldSkipChunkBlockInstance({ world: chunk.world, id: baseId, blockData, ax, ay, az, isNear })) continue;
 
             tempPos.set(ax - worldX, ay - worldY, az - worldZ);
+            
+            // Sinking plants on path blocks
+            if (isDecoType(blockData) && chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay - 1, az)) === 'path_block') {
+                tempPos.y -= 0.0625; // 1/16 height
+            }
             tempEuler.set(0, 0, 0);
 
             if (lodFar) {

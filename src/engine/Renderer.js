@@ -46,6 +46,15 @@ export class Renderer {
         });
     }
 
+    /**
+     * Controls the visibility of the 3D rendering canvas.
+     */
+    setVisible(visible) {
+        if (this.instance.domElement) {
+            this.instance.domElement.style.display = visible ? 'block' : 'none';
+        }
+    }
+
     fallbackToWebGL() {
         this.rendererType = 'webgl2';
         this.instance = new THREE.WebGLRenderer({ antialias: true });
@@ -68,6 +77,7 @@ export class Renderer {
             }
             if (this.instance.domElement.parentNode !== appElem) {
                 appElem.appendChild(this.instance.domElement);
+                this.instance.domElement.style.display = 'none'; // Hidden until startGame
             }
         }
     }

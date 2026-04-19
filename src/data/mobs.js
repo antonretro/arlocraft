@@ -13,5 +13,8 @@ export const MOBS = [
     { id: 'anton_evil', name: 'Creepy Anton', hp: 40, speed: 6, xp: 200, biomes: ['forest'], boss: true, texture: '/anton_creepy.png' },
     { id: 'prof_apple', name: 'Professor Apple', hp: 10, speed: 1.2, xp: 0, friendly: true, biomes: ['plains'], chat: ['Knowledge is delicious!', 'Have you seen my bow tie?', 'Synthesis is key.'], texture: '/apple_prof_mob.png' },
     { id: 'super_ball', name: 'Blue Sparkle', hp: 25, speed: 4, xp: 0, friendly: true, biomes: ['highlands'], chat: ['Up and away!', 'I will save this land!', 'Zoom!'], texture: '/blue_super_mob.png' },
-    { id: 'friendly_nugget', name: 'Tater Tot', hp: 10, speed: 1.5, xp: 0, friendly: true, biomes: ['forest'], chat: ['*nugget noises*', 'Friend?', 'Roll roll roll.'], texture: '/nugget_mob.png' }
+    { id: 'friendly_nugget', name: 'Tater Tot', hp: 10, speed: 1.5, xp: 0, friendly: true, biomes: ['forest'], chat: ['*nugget noises*', 'Friend?', 'Roll roll roll.'], texture: '/nugget_mob.png' },
+    { id: 'sheep', name: 'Sheep', hp: 8, speed: 1.5, xp: 10, friendly: true, biomes: ['plains', 'forest'], textureKey: 'sheep/sheep', textureMode: 'billboard' },
+    { id: 'pig', name: 'Pig', hp: 10, speed: 1.8, xp: 10, friendly: true, biomes: ['plains', 'forest', 'swamp'], textureKey: 'pig/pig', textureMode: 'billboard' },
+    { id: 'cow', name: 'Cow', hp: 10, speed: 1.2, xp: 10, friendly: true, biomes: ['plains', 'forest', 'highlands'], textureKey: 'cow/cow', textureMode: 'billboard' }
 ];

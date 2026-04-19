@@ -1,6 +1,13 @@
+import { Vector2, WebGLRenderer, Scene, PerspectiveCamera, DirectionalLight, AmbientLight, Group, MeshStandardMaterial, BoxGeometry, Mesh, MathUtils, TextureLoader, NearestFilter } from 'three';
+
 export class GameUI {
     constructor(game) {
         this.game = game;
+        this.avatarRenderer = null;
+        this.avatarScene = null;
+        this.avatarCamera = null;
+        this.avatarPlayer = null;
+        this.mousePos = new Vector2();
     }
 
     get(id) {
@@ -50,13 +57,15 @@ export class GameUI {
             'screen-title',
             'screen-world-select',
             'screen-world-create',
+            'screen-skins',
             'screen-loading'
         ];
-
+        
         const nextId =
             screen === 'booting' ? 'screen-booting' :
             screen === 'world-select' ? 'screen-world-select' :
             screen === 'world-create' ? 'screen-world-create' :
+            screen === 'skins' ? 'screen-skins' :
             screen === 'loading' ? 'screen-loading' :
             'screen-title';
 
@@ -65,6 +74,12 @@ export class GameUI {
             if (!node) continue;
             node.classList.toggle('ni-screen-active', id === nextId);
         }
+
+        if (screen === 'loading' || screen === 'skins') {
+            this._startAvatarRendering(screen);
+        } else {
+            this._stopAvatarRendering();
+        }
     }
 
     showLoadingScreen(statusText = 'Generating World...', subText = 'Building terrain and structures...') {
@@ -72,6 +87,7 @@ export class GameUI {
         const status = this.get('loading-status');
         const sub = this.get('loading-subtext');
         const bar = this.get('loading-progress');
+        const etaVal = this.get('eta-value');
 
         if (overlay) overlay.style.display = 'flex';
         if (status) status.textContent = statusText;
@@ -80,12 +96,33 @@ export class GameUI {
 
         this.setMenuScreen('loading');
 
+        const phases = [
+            'Analyzing Seed Complexity...',
+            'Scanning Voxels...',
+            'Seeding Biome Grids...',
+            'Fractalizing Noise Buffers...',
+            'Populating Flora Matrices...',
+            'Hardening Chunk Boundaries...'
+        ];
+
         if (this._loadingInterval) clearInterval(this._loadingInterval);
         let pct = 0;
+        const startTime = Date.now();
         this._loadingInterval = setInterval(() => {
-            pct = Math.min(pct + Math.random() * 8, 90);
+            pct = Math.min(pct + Math.random() * 5, 96);
             if (bar) bar.style.width = `${pct}%`;
-        }, 120);
+            
+            // Contextual Status
+            const phase = phases[Math.floor((pct/100) * phases.length)] || phases[phases.length-1];
+            
+            // ETA Estimation
+            const elapsed = (Date.now() - startTime) / 1000;
+            const remaining = Math.max(1, Math.ceil((elapsed / Math.max(0.01, pct)) * (100 - pct)));
+            const etaText = `${remaining}s remaining`;
+            
+            if (status) status.textContent = phase;
+            if (etaVal) etaVal.textContent = `(${phase}: ${etaText})`;
+        }, 150);
     }
 
     hideLoadingScreen() {
@@ -96,6 +133,8 @@ export class GameUI {
 
         const bar = this.get('loading-progress');
         if (bar) bar.style.width = '100%';
+        const etaVal = this.get('eta-value');
+        if (etaVal) etaVal.textContent = 'Complete';
 
         setTimeout(() => this.setMenuScreen('title'), 350);
     }
@@ -109,7 +148,7 @@ export class GameUI {
         const slotLabel = this.get('create-slot-label');
         if (slotLabel) slotLabel.textContent = this.game.selectedWorldSlot.toUpperCase();
 
-        const icons = ['???', '??', '???', '???', '??'];
+        const icons = ['\u{1F30D}', '\u{1F5FA}', '\u{1F3D4}', '\u{1F33F}', '\u26A1'];
 
         for (const [idx, slotId] of this.game.worldSlots.getAll().entries()) {
             const card = document.createElement('div');
@@ -130,12 +169,12 @@ export class GameUI {
                 card.innerHTML = `
                     <div class="ni-world-card-icon">${icon}</div>
                     <div class="ni-world-name">${slotId.toUpperCase()}</div>
-                    <div class="ni-world-meta">${summary.mode ?? 'SURVIVAL'} · Seed: ${summary.seed ?? 'unknown'}</div>
+                    <div class="ni-world-meta">${summary.mode ?? 'SURVIVAL'} &middot; Seed: ${summary.seed ?? 'unknown'}</div>
                     <div class="ni-world-meta">${when}</div>
                 `;
             } else {
                 card.innerHTML = `
-                    <div class="ni-world-card-icon" style="opacity: 0.3;">🌑</div>
+                    <div class="ni-world-card-icon" style="opacity: 0.3;">\u{1F30C}</div>
                     <div class="ni-world-name" style="opacity: 0.5;">${slotId.toUpperCase()}</div>
                     <div class="ni-world-meta">Empty Space</div>
                     <div class="ni-world-meta">Unexplored</div>
@@ -559,6 +598,187 @@ export class GameUI {
         this.bindMainMenu();
         this.bindPauseMenu();
         this.bindSettingsMenu();
+        this.bindSkinMenu();
         this.bindCanvasControls();
+        
+        // Setup mouse tracking for avatar
+        window.addEventListener('mousemove', (e) => {
+            this.mousePos.x = (e.clientX / window.innerWidth) * 2 - 1;
+            this.mousePos.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        });
     }
+
+    bindSkinMenu() {
+        const btnSkins = this.get('btn-to-skins');
+        const btnBackTop = this.get('btn-skins-back-top');
+        const btnBack = this.get('btn-skins-back');
+        const btnApply = this.get('btn-apply-skin');
+        const uploadArea = this.get('skin-upload-area');
+        const fileInput = this.get('skin-file-input');
+
+        if (btnSkins) btnSkins.addEventListener('click', () => {
+            this.renderSkinLibrary();
+            this.setMenuScreen('skins');
+        });
+
+        if (btnBackTop) btnBackTop.addEventListener('click', () => this.setMenuScreen('title'));
+        if (btnBack) btnBack.addEventListener('click', () => this.setMenuScreen('title'));
+
+        if (uploadArea && fileInput) {
+            uploadArea.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (re) => {
+                    this.game.skinSystem.applySkin('custom', re.target.result);
+                    this.renderSkinLibrary();
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        if (btnApply) {
+            btnApply.addEventListener('click', () => {
+                this.setStatus('Skin preferences saved.');
+                this.setMenuScreen('title');
+                this.game.audio.play('ui-click');
+            });
+        }
+    }
+
+    renderSkinLibrary() {
+        const classicGrid = this.get('classic-skins-grid');
+        const randomGrid = this.get('random-skins-grid');
+        if (!classicGrid || !randomGrid) return;
+
+        const skins = this.game.skinSystem;
+        const current = skins.currentSkin;
+
+        classicGrid.innerHTML = '';
+        skins.classicSkins.forEach(skin => {
+            const item = this._createSkinItem(skin, current === skin.id);
+            classicGrid.appendChild(item);
+        });
+
+        randomGrid.innerHTML = '';
+        skins.randomSkins.forEach(skin => {
+            const item = this._createSkinItem(skin, current === skin.id);
+            randomGrid.appendChild(item);
+        });
+    }
+
+    _createSkinItem(skin, isActive) {
+        const div = document.createElement('div');
+        div.className = `ni-skin-item ${isActive ? 'active' : ''}`;
+        div.innerHTML = skin.url ? `<img src="${skin.url}">` : `<div style="background: ${skin.config?.shirt || '#555'}; width:100%; height:100%;"></div>`;
+        div.addEventListener('click', () => {
+            this.game.skinSystem.applySkin(skin.id);
+            this.renderSkinLibrary();
+            this.get('selected-skin-name').textContent = skin.name;
+        });
+        return div;
+    }
+
+    _startAvatarRendering(screen) {
+        if (this._avatarFrame) return;
+        
+        const containerId = screen === 'loading' ? 'loading-avatar-canvas' : 'skin-preview-viewport';
+        const canvas = screen === 'loading' ? this.get('loading-avatar-canvas') : null;
+        const container = screen === 'skins' ? this.get('skin-preview-viewport') : null;
+        
+        if (!this.avatarRenderer) {
+            this.avatarRenderer = new WebGLRenderer({ antialias: true, alpha: true });
+            this.avatarScene = new Scene();
+            this.avatarCamera = new PerspectiveCamera(45, 1, 0.1, 100);
+            this.avatarCamera.position.set(0, 0, 4);
+            
+            const light = new DirectionalLight(0xffffff, 1.2);
+            light.position.set(2, 2, 5);
+            this.avatarScene.add(light);
+            this.avatarScene.add(new AmbientLight(0xffffff, 0.6));
+
+            // Create Player Model (Simple Box Man for Preview)
+            this.avatarPlayer = new Group();
+            const bodyMat = new MeshStandardMaterial({ color: 0x00c3e3 });
+            const head = new Mesh(new BoxGeometry(0.5, 0.5, 0.5), bodyMat);
+            head.position.y = 0.6;
+            const body = new Mesh(new BoxGeometry(0.5, 0.6, 0.25), bodyMat);
+            const lArm = new Mesh(new BoxGeometry(0.2, 0.6, 0.2), bodyMat);
+            lArm.position.set(-0.35, 0, 0);
+            const rArm = new Mesh(new BoxGeometry(0.2, 0.6, 0.2), bodyMat);
+            rArm.position.set(0.35, 0, 0);
+            const lLeg = new Mesh(new BoxGeometry(0.2, 0.6, 0.2), bodyMat);
+            lLeg.position.set(-0.15, -0.6, 0);
+            const rLeg = new Mesh(new BoxGeometry(0.2, 0.6, 0.2), bodyMat);
+            rLeg.position.set(0.15, -0.6, 0);
+            
+            this.avatarPlayer.add(head, body, lArm, rArm, lLeg, rLeg);
+            this.avatarScene.add(this.avatarPlayer);
+            this.avatarPlayer.position.y = 0.3;
+
+            // Hide old spinner once avatar is ready
+            const spinner = this.get('ni-loading-spinner');
+            if (spinner) spinner.style.display = 'none';
+
+            this._applySkinToAvatar();
+        }
+
+        const target = container || canvas;
+        if (container) {
+            container.innerHTML = '';
+            container.appendChild(this.avatarRenderer.domElement);
+            this.avatarRenderer.setSize(container.clientWidth, container.clientHeight);
+            this.avatarCamera.aspect = container.clientWidth / container.clientHeight;
+        } else if (canvas) {
+            this.avatarRenderer.setSize(140, 140);
+            this.avatarCamera.aspect = 1;
+        }
+        if (this.avatarCamera) this.avatarCamera.updateProjectionMatrix();
+
+        const animate = () => {
+            this._avatarFrame = requestAnimationFrame(animate); 
+            
+            // Mouse Tracking
+            const targetRotY = this.mousePos.x * 0.5;
+            const targetRotX = -this.mousePos.y * 0.3;
+            this.avatarPlayer.rotation.y = MathUtils.lerp(this.avatarPlayer.rotation.y, targetRotY, 0.1);
+            this.avatarPlayer.children[0].rotation.x = MathUtils.lerp(this.avatarPlayer.children[0].rotation.x, targetRotX, 0.1);
+            
+            // Subtle breathing
+            this.avatarPlayer.position.y = 0.3 + Math.sin(Date.now() * 0.002) * 0.05;
+            
+            this.avatarRenderer.render(this.avatarScene, this.avatarCamera);
+            
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) ctx.drawImage(this.avatarRenderer.domElement, 0, 0);
+            }
+        };
+        animate();
+    }
+
+    _applySkinToAvatar() {
+        if (!this.avatarPlayer || !this.game.skinSystem) return;
+        const skinUrl = this.game.skinSystem.getSkinUrl(this.game.skinSystem.currentSkin);
+        if (!skinUrl) return;
+
+        const loader = new TextureLoader();
+        loader.load(skinUrl, (texture) => {
+            texture.magFilter = NearestFilter;
+            texture.minFilter = NearestFilter;
+            const mat = new MeshStandardMaterial({ map: texture, transparent: true });
+            this.avatarPlayer.children.forEach(mesh => {
+                if (mesh instanceof Mesh) mesh.material = mat;
+            });
+        });
+    }
+
+    _stopAvatarRendering() {
+        if (this._avatarFrame) {
+            cancelAnimationFrame(this._avatarFrame);
+            this._avatarFrame = null;
+        }
+    }
+
 }
