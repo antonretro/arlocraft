@@ -1,0 +1,12 @@
+{
+  "name": "Lilac",
+  "hardness": 0,
+  "xp": 0,
+  "deco": true,
+  "transparent": true,
+  "textureId": "lilac_top",
+  "pairId": "lilac",
+  "pairOffsetY": -1,
+  "dropId": "lilac",
+  "pickId": "lilac"
+}

@@ -1,6 +1,7 @@
 {
-    "name": "Red Rose",
-    "hardness": 0,
-    "xp": 0,
-    "deco": true
+    "hardness":  0,
+    "xp":  0,
+    "deco":  true,
+    "transparent":  true,
+    "id":  "poppy"
 }

@@ -10,7 +10,7 @@ export class MiniMap {
         this.cells = 34;
 
         this.colors = {
-            grass: '#5c914d',
+            grass_block: '#5c914d',
             dirt: '#6b5138',
             stone: '#636c75',
             sand: '#bdae76',
@@ -31,7 +31,7 @@ export class MiniMap {
             platinum: '#bad6ea',
             mythril: '#4de4f0',
             virus: '#914cbc',
-            arlo: '#e095ab',
+            anton: '#e095ab',
             crafting_table: '#94724b',
             brick: '#a6543f',
             obsidian: '#2d283e',
@@ -102,9 +102,24 @@ export class MiniMap {
         ctx.fill();
         ctx.restore();
 
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
-        ctx.font = '12px monospace';
-        ctx.fillText('N', c - 4, 12);
+        // Compass cardinal labels (rotate with yaw)
+        const cardinals = [
+            { label: 'N', a: 0, color: '#ff4a4a' },
+            { label: 'E', a: Math.PI / 2, color: 'rgba(255,255,255,0.85)' },
+            { label: 'S', a: Math.PI, color: 'rgba(255,255,255,0.85)' },
+            { label: 'W', a: -Math.PI / 2, color: 'rgba(255,255,255,0.85)' }
+        ];
+        ctx.font = 'bold 11px monospace';
+        for (const { label, a, color } of cardinals) {
+            const rot = a - yaw;
+            const r = c - 9;
+            const lx = c + Math.sin(rot) * r;
+            const ly = c - Math.cos(rot) * r;
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.fillText(label, lx - 4 + 1, ly + 4 + 1);
+            ctx.fillStyle = color;
+            ctx.fillText(label, lx - 4, ly + 4);
+        }
 
         // Draw landmark labels
         const landmarks = this.game.world?.getLandmarksNear?.(playerPos.x, playerPos.z, this.radius + 8);

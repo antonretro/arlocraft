@@ -1,7 +1,7 @@
 export const FEATURES = {
     minimap: true,
-    dynamicLighting: false,
-    directionalChunkCulling: true,
+    dynamicLighting: true,
+    directionalChunkCulling: false,
     animatedVirusBlocks: false,
     dynamicQualityAuto: true,
     blockBreakPickupMagnet: true,

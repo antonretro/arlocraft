@@ -19,7 +19,7 @@ function bilerp(v00, v10, v01, v11, tx, tz) {
 const DEFAULT_BIOME = BIOME_BY_ID.get('plains');
 
 export class NoiseRouter {
-    constructor(seedString = 'arlocraft') {
+    constructor(seedString = 'antoncraft') {
         this.seed = this.hashSeed(seedString);
         this.biomeBlendCellSize = 24;
         this.maxBiomeCellCacheEntries = 4096;
@@ -68,30 +68,30 @@ export class NoiseRouter {
     }
 
     getClimate(x, z) {
-        const continental = clamp01((this.sample2D(this.depthNoise, x, z, 620) * 0.5) + 0.5);
-        const erosion = clamp01((this.sample2D(this.scaleNoise, x - 4400, z + 2800, 340) * 0.5) + 0.5);
-        const ridge = clamp01((this.sample2D(this.ridgeNoise, x + 1200, z - 1900, 240) * 0.5) + 0.5);
+        const sx = Number(this.seed % 10000n);
+        const sz = Number((this.seed / 1000n) % 10000n);
 
-        const rawTemp = clamp01((this.sample2D(this.tempNoise, x + 9000, z - 3000, 560) * 0.5) + 0.5);
-        const rawHumidity = clamp01((this.sample2D(this.humidNoise, x - 6000, z + 7000, 520) * 0.5) + 0.5);
+        const continental = clamp01((this.sample2D(this.depthNoise, x + sx, z + sz, 620) * 0.5) + 0.5);
+        const erosion = clamp01((this.sample2D(this.scaleNoise, x - 4400 + sx, z + 2800 + sz, 340) * 0.5) + 0.5);
+        const ridge = clamp01((this.sample2D(this.ridgeNoise, x + 1200 + sx, z - 1900 + sz, 240) * 0.5) + 0.5);
+
+        const rawTemp = clamp01((this.sample2D(this.tempNoise, x + 9000 + sx, z - 3000 + sz, 560) * 0.5) + 0.5);
+        const rawHumidity = clamp01((this.sample2D(this.humidNoise, x - 6000 + sx, z + 7000 + sz, 520) * 0.5) + 0.5);
 
         const elevation = clamp01((continental * 0.58) + ((1 - erosion) * 0.19) + (ridge * 0.23));
-        const temperature = clamp01(rawTemp + ((continental - 0.5) * 0.08) - ((elevation - 0.5) * 0.13));
+        const distFromOrigin = Math.sqrt(x * x + z * z);
+        const warmBias = Math.max(0, 1 - distFromOrigin / 96) * 0.35;
+        const temperature = clamp01(rawTemp + warmBias + ((continental - 0.5) * 0.08) - ((elevation - 0.5) * 0.13));
         const humidity = clamp01(rawHumidity + ((0.5 - temperature) * 0.12) - ((continental - 0.5) * 0.06));
 
-        return {
-            temperature,
-            humidity,
-            elevation,
-            ridge
-        };
+        return { temperature, humidity, elevation, ridge };
     }
 
     selectBiomeID(temperature, humidity, elevation, ridge) {
         if (elevation > 0.88 && temperature < 0.66) return 'alpine';
         if (elevation > 0.8) return ridge > 0.58 ? 'alpine' : 'highlands';
 
-        if (temperature < 0.2) return 'tundra';
+        if (temperature < 0.14) return 'tundra';
 
         if (temperature > 0.72 && humidity < 0.33) {
             if (elevation > 0.66) return 'badlands';

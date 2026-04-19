@@ -1,6 +1,6 @@
 {
-  "name": "arlocraft",
-  "version": "0.0.0",
+  "name": "antoncraft",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "desktop/main.cjs",
@@ -10,14 +10,14 @@
     "build:pages": "vite build --base ./",
     "preview": "vite preview",
     "build:web:portable": "vite build --base ./",
-    "build:exe": "npm run build:web:portable && electron-builder --win portable",
+    "build:exe": "npm run build:web:portable && npx electron-builder --win portable -c.electronVersion=41.2.0",
     "start:desktop": "node desktop/start-desktop.cjs"
   },
   "build": {
-    "appId": "com.arlocraft.game",
-    "productName": "ArloCraft",
+    "appId": "com.antoncraft.game",
+    "productName": "AntonCraft",
     "directories": {
-      "output": "release"
+      "output": "release_v1_0_0"
     },
     "files": [
       "dist/**/*",
@@ -35,7 +35,7 @@
       ]
     },
     "portable": {
-      "artifactName": "ArloCraft-${version}-Portable.exe"
+      "artifactName": "AntonCraft-${version}-Portable.exe"
     }
   },
   "devDependencies": {

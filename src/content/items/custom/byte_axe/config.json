@@ -1,0 +1,8 @@
+{
+    "id": "byte_axe",
+    "name": "Byte Axe",
+    "type": "axe",
+    "description": "A high-tech axe that cuts through digital matter.",
+    "sprite": "byte_axe.png",
+    "spriteStatus": "NEEDED"
+}

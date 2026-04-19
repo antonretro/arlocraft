@@ -1,0 +1,7 @@
+{
+    "name": "Crystal Wood",
+    "hardness": 5,
+    "xp": 50,
+    "emissive": true,
+    "color": "0x211042"
+}

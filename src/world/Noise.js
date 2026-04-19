@@ -4,7 +4,7 @@ const F3 = 1.0 / 3.0;
 const G3 = 1.0 / 6.0;
 
 export class Noise {
-    constructor(seedString = 'arlocraft') {
+    constructor(seedString = 'antoncraft') {
         this.p = new Uint8Array(256);
         this.perm = new Uint8Array(512);
         this.permMod12 = new Uint8Array(512);

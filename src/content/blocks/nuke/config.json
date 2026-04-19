@@ -3,5 +3,7 @@
     "hardness": 0.1,
     "xp": 25,
     "emissive": true,
-    "color": "0x1c1c1c"
+    "emissiveColor": "0x662100",
+    "color": "0x1c1c1c",
+    "textureId": "nuke"
 }

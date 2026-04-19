@@ -1,4 +1,4 @@
-# ArloCraft Feature Backlog
+# AntonCraft Feature Backlog
 
 ## Core Gameplay
 - Survival balancing pass (hunger, regen, enemy scaling)

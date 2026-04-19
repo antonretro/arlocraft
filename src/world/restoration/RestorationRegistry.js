@@ -5,7 +5,7 @@ const SITE_DEFS = [
         patch: 'highway',
         interactRadius: 8,
         xpReward: 60,
-        requirements: [{ id: 'stone', count: 18 }, { id: 'wood', count: 6 }],
+        requirements: [{ id: 'stone', count: 18 }, { id: 'oak_log', count: 6 }],
         landmarks: ['Broken Bridge', 'Abandoned Highway', 'Mine Entrance']
     },
     {
@@ -14,7 +14,7 @@ const SITE_DEFS = [
         patch: 'market',
         interactRadius: 7,
         xpReward: 45,
-        requirements: [{ id: 'wood', count: 12 }, { id: 'path_block', count: 8 }],
+        requirements: [{ id: 'oak_log', count: 12 }, { id: 'path_block', count: 8 }],
         landmarks: ['Market Ruins', 'Lamp Plaza']
     },
     {
@@ -23,7 +23,7 @@ const SITE_DEFS = [
         patch: 'housing',
         interactRadius: 7,
         xpReward: 50,
-        requirements: [{ id: 'wood', count: 16 }, { id: 'glass', count: 4 }],
+        requirements: [{ id: 'oak_log', count: 16 }, { id: 'glass', count: 4 }],
         landmarks: ['Old Hut', 'Collapsed Bunker']
     },
     {
@@ -32,7 +32,7 @@ const SITE_DEFS = [
         patch: 'park',
         interactRadius: 7,
         xpReward: 40,
-        requirements: [{ id: 'grass', count: 10 }, { id: 'dirt', count: 8 }],
+        requirements: [{ id: 'grass_block', count: 10 }, { id: 'dirt', count: 8 }],
         landmarks: ['Lost Orchard', 'Abandoned Camp']
     },
     {
@@ -57,4 +57,3 @@ export function getRestorationSiteByLandmarkName(name) {
     if (!name) return null;
     return SITE_BY_LANDMARK.get(name) ?? null;
 }
-
