@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import StatsPanel from 'stats.js';
+import { migrateInventoryItem } from '../data/blockMigrations.js';
 import { ActionSystem } from './ActionSystem.js';
 import { Camera } from './Camera.js';
 import { DayNightSystem } from './DayNightSystem.js';
@@ -301,6 +302,148 @@ export class Game {
                 this.ui.setStatus(`Failed to load ${slotId.toUpperCase()}.`, true);
             }
             return false;
+        }
+    }
+
+    startGame({ skipSeedApply = false, preserveCurrentMode = false } = {}) {
+        if (!skipSeedApply) {
+            const seedInput = document.getElementById('seed-input');
+            if (seedInput?.value.trim()) this.world.seedString = seedInput.value.trim();
+        }
+
+        if (!preserveCurrentMode) {
+            this.physics.setMode(this.selectedStartMode);
+            this.gameState.setMode(this.selectedStartMode);
+        }
+
+        this.world.clearAll();
+        this.resetEntities();
+        this.gameState.hp = 20;
+        this.gameState.hunger = 20;
+        this.gameState.inventory = Array(36).fill(null);
+        this.gameState.offhand = null;
+        this.gameState.craftingGrid = Array(9).fill(null);
+
+        const spawn = this.world.getSafeSpawnPoint(0, 0, 40);
+        if (this.physics.isReady) {
+            this.physics.playerBody.setTranslation({ x: spawn.x, y: spawn.y, z: spawn.z }, true);
+            this.physics.playerBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        }
+
+        this.hasStarted = true;
+        this.isPaused = false;
+        this.showTitle(false);
+        this.showPause(false);
+        this.touchControls ? this.touchControls.show(true) : this.input.setPointerLock();
+        this.helpPanel.setState('playing');
+
+        window.dispatchEvent(new CustomEvent('inventory-changed'));
+        window.dispatchEvent(new CustomEvent('offhand-changed', { detail: null }));
+        window.dispatchEvent(new CustomEvent('hp-changed', { detail: this.gameState.hp }));
+        window.dispatchEvent(new CustomEvent('hunger-changed', { detail: this.gameState.hunger }));
+        this.audio.play('ui-click');
+    }
+
+    getSaveData() {
+        const pos = this.getPlayerPosition();
+        return {
+            version: 1,
+            savedAt: new Date().toISOString(),
+            world: this.world.serialize(),
+            player: {
+                position: { x: pos.x, y: pos.y, z: pos.z },
+                look: { yaw: this.viewYaw, pitch: this.viewPitch },
+                cameraMode: this.cameraModes[this.cameraModeIndex],
+                mode: this.gameState.mode,
+                hp: this.gameState.hp,
+                hunger: this.gameState.hunger
+            },
+            stats: {
+                level: this.stats.level,
+                xp: this.stats.xp,
+                xpToNextLevel: this.stats.xpToNextLevel,
+                attributes: this.stats.attributes
+            },
+            inventory: this.gameState.inventory,
+            offhand: this.gameState.offhand,
+            craftingGrid: this.gameState.craftingGrid
+        };
+    }
+
+    applySaveData(data) {
+        if (!data?.world) throw new Error('Invalid save');
+        this.world.loadFromData(data.world);
+        this.resetEntities();
+
+        const seedInput = document.getElementById('seed-input');
+        if (seedInput) seedInput.value = this.world.seedString;
+
+        if (Array.isArray(data.inventory)) {
+            this.gameState.inventory = data.inventory.slice(0, 36).map(migrateInventoryItem);
+            while (this.gameState.inventory.length < 36) this.gameState.inventory.push(null);
+        }
+        this.gameState.offhand = migrateInventoryItem(data?.offhand ?? null);
+        if (Array.isArray(data.craftingGrid)) {
+            this.gameState.craftingGrid = data.craftingGrid.slice(0, 9).map(migrateInventoryItem);
+            while (this.gameState.craftingGrid.length < 9) this.gameState.craftingGrid.push(null);
+        }
+
+        if (data.player) {
+            if (data.player.mode) this.gameState.setMode(data.player.mode);
+            if (Number.isFinite(data.player.hp)) this.gameState.hp = data.player.hp;
+            if (Number.isFinite(data.player.hunger)) this.gameState.hunger = data.player.hunger;
+            if (data.player.look) {
+                this.viewYaw = Number(data.player.look.yaw) || 0;
+                this.viewPitch = Number(data.player.look.pitch) || 0;
+            }
+            if (typeof data.player.cameraMode === 'string') {
+                const idx = this.cameraModes.indexOf(data.player.cameraMode);
+                if (idx >= 0) this.cameraModeIndex = idx;
+            }
+        }
+
+        if (data.stats) {
+            if (Number.isFinite(data.stats.level)) this.stats.level = data.stats.level;
+            if (Number.isFinite(data.stats.xp)) this.stats.xp = data.stats.xp;
+            if (Number.isFinite(data.stats.xpToNextLevel)) this.stats.xpToNextLevel = data.stats.xpToNextLevel;
+            if (data.stats.attributes) this.stats.attributes = { ...this.stats.attributes, ...data.stats.attributes };
+        }
+
+        const px = data.player?.position?.x ?? 0;
+        const py = data.player?.position?.y ?? 70;
+        const pz = data.player?.position?.z ?? 0;
+        if (this.physics.isReady) {
+            this.physics.playerBody.setTranslation({ x: px, y: py, z: pz }, true);
+            this.physics.playerBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            this.physics.setMode(this.gameState.mode);
+            this.updateCameraFromPlayer();
+        }
+
+        this.hasStarted = true;
+        this.isPaused = false;
+        this.showTitle(false);
+        this.showPause(false);
+        this.touchControls ? this.touchControls.show(true) : this.input.setPointerLock();
+        this.helpPanel.setState('playing');
+
+        window.dispatchEvent(new CustomEvent('inventory-changed'));
+        window.dispatchEvent(new CustomEvent('offhand-changed', { detail: this.gameState.offhand }));
+        window.dispatchEvent(new CustomEvent('hp-changed', { detail: this.gameState.hp }));
+        window.dispatchEvent(new CustomEvent('hunger-changed', { detail: this.gameState.hunger }));
+        window.dispatchEvent(new CustomEvent('xp-changed', { detail: { xp: this.stats.xp, max: this.stats.xpToNextLevel } }));
+    }
+
+    initPerfPanel() {
+        if (this.framePanel) return;
+        try {
+            const panel = new StatsPanel();
+            panel.showPanel(0);
+            panel.dom.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;';
+            document.body.appendChild(panel.dom);
+            this.framePanel = panel;
+            if (!this.settings.perfPanelVisible) panel.dom.style.display = 'none';
+        } catch {
+            this.framePanel = null;
         }
     }
 
