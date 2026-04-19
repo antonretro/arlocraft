@@ -671,7 +671,20 @@ export class GameUI {
     _createSkinItem(skin, isActive) {
         const div = document.createElement('div');
         div.className = `ni-skin-item ${isActive ? 'active' : ''}`;
-        div.innerHTML = skin.url ? `<img src="${skin.url}">` : `<div style="background: ${skin.config?.shirt || '#555'}; width:100%; height:100%;"></div>`;
+        if (skin.url) {
+            div.innerHTML = `<img src="${skin.url}" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated;">`;
+        } else {
+            const c = skin.config || {};
+            div.innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;gap:1px;transform:scale(0.7)">
+                    <div style="width:20px;height:20px;background:${c.skin||'#ffccaa'};border-radius:2px"></div>
+                    <div style="width:22px;height:20px;background:${c.shirt||'#008888'};border-radius:1px"></div>
+                    <div style="display:flex;gap:2px">
+                        <div style="width:9px;height:18px;background:${c.pants||'#4444aa'};border-radius:1px"></div>
+                        <div style="width:9px;height:18px;background:${c.pants||'#4444aa'};border-radius:1px"></div>
+                    </div>
+                </div>`;
+        }
         div.addEventListener('click', () => {
             this.game.skinSystem.applySkin(skin.id);
             this.renderSkinLibrary();
