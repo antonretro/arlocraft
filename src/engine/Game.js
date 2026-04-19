@@ -308,7 +308,7 @@ export class Game {
     startGame({ skipSeedApply = false, preserveCurrentMode = false } = {}) {
         if (!skipSeedApply) {
             const seedInput = document.getElementById('seed-input');
-            if (seedInput?.value.trim()) this.world.seedString = seedInput.value.trim();
+            if (seedInput?.value.trim()) this.world.setSeed(seedInput.value.trim());
         }
 
         if (!preserveCurrentMode) {
@@ -316,7 +316,7 @@ export class Game {
             this.gameState.setMode(this.selectedStartMode);
         }
 
-        this.world.clearAll();
+        this.world.clearWorld();
         this.resetEntities();
         this.gameState.hp = 20;
         this.gameState.hunger = 20;
