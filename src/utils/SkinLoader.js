@@ -9,7 +9,8 @@ export class SkinLoader {
     _loadImage(url) {
         return new Promise((resolve, reject) => {
             const img = new Image();
-            img.crossOrigin = 'anonymous';
+            // Only set crossOrigin for external URLs (needed for canvas drawImage)
+            if (url.startsWith('http')) img.crossOrigin = 'anonymous';
             img.onload = () => resolve(img);
             img.onerror = reject;
             img.src = url;
