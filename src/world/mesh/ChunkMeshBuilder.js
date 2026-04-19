@@ -293,7 +293,9 @@ export function rebuildChunkInstancedMeshes(chunk) {
         if (shouldSkipStandaloneTypeRender(blockData)) continue;
 
         const baseMaterial = chunk.world.blockRegistry.getMaterial(baseId);
-        const { material, owned } = specializeMaterial(baseMaterial);
+        const specialized = specializeMaterial(baseMaterial);
+        if (!specialized) continue;
+        const { material, owned } = specialized;
         if (!material) continue;
 
         if (isDecoType(blockData)) {
