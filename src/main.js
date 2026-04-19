@@ -8,6 +8,7 @@ import './style.css';
 import './content/blocks/crafting_table/CraftingTableHandler.js';
 import './content/blocks/chest/ChestHandler.js';
 import './content/blocks/furnace/FurnaceHandler.js';
+import './content/blocks/command_block/CommandBlockHandler.js';
 
 console.log("[AntonCraft] main.js fully loading...");
 

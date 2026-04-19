@@ -1,3 +1,5 @@
+import { ACHIEVEMENTS } from '../data/achievements.js';
+
 export class GameState {
     constructor() {
         this.mode = 'SURVIVAL';
@@ -32,6 +34,8 @@ export class GameState {
             lowestY: 64,
             discoveredBlocksCount: 0
         };
+
+        this.achievementCheckTimer = setInterval(() => this.checkAchievements(), 2000);
         
         this.initStartingInventory();
     }
@@ -67,7 +71,29 @@ export class GameState {
     unlockAchievement(id) {
         if (!id || this.unlockedAchievements.has(id)) return;
         this.unlockedAchievements.add(id);
-        window.dispatchEvent(new CustomEvent('achievement-unlocked', { detail: { id } }));
+        const achievement = ACHIEVEMENTS.find(a => a.id === id);
+        window.dispatchEvent(new CustomEvent('achievement-unlocked', { 
+            detail: { 
+                id, 
+                name: achievement?.name || id,
+                icon: achievement?.icon || '🏆'
+            } 
+        }));
+    }
+
+    checkAchievements() {
+        if (this.mode === 'CREATIVE') return;
+        
+        for (const ach of ACHIEVEMENTS) {
+            if (this.unlockedAchievements.has(ach.id)) continue;
+            try {
+                if (ach.check(this.stats)) {
+                    this.unlockAchievement(ach.id);
+                }
+            } catch (e) {
+                console.warn('[Achievements] Check failed for', ach.id, e);
+            }
+        }
     }
 
     updateStat(key, value, mode = 'set') {

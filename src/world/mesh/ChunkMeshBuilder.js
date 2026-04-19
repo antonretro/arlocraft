@@ -146,30 +146,51 @@ function collectBlocksByType(chunk) {
         const blockData = chunk.world.getBlockData(id);
         const renderType = blockData?.renderType ?? 'cube';
 
+        // --- Smart Rails & Connected Textures ---
+        const [ax, ay, az] = chunk.world.keyToCoords(key);
+
+        if (id === 'rail' || id === 'powered_rail' || id === 'detector_rail') {
+            const hasRail = (nx, ny, nz) => {
+                const nid = chunk.world.getBlockAt(nx, ny, nz);
+                return nid && (nid.includes('rail'));
+            };
+
+            const n = hasRail(ax, ay, az - 1);
+            const s = hasRail(ax, ay, az + 1);
+            const e = hasRail(ax + 1, ay, az);
+            const w = hasRail(ax - 1, ay, az);
+
+            if ((n && e) || (e && s) || (s && w) || (w && n)) {
+                // It's a corner!
+                add(id + ':corner', key);
+            } else if (e || w) {
+                // Horizontal
+                add(id + ':rotated', key);
+            } else {
+                // Vertical or single
+                add(id, key);
+            }
+            continue;
+        }
+
         // --- Neighborhood-Aware Face Culling for Box/Cube geometries ---
-        if (renderType === 'cube' || id === 'glass' || id.includes('glass')) {
-            const [ax, ay, az] = chunk.world.keyToCoords(key);
-            
+        if (renderType === 'cube' || id.includes('glass')) {
             const isOpaque = (neighborId) => {
                 if (!neighborId || neighborId === 'air') return false;
-                // Cull against self (removes walls between glass blocks)
-                if (neighborId === id) return true;
+                // Cull against any glass variant for seamless look
                 if (id.includes('glass') && neighborId.includes('glass')) return true;
+                if (neighborId === id) return true;
 
                 const nData = chunk.world.getBlockData(neighborId);
-                // Opaque blocks cull everything behind them.
                 return nData && !nData.transparent && !nData.deco;
             };
 
-            // Top
-            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay + 1, az)))) add(id + ':top', key);
-            // Bottom
-            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay - 1, az)))) add(id + ':bottom', key);
-            // Sides
-            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax + 1, ay, az)))) add(id + ':px', key);
-            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax - 1, ay, az)))) add(id + ':nx', key);
-            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay, az + 1)))) add(id + ':pz', key);
-            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay, az - 1)))) add(id + ':nz', key);
+            if (!isOpaque(chunk.world.getBlockAt(ax, ay + 1, az))) add(id + ':top', key);
+            if (!isOpaque(chunk.world.getBlockAt(ax, ay - 1, az))) add(id + ':bottom', key);
+            if (!isOpaque(chunk.world.getBlockAt(ax + 1, ay, az))) add(id + ':px', key);
+            if (!isOpaque(chunk.world.getBlockAt(ax - 1, ay, az))) add(id + ':nx', key);
+            if (!isOpaque(chunk.world.getBlockAt(ax, ay, az + 1))) add(id + ':pz', key);
+            if (!isOpaque(chunk.world.getBlockAt(ax, ay, az - 1))) add(id + ':nz', key);
             
             continue;
         }

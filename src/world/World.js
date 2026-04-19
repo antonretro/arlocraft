@@ -13,6 +13,8 @@ import { WorldMutationService } from './WorldMutationService.js';
 import { WorldInteractionService } from './WorldInteractionService.js';
 import { WorldPersistenceService } from './WorldPersistenceService.js';
 import { FluidSystem } from './FluidSystem.js';
+import { GravitySystem } from './GravitySystem.js';
+import { RedstoneSystem } from './RedstoneSystem.js';
 import { getBlockHandler } from '../engine/BlockHandlerRegistry.js';
 import { rollLoot } from '../data/LootTables.js';
 
@@ -32,6 +34,8 @@ export class World {
         this.interaction = new WorldInteractionService(this);
         this.persistence = new WorldPersistenceService(this);
         this.fluids = new FluidSystem(this);
+        this.gravity = new GravitySystem(this);
+        this.redstone = new RedstoneSystem(this);
 
         this.registry = new BlockRegistry();
         this.blockRegistry = this.registry;
@@ -438,8 +442,44 @@ export class World {
         }
 
         this.chunkManager.flushPriorityChunkRebuilds(20);
-        window.dispatchEvent(new CustomEvent('block-placed', { detail: { id: finalId } }));
+        window.dispatchEvent(new CustomEvent('block-placed', { detail: { id: finalId, x: px, y: py, z: pz } }));
         return true;
+    }
+
+    handleBucketAction(camera, action, slotIndex) {
+        const inventory = this.game.gameState.inventory;
+        const item = inventory[slotIndex];
+        if (!item) return false;
+
+        const hit = this.raycastBlocks(camera, 6, true);
+        if (!hit) return false;
+
+        const { x, y, z } = hit.cell;
+        const targetId = hit.id;
+
+        if (item.id === 'bucket') {
+            // PICKUP Logic
+            if (targetId === 'water' || targetId === 'lava') {
+                this.mutations.removeBlockByKey(this.getKey(x, y, z));
+                item.id = targetId + '_bucket';
+                this.game.audio?.play('bucket-fill');
+                window.dispatchEvent(new CustomEvent('inventory-changed'));
+                return true;
+            }
+        } else if (item.id === 'water_bucket' || item.id === 'lava_bucket') {
+            // PLACE Logic
+            const liquidId = item.id.replace('_bucket', '');
+            const placeHit = this.raycastBlocks(camera, 6, false);
+            if (placeHit) {
+                const { x: px, y: py, z: pz } = placeHit.previous;
+                if (this.placeBlock(camera, slotIndex, true)) {
+                    // placeBlock handles the ID change to 'bucket' if it detects liquid placement
+                    this.game.audio?.play('bucket-empty');
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     interactBlock(camera) {

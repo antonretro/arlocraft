@@ -411,8 +411,15 @@ export class Chunk {
                     const bx = x + dx;
                     const by = y + dy;
                     const bz = z + dz;
-                    // Pre-clear with air (overwritten by blueprint blocks later)
-                    this.addGeneratedStructureBlock(bx, by, bz, 'air');
+                    
+                    const existing = this.world.getBlockAt(bx, by, bz);
+                    const isNature = existing?.includes('leaves') || existing?.includes('log') || existing?.includes('grass') || existing?.includes('flower');
+                    
+                    // Only clear if its solid terrain or if we're in the core of the structure
+                    // This prevents "shaving" trees that are just outside the structure's blueprint
+                    if (existing && existing !== 'air' && (this.world.isBlockSolid(existing) || isNature)) {
+                        this.addGeneratedStructureBlock(bx, by, bz, 'air');
+                    }
                 }
             }
         }

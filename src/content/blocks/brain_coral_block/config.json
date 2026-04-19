@@ -1,7 +1,7 @@
 {
     "hardness":  1,
-    "transparent":  true,
+    "transparent": false,
     "name":  "Brain Coral Block",
     "xp":  2,
-    "deco":  true
+    "deco": false
 }

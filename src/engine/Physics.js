@@ -46,6 +46,7 @@ export class Physics {
         this.autoJumpCooldown = 0;
         this.lastSafePosition = new THREE.Vector3(0, 2.5, 0);
         this.tmpRescuePos = new THREE.Vector3();
+        this.fallDistance = 0;
 
         // Minecraft-style sprinting
         this.wPressTimer = 0;
@@ -411,7 +412,10 @@ export class Physics {
             this.moveDir.set(0, 0, 0);
         }
 
-        const moveSpeed = inWater ? this.swimSpeed : speed;
+        const blockUnderFeet = this.world.getBlockAt(this.position.x, this.position.y - 0.1, this.position.z);
+        const onHoney = blockUnderFeet === 'honey_block';
+        
+        const moveSpeed = inWater ? this.swimSpeed : (onHoney ? this.walkSpeed * 0.4 : speed);
         const targetX = this.moveDir.x * moveSpeed;
         const targetZ = this.moveDir.z * moveSpeed;
 
@@ -448,19 +452,52 @@ export class Physics {
                     this.velocity.y = Math.max(this.velocity.y, this.waterExitBoost);
                 }
             } else if (grounded) {
-                if (this.velocity.y < 0) this.velocity.y = 0;
-                const bufferedJump = this.jumpBufferTimer > 0 && this.coyoteTimer > 0;
-                if (bufferedJump && !this.isCrouching) {
-                    this.velocity.y = this.jumpSpeed;
-                    this.jumpBufferTimer = 0;
-                    this.coyoteTimer = 0;
-                } else if (!this.isCrouching && this.autoJumpEnabled && this.autoJumpCooldown <= 0 && wPressed && this.shouldAutoJump()) {
-                    this.velocity.y = this.jumpSpeed;
-                    this.autoJumpCooldown = 0.4;
+                const blockBelow = this.world.getBlockAt(this.position.x, this.position.y - 0.1, this.position.z);
+                const isSlime = blockBelow === 'slime_block';
+                const isHoney = blockBelow === 'honey_block';
+
+                if (isSlime && this.fallDistance > 1.0) {
+                    // SLIME BOUNCE: Invert and attenuate vertical velocity
+                    this.velocity.y = Math.min(12, this.fallDistance * 0.65);
+                    this.fallDistance = 0;
+                    this.world.game.audio?.play('slime-bounce');
+                } else {
+                    if (this.velocity.y < 0) this.velocity.y = 0;
+                    const bufferedJump = this.jumpBufferTimer > 0 && this.coyoteTimer > 0;
+                    
+                    if (isHoney) {
+                        // HONEY: No jumping!
+                        this.jumpBufferTimer = 0;
+                    } else if (bufferedJump && !this.isCrouching) {
+                        this.velocity.y = this.jumpSpeed;
+                        this.jumpBufferTimer = 0;
+                        this.coyoteTimer = 0;
+                    } else if (!this.isCrouching && this.autoJumpEnabled && this.autoJumpCooldown <= 0 && wPressed && this.shouldAutoJump()) {
+                        this.velocity.y = this.jumpSpeed;
+                        this.autoJumpCooldown = 0.4;
+                    }
                 }
-            } else {
-                this.velocity.y += this.gravity * delta;
-                if (this.velocity.y < -35) this.velocity.y = -35;
+            }
+        }
+
+        // --- Fall Damage & Water Clutch ---
+        if (this.mode === 'SURVIVAL') {
+            const blockBelow = this.world.getBlockAt(this.position.x, this.position.y - 0.1, this.position.z);
+            const isSlime = blockBelow === 'slime_block';
+            
+            if (inWater || isSlime) {
+                this.fallDistance = 0; // Water/Slime Clutch!
+            } else if (grounded) {
+                if (this.fallDistance > 3.5) {
+                    const damage = Math.floor(this.fallDistance - 3);
+                    if (damage > 0) {
+                        this.world.game.gameState.takeDamage(damage);
+                        this.world.game.audio?.play('fall-damage');
+                    }
+                }
+                this.fallDistance = 0;
+            } else if (this.velocity.y < -0.1) {
+                this.fallDistance += Math.abs(this.velocity.y * delta);
             }
         }
 

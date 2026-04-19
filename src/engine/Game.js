@@ -28,6 +28,7 @@ import { WorldSlotManager } from './WorldSlotManager.js';
 import { UpdateChecker } from './UpdateChecker.js';
 import { GameUI } from './GameUI.js';
 import { SkinSystem } from './SkinSystem.js';
+import { ParticleSystem } from './ParticleSystem.js';
 
 const LOCAL_APP_VERSION = 'v1.0';
 const GITHUB_REPO_OWNER = 'antonretro';
@@ -96,6 +97,7 @@ export class Game {
         this.input = new Input(this);
         
         this.hud = new HUD(this.gameState, this);
+        this.particles = new ParticleSystem(this);
         this.survival = new SurvivalSystem(this.gameState, this.hud);
         this.dayNight = new DayNightSystem(this.renderer, this.world, this.features ?? {});
         this.helpPanel = new HelpPanel();
@@ -992,6 +994,32 @@ export class Game {
             return;
         }
 
+        // THROWABLES
+        const throwables = ['snowball', 'egg', 'ender_pearl'];
+        if (throwables.includes(selected.id)) {
+            const pos = this.camera.instance.position.clone();
+            const dir = new THREE.Vector3();
+            this.camera.instance.getWorldDirection(dir);
+            
+            this.entities.spawnProjectile(selected.id, null, pos, dir);
+            this.audio?.play('throw');
+            
+            if (this.gameState.mode !== 'CREATIVE') {
+                selected.count--;
+                if (selected.count <= 0) {
+                    this.gameState.inventory[this.gameState.selectedSlot] = null;
+                }
+                window.dispatchEvent(new CustomEvent('inventory-changed'));
+            }
+            return;
+        }
+
+        // Entity Interaction (e.g. Milking)
+        const entityInt = this.entities.interactEntityFromCamera(this.camera.instance);
+        if (entityInt && entityInt.action) return;
+
+        if (this.world.handleBucketAction(this.camera.instance, 'use', this.gameState.selectedSlot)) return;
+
         if (this.world.interactBlock(this.camera.instance)) return;
 
         const selectedSlot = this.gameState.selectedSlot;
@@ -1120,6 +1148,7 @@ export class Game {
             this.profiler.physicsMs = performance.now() - physicsStart;
             playerPos = this.getPlayerPosition();
             this.entities.update(delta);
+            this.particles.update(delta);
             const worldStart = performance.now();
             this.world.update(playerPos, delta);
             this.profiler.worldMs = performance.now() - worldStart;

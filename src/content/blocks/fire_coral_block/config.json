@@ -1,6 +1,6 @@
-﻿{
+{
     "hardness":  1,
-    "transparent":  true,
+    "transparent": false,
     "name":  "Fire Coral Block",
     "xp":  2
 }

@@ -848,4 +848,66 @@ export class GameUI {
         }
     }
 
+    bindMultiplayerMenu() {
+        const btnHost = this.get('btn-mp-host');
+        const btnJoin = this.get('btn-multi-join');
+        const btnBackTop = this.get('btn-multi-back-top');
+        const btnBack = this.get('btn-multi-back');
+        const btnCopy = this.get('btn-copy-id');
+        const privacyToggle = this.get('multi-privacy-toggle');
+        const myIdInput = this.get('multi-my-id');
+        const joinInput = this.get('multi-join-id');
+
+        if (btnBackTop) btnBackTop.addEventListener('click', () => this.setMenuScreen('title'));
+        if (btnBack) btnBack.addEventListener('click', () => this.setMenuScreen('title'));
+
+        if (privacyToggle && myIdInput) {
+            privacyToggle.addEventListener('change', () => {
+                myIdInput.type = privacyToggle.checked ? 'password' : 'text';
+            });
+        }
+
+        if (btnCopy && myIdInput) {
+            btnCopy.addEventListener('click', () => {
+                const id = this.game.multiplayer?.peer?.id;
+                if (!id) return;
+                navigator.clipboard.writeText(id).then(() => {
+                    const originalText = btnCopy.textContent;
+                    btnCopy.textContent = 'COPIED!';
+                    btnCopy.classList.add('ni-btn-green');
+                    setTimeout(() => {
+                        btnCopy.textContent = originalText;
+                        btnCopy.classList.remove('ni-btn-green');
+                    }, 2000);
+                });
+            });
+        }
+
+        if (btnJoin && joinInput) {
+            btnJoin.addEventListener('click', () => {
+                const remoteId = joinInput.value.trim();
+                if (!remoteId) {
+                    this.setStatus('Please enter a valid Join Code.', true);
+                    return;
+                }
+                
+                this.setStatus(`Bridging to ${remoteId.substring(0, 8)}...`);
+                this.game.multiplayer.connectToPeer(remoteId).then(() => {
+                    this.setStatus('Connection established! Syncing world...');
+                    // The actual world enter happens via MultiplayerManager events
+                }).catch(err => {
+                    this.setStatus(`Connection failed: ${err.message}`, true);
+                });
+            });
+        }
+
+        // Logic to update the ID display when PeerJS connects
+        const updateMyId = () => {
+            if (myIdInput && this.game.multiplayer?.peer?.id) {
+                myIdInput.value = this.game.multiplayer.peer.id;
+            }
+        };
+
+        setInterval(updateMyId, 2000);
+    }
 }

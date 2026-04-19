@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { MOBS } from '../data/mobs.js';
 import { TOOLS } from '../data/tools.js';
 import { MobEntity } from './MobEntity.js';
+import { Snowball } from './throwables/Snowball.js';
+import { Egg } from './throwables/Egg.js';
+import { EnderPearl } from './throwables/EnderPearl.js';
 
 const entityTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/entity/**/*.png', {
     eager: true,
@@ -69,6 +72,7 @@ export class EntityManager {
         this.loadedTextureCache = new Map();
         this.billboardTextureCache = new Map();
         this.remotePlayers = new Map(); // PeerID -> {group, parts}
+        this.projectiles = [];
     }
 
     // --- Remote Players (Multiplayer) ---
@@ -153,6 +157,32 @@ export class EntityManager {
         }
         this.game.renderer.scene.add(entity.mesh);
         return entity;
+    }
+
+    spawnProjectile(type, owner, position, direction) {
+        const speed = 25;
+        const velocity = direction.clone().multiplyScalar(speed);
+        // Add slightly upward arc as in Minecraft
+        velocity.y += 3;
+        
+        let projectile;
+        switch (type) {
+            case 'snowball':
+                projectile = new Snowball(this.game, owner, position, velocity);
+                break;
+            case 'egg':
+                projectile = new Egg(this.game, owner, position, velocity);
+                break;
+            case 'ender_pearl':
+                projectile = new EnderPearl(this.game, owner, position, velocity);
+                break;
+            default:
+                console.warn('[EntityManager] Unknown projectile type:', type);
+                return null;
+        }
+
+        this.projectiles.push(projectile);
+        return projectile;
     }
 
     resolveTextureUrl(config) {
@@ -264,6 +294,24 @@ export class EntityManager {
         return Boolean(this.findEntityInCrosshair(camera, maxRange, (entity) => !entity.config?.friendly));
     }
 
+    interactEntityFromCamera(camera, maxRange = 4.5) {
+        const hit = this.findEntityInCrosshair(camera, maxRange);
+        if (!hit) return null;
+        
+        const entity = hit.entity;
+        const selected = this.game.gameState.getSelectedItem();
+
+        // Milking logic
+        if (entity.id === 'cow' && selected?.id === 'bucket') {
+            selected.id = 'milk_bucket';
+            this.game.audio?.play('milking');
+            window.dispatchEvent(new CustomEvent('inventory-changed'));
+            return { action: 'milked', entity };
+        }
+
+        return { entity };
+    }
+
     attackFromCamera(camera, selectedItem) {
         if (this.attackCooldown > 0 || this.entities.length === 0) return false;
 
@@ -284,6 +332,7 @@ export class EntityManager {
         const isCrit = Math.random() < critChance;
         if (isCrit) {
             damage *= 1.75;
+            this.game.particles?.spawnBurst(target.mesh.position, 'CRIT', 15, 0.3);
             window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type: 'CRIT HIT' } }));
         }
 
@@ -336,6 +385,10 @@ export class EntityManager {
             entity.update(delta);
         });
         this.entities = this.entities.filter((entity) => !entity.dead);
+        
+        // Update Projectiles
+        this.projectiles.forEach(p => p.update(delta));
+        this.projectiles = this.projectiles.filter(p => !p.dead);
     }
 
     interactNearbyEntity(position, maxDist) {

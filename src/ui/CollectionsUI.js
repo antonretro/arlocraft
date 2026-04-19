@@ -1,5 +1,5 @@
-import { BLOCKS } from '../data/blocks.js';
 import { RECIPE_BOOK } from '../data/recipeBook.js';
+import { ACHIEVEMENTS } from '../data/achievements.js';
 import { iconService } from './IconService.js';
 
 export class CollectionsUI {
@@ -149,28 +149,22 @@ export class CollectionsUI {
         if (!list) return;
         list.innerHTML = '';
 
-        const medals = this.gameState.unlockedAchievements || new Set();
-        const MEDAL_DEFS = [
-            { id: 'first_mine', name: 'Breaker', desc: 'Mine your first block.' },
-            { id: 'crafted', name: 'Artisan', desc: 'Craft something special.' },
-            { id: 'explorer', name: 'Wayfarer', desc: 'Travel 100 blocks.' },
-            { id: 'survivor', name: 'Survivor', desc: 'Survive a full day cycle.' }
-        ];
+        const unlocked = this.gameState.unlockedAchievements || new Set();
 
-        MEDAL_DEFS.forEach(m => {
-            const has = medals.has(m.id);
+        ACHIEVEMENTS.forEach(m => {
+            const has = unlocked.has(m.id);
             const item = document.createElement('div');
             item.className = `ni-log-item ${has ? '' : 'locked'}`;
-            item.title = has ? m.desc : 'Locked Achievement';
+            item.title = has ? m.description : 'Locked Achievement';
 
             if (has) {
                 const icon = document.createElement('div');
                 icon.className = 'item-icon medal-icon';
-                const medalPath = iconService.getGeneratedIconPath('medal');
-                icon.style.backgroundImage = `url('${medalPath}')`;
-                icon.style.backgroundSize = 'contain';
-                icon.style.width = '100%';
-                icon.style.height = '100%';
+                icon.textContent = m.icon || '🏆';
+                icon.style.display = 'flex';
+                icon.style.alignItems = 'center';
+                icon.style.justifyContent = 'center';
+                icon.style.fontSize = '1.2rem';
                 item.appendChild(icon);
             }
             list.appendChild(item);

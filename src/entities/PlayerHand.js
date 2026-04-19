@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { TOOLS } from '../data/tools.js';
+import { FOOD_VALUES } from '../engine/SurvivalSystem.js';
 import { normalizeBlockVariantId } from '../data/blockIds.js';
 
 const itemTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/item/*.png', { eager: true, query: '?url' });
@@ -313,18 +314,25 @@ export class PlayerHand {
             this.swingType = 'SHAKE';
         }
         const isDeco = blockConfig?.deco;
+        const isFood = Boolean(FOOD_VALUES[itemId] || itemId === 'milk_bucket');
+        const isItem = isTool || isDeco || isFood || itemId.includes('bucket');
+
         let textureKey = blockConfig?.textureId || normalizedId;
         if (blockConfig?.pairId && typeof textureKey === 'string' && textureKey.endsWith('_bottom')) {
             const pairTextureKey = registry.blocks.get(blockConfig.pairId)?.textureId;
             if (pairTextureKey) textureKey = pairTextureKey;
         }
 
-        if (isTool || isDeco) {
+        if (isItem) {
             let texName = textureKey;
             
             if (isTool) {
                 if (tool?.type && TOOL_MAP[tool.type]) texName = TOOL_MAP[tool.type];
                 else if (tool?.id && TOOL_MAP[tool.id]) texName = TOOL_MAP[tool.id];
+            } else if (isFood) {
+                if (TOOL_MAP[itemId]) texName = TOOL_MAP[itemId];
+            } else if (itemId.includes('bucket')) {
+                texName = itemId;
             }
 
             const url = ITEM_TEXTURES.get(texName) || ITEM_TEXTURES.get(normalizedId) || BLOCK_TEXTURES.get(texName);

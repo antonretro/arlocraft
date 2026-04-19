@@ -1,6 +1,6 @@
-﻿{
+{
     "hardness":  1,
-    "transparent":  true,
+    "transparent": false,
     "name":  "Bubble Coral Block",
     "xp":  2
 }

@@ -66,6 +66,9 @@ export class WorldMutationService {
             this.world.fluids?.scheduleSpread(gx, gy, gz, id, 0);
         }
 
+        this.world.gravity?.onBlockChanged(gx, gy, gz, 'add');
+        this.world.redstone?.onBlockChanged(gx, gy, gz, 'add');
+
         // --- Multiplayer Broadcast ---
         if (this.world.game?.multiplayer && !options.silent) {
             this.world.game.multiplayer.broadcastBlockUpdate(gx, gy, gz, id, 'add');
@@ -102,10 +105,16 @@ export class WorldMutationService {
 
         this.world.chunkManager.updateNeighborsDirty(x, y, z);
         
+        // Spawn breaking particles
+        this.world.game?.particles?.spawnBurst(new THREE.Vector3(x, y, z), 'SMOKE', 6, 0.1);
+
         if (id === 'virus' || id === 'anton') {
             const radius = this.world.config.virus?.influenceRadiusBlocks ?? 3;
             this.world.chunkManager.markChunksWithinBlockRadiusDirty(x, y, z, radius, true);
         }
+
+        this.world.gravity?.onBlockChanged(x, y, z, 'remove');
+        this.world.redstone?.onBlockChanged(x, y, z, 'remove');
 
         // --- Multiplayer Broadcast ---
         if (this.world.game?.multiplayer && !options.silent) {

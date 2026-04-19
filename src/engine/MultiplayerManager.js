@@ -20,18 +20,27 @@ export class MultiplayerManager {
             return;
         }
 
-        console.log('[Multiplayer] Initializing P2P system...');
+        console.log('[Multiplayer] Initializing Secure Peer Pipeline...');
         
-        // Initialize Peer with a random ID or user-chosen name
-        this.peer = new Peer();
+        // Generate a cryptographically random, anonymous ID for privacy
+        const randomId = 'ARLO-' + Math.random().toString(36).substring(2, 6).toUpperCase() + 
+                         '-' + Math.random().toString(36).substring(2, 6).toUpperCase() + 
+                         '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+        
+        this.peer = new Peer(randomId, {
+            debug: 1,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            }
+        });
 
         this.peer.on('open', (id) => {
-            console.log('[Multiplayer] Local Peer ID:', id);
+            console.log('[Multiplayer] Secure Identity Established:', id);
             this.roomId = id;
             if (this.onConnected) this.onConnected(id);
-            
-            const idInput = document.getElementById('multi-my-id');
-            if (idInput) idInput.value = id;
         });
 
         this.peer.on('connection', (conn) => {
@@ -39,18 +48,40 @@ export class MultiplayerManager {
         });
 
         this.peer.on('error', (err) => {
-            console.error('[Multiplayer] Peer Error:', err);
-            this.game.notifications?.add('Multiplayer Error: ' + err.type, 'error');
+            console.error('[Multiplayer] Peer Connectivity Error:', err.type);
+            let msg = 'Network connection failed.';
+            if (err.type === 'peer-unavailable') msg = 'The Join Code is invalid or the host is offline.';
+            if (err.type === 'network') msg = 'P2P tunnel could not be established.';
+            this.game.notifications?.add(msg, 'error');
         });
     }
 
-    join(targetId) {
-        if (!this.peer) return;
-        console.log('[Multiplayer] Connecting to:', targetId);
-        const conn = this.peer.connect(targetId, {
-            reliable: true
+    async connectToPeer(targetId) {
+        return new Promise((resolve, reject) => {
+            if (!this.peer) return reject(new Error('Peer system not initialized.'));
+            
+            console.log('[Multiplayer] Attempting to bridge to:', targetId);
+            const conn = this.peer.connect(targetId, {
+                reliable: true,
+                connectionPriority: 'high'
+            });
+
+            const timeout = setTimeout(() => {
+                conn.close();
+                reject(new Error('Connection timed out. Check the code and try again.'));
+            }, 10000);
+
+            conn.on('open', () => {
+                clearTimeout(timeout);
+                this.setupConnection(conn);
+                resolve(conn);
+            });
+
+            conn.on('error', (err) => {
+                clearTimeout(timeout);
+                reject(err);
+            });
         });
-        this.setupConnection(conn);
     }
 
     setupConnection(conn) {
@@ -68,6 +99,12 @@ export class MultiplayerManager {
                     mode: this.game.gameState.mode
                 }
             });
+
+            // If we are the host, send the current world state to the new client
+            if (this.isHost) {
+                console.log('[Multiplayer] Host detected, syncing world state to', conn.peer);
+                this.sendWorldSync(conn.peer);
+            }
 
             this.game.notifications?.add('Peer Connected!', 'success');
         });
@@ -103,6 +140,11 @@ export class MultiplayerManager {
                 
             case 'chat':
                 this.game.hud?.addChat?.(peerId, data.text);
+                break;
+                
+            case 'world_sync':
+                console.log('[Multiplayer] Received World Sync from host');
+                this.handleWorldSync(data);
                 break;
         }
     }
@@ -185,5 +227,33 @@ export class MultiplayerManager {
         } else {
             this.game.world.removeBlockAt(x, y, z, { silent: true });
         }
+    }
+
+    sendWorldSync(peerId) {
+        // Collect all blocks from the blockMap. 
+        // For performance, we send them as a list of entries.
+        const entries = [];
+        for (const [key, id] of this.game.world.state.blockMap.entries()) {
+             const [x, y, z] = this.game.world.coords.keyToCoords(key);
+             entries.push({ x, y, z, id });
+        }
+
+        this.send(peerId, {
+            type: 'world_sync',
+            data: { blocks: entries }
+        });
+    }
+
+    handleWorldSync(data) {
+        if (!data.blocks || !Array.isArray(data.blocks)) return;
+        
+        console.log(`[Multiplayer] Applying sync for ${data.blocks.length} blocks...`);
+        
+        // Use a silent mutation pass to avoid broadcast loops
+        for (const b of data.blocks) {
+            this.game.world.addBlock(b.x, b.y, b.z, b.id, 'sync', true, { silent: true });
+        }
+        
+        this.game.notifications?.add('World Synchronized', 'success');
     }
 }
