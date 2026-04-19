@@ -109,8 +109,7 @@ export class Game {
         this.bindEvents();
         this.setupUI();
         this.setupSkinListeners();
-        this.setupDragAndDrop();
-        
+
         this.init().catch(e => {
             console.error('[AntonCraft] Init Failure:', e);
         });
@@ -418,7 +417,10 @@ export class Game {
     }
 
     setMenuMode(mode, playSound = true) {
+        if (this._settingMode) return;
+        this._settingMode = true;
         this.gameState.setMode(mode);
+        this._settingMode = false;
         this.selectedStartMode = mode;
         this.settings.preferredMode = mode;
         this.saveSettings();
