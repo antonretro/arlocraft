@@ -184,7 +184,7 @@ export class TouchControls {
                 const dy = t.clientY - this._lookLastY;
                 this._lookLastX = t.clientX;
                 this._lookLastY = t.clientY;
-                const sens = (this.game.settings?.sensitivity ?? 0.00145) * 420;
+                const sens = (this.game.settings?.sensitivity ?? 0.00145) * 160;
                 const inv  = this.game.settings?.invertY ? -1 : 1;
                 this.game.adjustLook(-dx * sens, -dy * sens * inv);
             }

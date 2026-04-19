@@ -29,7 +29,7 @@ export class Physics {
         this.buoyancy = 1.2;
         this.waterExitBoost = 7.6;
         this.waterSurfaceExitWindow = 0.95;
-        this.waterExitStepHeight = 1.15;
+        this.waterExitStepHeight = 2.0;
         this.feetOffset = 0.3;
         this.maxStepHeight = 0.62;
         this.playerRadius = 0.32;
@@ -75,7 +75,7 @@ export class Physics {
     resetPlayer(x = 0, y = 160, z = 0) {
         if (!this.isReady) return;
         const spawn = this.world.getSafeSpawnPoint(x, z);
-        const startY = Number.isFinite(y) && y > spawn ? y : spawn;
+        const startY = Number.isFinite(y) && y > spawn.y ? y : spawn.y;
         const safe = this.resolveSafeSpawn(spawn.x, startY, spawn.z, 24);
         this.position.set(safe.x, safe.y, safe.z);
         this.tryResolveEmbeddedPosition(16); // Increased range for safety

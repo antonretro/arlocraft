@@ -336,8 +336,9 @@ export class Game {
 
         const spawn = this.world.getSafeSpawnPoint(0, 0, 40);
         if (this.physics.isReady) {
-            this.physics.playerBody.setTranslation({ x: spawn.x, y: spawn.y, z: spawn.z }, true);
-            this.physics.playerBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            this.physics.position.set(spawn.x, spawn.y, spawn.z);
+            this.physics.velocity.set(0, 0, 0);
+            this.physics.lastSafePosition.copy(this.physics.position);
         }
 
         this.hasStarted = true;

@@ -131,7 +131,8 @@ export class Input {
             const locked = Boolean(canvas && document.pointerLockElement === canvas);
             this.isLocked = locked;
             this.game.onPointerLockChange(locked);
-            if (!locked) {
+            // On touch devices pointer lock is never acquired — don't wipe touch button state
+            if (!locked && !this.game.touchControls) {
                 this.keys = Object.create(null);
                 this.mouseButtons.left = false;
                 this.mouseButtons.right = false;

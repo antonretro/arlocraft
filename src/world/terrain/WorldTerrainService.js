@@ -175,13 +175,17 @@ export class WorldTerrainService {
             for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
                 const tx = x + Math.cos(angle) * r;
                 const tz = z + Math.sin(angle) * r;
-                const height = this.getTerrainHeight(tx, tz);
+                // Use column height (respects spawn-zone flattening) instead of raw terrain
+                const height = this.getColumnHeight(tx, tz);
                 if (height > this.world.seaLevel + 1) {
-                    return { x: tx, y: height + 2, z: tz };
+                    // Scan for actual top block (accounts for trees on the surface)
+                    const topBlock = this.world.getTopBlockAt?.(tx, tz);
+                    const topY = topBlock ? topBlock.y + 1 : height + 1;
+                    return { x: tx, y: topY + 0.5, z: tz };
                 }
             }
         }
-        return { x: x, y: 70, z: z };
+        return { x: x, y: this.getColumnHeight(x, z) + 2, z: z };
     }
 
     hash2D(x, z) {
