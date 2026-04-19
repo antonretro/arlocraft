@@ -27,6 +27,7 @@ import { SaveSystem } from './SaveSystem.js';
 import { WorldSlotManager } from './WorldSlotManager.js';
 import { UpdateChecker } from './UpdateChecker.js';
 import { GameUI } from './GameUI.js';
+import { SkinSystem } from './SkinSystem.js';
 
 const LOCAL_APP_VERSION = 'v1.0';
 const GITHUB_REPO_OWNER = 'antonretro';
@@ -41,6 +42,7 @@ export class Game {
 
         this.saveSystem = new SaveSystem(this);
         this.worldSlots = new WorldSlotManager(this.saveSystem);
+        this.skinSystem = new SkinSystem();
         this.ui = new GameUI(this);
         this.updateChecker = new UpdateChecker('antonretro', 'antoncraft');
 
