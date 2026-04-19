@@ -11,6 +11,18 @@ export class SkinLoader {
         this.defaultAlex = '/assets/alex.png';
     }
 
+    async loadSkinFromUrl(url) {
+        return new Promise((resolve, reject) => {
+            this.loader.load(url, (texture) => {
+                texture.magFilter = THREE.NearestFilter;
+                texture.minFilter = THREE.NearestFilter;
+                const img = texture.image;
+                const materials = this.createMaterials(img);
+                resolve({ texture, materials });
+            }, undefined, reject);
+        });
+    }
+
     async loadSkin(username) {
         // Minotar accepts usernames directly (no UUID lookup needed) and has CORS enabled
         const url = username === 'Steve' || username === 'Alex' || !username

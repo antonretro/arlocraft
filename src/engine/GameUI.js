@@ -672,7 +672,8 @@ export class GameUI {
         const div = document.createElement('div');
         div.className = `ni-skin-item ${isActive ? 'active' : ''}`;
         if (skin.url) {
-            div.innerHTML = `<img src="${skin.url}" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated;">`;
+            // Show face region (8,8)–(16,16) of 64×64 skin sheet at 8× zoom
+            div.innerHTML = `<div style="width:64px;height:64px;background-image:url('${skin.url}');background-size:512px 512px;background-position:-64px -64px;image-rendering:pixelated;flex-shrink:0;"></div>`;
         } else {
             const c = skin.config || {};
             div.innerHTML = `
@@ -689,6 +690,12 @@ export class GameUI {
             this.game.skinSystem.applySkin(skin.id);
             this.renderSkinLibrary();
             this.get('selected-skin-name').textContent = skin.name;
+            // Apply to actual player model
+            if (skin.url) {
+                this.game.skinLoader.loadSkinFromUrl(skin.url).then(({ materials }) => {
+                    this.game._applyLoadedSkin(materials, skin.url);
+                }).catch(e => console.warn('[Skins] Failed to load skin:', e));
+            }
         });
         return div;
     }

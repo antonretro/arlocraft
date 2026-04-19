@@ -137,23 +137,9 @@ canvas { display: block; }
     border: none;
 }
 
-#screen-loading, #screen-booting {
-    background-image: url('/assets/stone.png');
-}
-
-#screen-world-select, #screen-world-create {
-    background-image: url('/assets/cobblestone.png');
-}
-
-#screen-skins {
-    background-image: url('/assets/dirt.png');
-}
-
-#settings-panel {
-    background-image: url('/assets/sand.png');
-}
-
-#pause-overlay {
+#screen-loading, #screen-booting,
+#screen-world-select, #screen-world-create,
+#screen-skins, #settings-panel, #pause-overlay {
     background-image: url('/assets/dirt.png');
 }
 

@@ -1295,26 +1295,11 @@ export class Game {
         try {
             if (!this.skinLoader) throw new Error('skinLoader not initialized');
             const { materials } = await this.skinLoader.loadSkin(username);
-            if (this.playerParts) {
-                this.playerParts.head.material = materials.head;
-                materials.head.forEach(m => { m.needsUpdate = true; });
-                this.playerParts.torso.material = materials.torso;
-                materials.torso.forEach(m => { m.needsUpdate = true; });
-                this.playerParts.armL.material = materials.armL;
-                materials.armL.forEach(m => { m.needsUpdate = true; });
-                this.playerParts.armR.material = materials.armR;
-                materials.armR.forEach(m => { m.needsUpdate = true; });
-                this.playerParts.legL.material = materials.legL;
-                materials.legL.forEach(m => { m.needsUpdate = true; });
-                this.playerParts.legR.material = materials.legR;
-                materials.legR.forEach(m => { m.needsUpdate = true; });
-                if (this.playerParts.face) this.playerParts.face.visible = false;
-            }
-            if (this.hand) this.hand.updateArmSkin(materials.armR);
+            this._applyLoadedSkin(materials);
+            // Update HUD avatar via crafatar for online username or canvas data for local skins
             const h = document.getElementById('anton-face-image');
             if (h) {
-                // If we have local materials (offline or custom), use the head front face
-                if (materials.head && materials.head[4]?.map?.image) {
+                if (materials.head?.[4]?.map?.image) {
                     h.src = materials.head[4].map.image.toDataURL();
                 } else if (username) {
                     h.src = `https://crafatar.com/avatars/${username}?size=64&overlay`;
@@ -1325,6 +1310,24 @@ export class Game {
             this.settings.skinUsername = username;
             this.saveSettings();
         } catch (e) { console.error('[AntonCraft] Skin Error:', e); }
+    }
+
+    _applyLoadedSkin(materials, urlForHud = null) {
+        if (this.playerParts) {
+            const parts = ['head', 'torso', 'armL', 'armR', 'legL', 'legR'];
+            for (const part of parts) {
+                if (materials[part]) {
+                    this.playerParts[part].material = materials[part];
+                    materials[part].forEach(m => { m.needsUpdate = true; });
+                }
+            }
+            if (this.playerParts.face) this.playerParts.face.visible = false;
+        }
+        if (this.hand) this.hand.updateArmSkin(materials.armR);
+        const h = document.getElementById('anton-face-image');
+        if (h && materials.head?.[4]?.map?.image) {
+            h.src = materials.head[4].map.image.toDataURL();
+        }
     }
 
     animatePlayer(delta) {
