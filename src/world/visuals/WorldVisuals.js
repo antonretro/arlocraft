@@ -75,7 +75,9 @@ export class WorldVisuals {
                 geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
                 geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
                 geo.setIndex(indices);
-                geo.addGroup(0, indices.length, 0); // single group — one material covers all faces
+                // Each face group maps to the correct material slot in the array material:
+                // 0=right, 1=left, 2=top, 3=bottom, 4=front, 5=back
+                for (let f = 0; f < 6; f++) geo.addGroup(f * 6, 6, f);
                 return withWhiteVertexColors(geo);
             })(),
             water: (() => {
