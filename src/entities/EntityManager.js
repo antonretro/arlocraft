@@ -68,6 +68,66 @@ export class EntityManager {
         this.textureLoader = new THREE.TextureLoader();
         this.loadedTextureCache = new Map();
         this.billboardTextureCache = new Map();
+        this.remotePlayers = new Map(); // PeerID -> {group, parts}
+    }
+
+    // --- Remote Players (Multiplayer) ---
+
+    spawnRemotePlayer(peerId, skinUsername) {
+        if (this.remotePlayers.has(peerId)) return;
+
+        const group = new THREE.Group();
+        const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x7289a2 });
+        const darkMaterial = new THREE.MeshLambertMaterial({ color: 0x425566 });
+
+        // Simple humanoid body parts (Box Man)
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.9, 0.38), bodyMaterial);
+        torso.position.set(0, 0.95, 0);
+        group.add(torso);
+
+        const legL = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.75, 0.28), darkMaterial);
+        legL.position.set(-0.18, 0.36, 0);
+        group.add(legL);
+
+        const legR = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.75, 0.28), darkMaterial);
+        legR.position.set(0.18, 0.36, 0);
+        group.add(legR);
+
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 1.72, 0);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.62), bodyMaterial);
+        headGroup.add(head);
+        group.add(headGroup);
+
+        this.game.renderer.scene.add(group);
+        this.remotePlayers.set(peerId, { group, headGroup });
+
+        // Load skin async
+        if (this.game.skinLoader && skinUsername) {
+            this.game.skinLoader.loadSkin(skinUsername).then(({ materials }) => {
+                if (torso) torso.material = materials.torso;
+                if (head) head.material = materials.head;
+            }).catch(e => console.warn('[Multiplayer] Failed to load skin for', peerId, e));
+        }
+
+        console.log('[Multiplayer] Spawned remote player:', peerId);
+    }
+
+    updateRemotePlayer(peerId, pos, rot) {
+        const netPlayer = this.remotePlayers.get(peerId);
+        if (!netPlayer) return;
+
+        netPlayer.group.position.set(pos.x, pos.y - 0.3, pos.z);
+        netPlayer.group.rotation.y = rot.yaw + Math.PI;
+        netPlayer.headGroup.rotation.x = rot.pitch;
+    }
+
+    removeRemotePlayer(peerId) {
+        const netPlayer = this.remotePlayers.get(peerId);
+        if (netPlayer) {
+            this.game.renderer.scene.remove(netPlayer.group);
+            this.remotePlayers.delete(peerId);
+        }
     }
 
     spawn(typeId, x, y, z) {

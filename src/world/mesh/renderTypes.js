@@ -32,10 +32,13 @@ export function resolveChunkGeometry(world, id, blockData) {
     if (blockData?.renderType === 'plant' || blockData?.renderType === 'paired_plant' || blockData?.deco) {
         return geo.deco ?? geo.solid;
     }
-    if (id.includes('_stairs')) return geo.stair ?? geo.solid;
-    if (blockData?.renderType === 'slab' || id.includes('_slab') || blockData?.slab) {
-        return geo.slab ?? geo.solid;
-    }
+    if (id.includes(':top')) return geo.face_top ?? geo.solid;
+    if (id.includes(':bottom')) return geo.face_bottom ?? geo.solid;
+    if (id.includes(':nx')) return geo.face_nx ?? geo.solid;
+    if (id.includes(':px')) return geo.face_px ?? geo.solid;
+    if (id.includes(':nz')) return geo.face_nz ?? geo.solid;
+    if (id.includes(':pz')) return geo.face_pz ?? geo.solid;
+
     return geo.solid ?? null;
 }
 

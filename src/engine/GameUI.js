@@ -228,6 +228,14 @@ export class GameUI {
         const btnDeleteWorld = this.get('btn-delete-world');
         const btnWorldsBack = this.get('btn-worlds-back');
         const btnCreateBack = this.get('btn-create-back');
+        const btnToMultiplayer = this.get('btn-to-multiplayer');
+
+        if (btnToMultiplayer) {
+            btnToMultiplayer.addEventListener('click', () => {
+                this.setMenuScreen('multiplayer');
+                this.game.multiplayer?.init(); // Start PeerJS connection if not already started
+            });
+        }
 
         if (btnStart) {
             btnStart.addEventListener('click', () => {
@@ -637,6 +645,7 @@ export class GameUI {
         this.bindPauseMenu();
         this.bindSettingsMenu();
         this.bindSkinMenu();
+        this.bindMultiplayerMenu();
         this.bindCanvasControls();
         
         // Setup mouse tracking for avatar

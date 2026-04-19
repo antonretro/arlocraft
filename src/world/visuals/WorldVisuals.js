@@ -150,6 +150,47 @@ export class WorldVisuals {
                 geo.translate(0, 0.5, 0);
                 return withWhiteVertexColors(geo);
             })(),
+            face_top: (() => {
+                const geo = new THREE.PlaneGeometry(1, 1);
+                geo.rotateX(-Math.PI / 2);
+                geo.translate(0, 0.5, 0);
+                geo.addGroup(0, 6, 2);
+                return withWhiteVertexColors(geo);
+            })(),
+            face_bottom: (() => {
+                const geo = new THREE.PlaneGeometry(1, 1);
+                geo.rotateX(Math.PI / 2);
+                geo.translate(0, -0.5, 0);
+                geo.addGroup(0, 6, 3);
+                return withWhiteVertexColors(geo);
+            })(),
+            face_px: (() => {
+                const geo = new THREE.PlaneGeometry(1, 1);
+                geo.rotateY(Math.PI / 2);
+                geo.translate(0.5, 0, 0);
+                geo.addGroup(0, 6, 0);
+                return withWhiteVertexColors(geo);
+            })(),
+            face_nx: (() => {
+                const geo = new THREE.PlaneGeometry(1, 1);
+                geo.rotateY(-Math.PI / 2);
+                geo.translate(-0.5, 0, 0);
+                geo.addGroup(0, 6, 1);
+                return withWhiteVertexColors(geo);
+            })(),
+            face_pz: (() => {
+                const geo = new THREE.PlaneGeometry(1, 1);
+                geo.translate(0, 0, 0.5);
+                geo.addGroup(0, 6, 4);
+                return withWhiteVertexColors(geo);
+            })(),
+            face_nz: (() => {
+                const geo = new THREE.PlaneGeometry(1, 1);
+                geo.rotateY(Math.PI);
+                geo.translate(0, 0, -0.5);
+                geo.addGroup(0, 6, 5);
+                return withWhiteVertexColors(geo);
+            })(),
             stair: (() => {
                 const base = new THREE.BoxGeometry(1, 0.5, 1);
                 base.translate(0, -0.25, 0);
@@ -286,10 +327,13 @@ export class WorldVisuals {
         this.placementOutline.visible = visible;
     }
 
-    updateMiningCracks(x, y, z, visible, material) {
+    updateMiningCracks(x, y, z, visible, material, geometry = null) {
         this.miningCracks.position.set(x, y, z);
         this.miningCracks.visible = visible;
         if (material) this.miningCracks.material = material;
+        if (geometry && this.miningCracks.geometry !== geometry) {
+            this.miningCracks.geometry = geometry;
+        }
     }
 
     update(_time) {}

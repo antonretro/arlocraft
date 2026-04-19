@@ -66,6 +66,11 @@ export class WorldMutationService {
             this.world.fluids?.scheduleSpread(gx, gy, gz, id, 0);
         }
 
+        // --- Multiplayer Broadcast ---
+        if (this.world.game?.multiplayer && !options.silent) {
+            this.world.game.multiplayer.broadcastBlockUpdate(gx, gy, gz, id, 'add');
+        }
+
         return id;
     }
 
@@ -101,6 +106,12 @@ export class WorldMutationService {
             const radius = this.world.config.virus?.influenceRadiusBlocks ?? 3;
             this.world.chunkManager.markChunksWithinBlockRadiusDirty(x, y, z, radius, true);
         }
+
+        // --- Multiplayer Broadcast ---
+        if (this.world.game?.multiplayer && !options.silent) {
+            this.world.game.multiplayer.broadcastBlockUpdate(x, y, z, null, 'remove');
+        }
+
         return true;
     }
 

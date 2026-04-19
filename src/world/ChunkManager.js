@@ -145,16 +145,29 @@ export class ChunkManager {
             this.pendingChunkSet.delete(key);
         }
 
-        // Hostile mob spawning on chunk load
-        if (
-            this.world.corruptionEnabled
-            && this.world.hash2D(cx + 411, cz - 108) > 0.93
-            && this.world.game?.entities?.entities?.length < this.world.game?.entities?.maxEntities
-        ) {
-            const wx = (cx * this.world.chunkSize) + Math.floor(this.world.chunkSize / 2);
-            const wz = (cz * this.world.chunkSize) + Math.floor(this.world.chunkSize / 2);
-            const wy = this.world.getTerrainHeight(wx, wz) + 2;
-            this.world.game.entities.spawn('virus_grunt', wx + 0.5, wy, wz + 0.5);
+        // --- Ambient Mob Spawning on Chunk Load ---
+        const spawnRoll = this.world.hash2D(cx + 811, cz - 293);
+        const canSpawn = spawnRoll > 0.94 && this.world.game?.entities?.entities?.length < this.world.game?.entities?.maxEntities;
+        
+        if (canSpawn) {
+            // Find a random surface point in the chunk
+            const rx = Math.floor(this.world.hash2D(cx, cz) * this.world.chunkSize);
+            const rz = Math.floor(this.world.hash2D(cz, cx) * this.world.chunkSize);
+            const wx = (cx * this.world.chunkSize) + rx;
+            const wz = (cz * this.world.chunkSize) + rz;
+            const wy = this.world.getTerrainHeight(wx, wz) + 1.2;
+            
+            const isNight = this.world.dayNightSystem?.isNight?.() ?? false;
+            const inCorruptedArea = this.world.isCorruptedAt?.(wx, wz) || this.world.corruptionEnabled;
+            
+            // Spawn hostile in dark/night/corrupted areas, otherwise passive friendlies
+            if (isNight || inCorruptedArea) {
+                this.world.game.entities.spawn('virus_grunt', wx + 0.5, wy, wz + 0.5);
+            } else {
+                const passives = ['cow', 'sheep', 'pig'];
+                const picker = Math.floor(this.world.hash2D(wx + 77, wz - 31) * passives.length);
+                this.world.game.entities.spawn(passives[picker], wx + 0.5, wy, wz + 0.5);
+            }
         }
     }
 

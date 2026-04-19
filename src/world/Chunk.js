@@ -29,9 +29,9 @@ const CIVIC_STRUCTURE_POOL = [
 
 const BIOME_GROUND_LIFE = {
     plains: ['short_grass', 'short_grass', 'short_grass', 'short_grass', 'short_grass', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'tall_grass_bottom', 'dandelion', 'poppy', 'red_tulip'],
-    forest: ['short_grass', 'short_grass', 'short_grass', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'fern', 'fern', 'fern', 'mushroom_brown', 'mushroom_red', 'blueberry', 'strawberry', 'poppy'],
-    meadow: ['short_grass', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'tall_grass_bottom', 'tall_grass_bottom', 'dandelion', 'poppy', 'orange_tulip', 'red_tulip', 'pink_tulip', 'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium', 'blueberry', 'lilac', 'peony', 'rose_bush'],
-    swamp: ['fern', 'fern', 'fern', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'mushroom_brown', 'mushroom_red', 'blueberry'],
+    forest: ['short_grass', 'short_grass', 'short_grass', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'fern', 'fern', 'fern', 'mushroom_brown', 'mushroom_red', 'blueberry_stage3', 'strawberry_stage3', 'poppy'],
+    meadow: ['short_grass', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'tall_grass_bottom', 'tall_grass_bottom', 'dandelion', 'poppy', 'orange_tulip', 'red_tulip', 'pink_tulip', 'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium', 'blueberry_stage3', 'lilac', 'peony', 'rose_bush'],
+    swamp: ['fern', 'fern', 'fern', 'short_grass', 'short_grass', 'tall_grass_bottom', 'tall_grass_bottom', 'mushroom_brown', 'mushroom_red', 'blueberry_stage3'],
     desert: ['tomato'],
     badlands: ['carrot'],
     canyon: ['carrot'],
@@ -762,9 +762,20 @@ export class Chunk {
             const hy = this.world.getColumnHeight(hx, hz) + 1;
             
             const struct = structures[i % structures.length];
+            
+            // --- Clearance Pass: Remove terrain/vegetation in the structure footprint + 1 margin ---
+            const sw = struct.width || 5, sh = (struct.height || 4) + 1, sd = struct.depth || 5;
+            for (let dx = -1; dx < sw + 1; dx++) {
+                for (let dz = -1; dz < sd + 1; dz++) {
+                    for (let dy = 0; dy < sh; dy++) {
+                        this.addGeneratedBlock(hx + dx, hy + dy, hz + dz, 'air');
+                    }
+                }
+            }
+
             const blocks = struct.blueprints(hx, hy, hz);
             
-            // Foundation
+            // Foundation: Fill air gaps below the house with dirt if it's placed on uneven ground
             const lowestYAtXZ = new Map();
             for (const b of blocks) {
                 const xzKey = `${b.x},${b.z}`;

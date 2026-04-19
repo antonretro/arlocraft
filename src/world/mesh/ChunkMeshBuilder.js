@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { normalizeBlockVariantId } from '../../data/blockIds.js';
 import { RENDER_LAYERS, materialIsTransparent, materialUsesBlendTransparency } from '../../rendering/RenderConfig.js';
 import { DECO_LOD_DIST_SQ, isDecoType, resolveChunkGeometry, resolveLODGeometry, shouldSkipChunkBlockInstance, shouldSkipStandaloneTypeRender } from './renderTypes.js';
 
@@ -142,10 +143,34 @@ function collectBlocksByType(chunk) {
             continue;
         }
 
-        // Feature: Split Grass Block to allow independent tinting of sides vs top
-        if (id === 'grass_block') {
-            add('grass_block_top', key);
-            add('grass_block_sides', key);
+        const blockData = chunk.world.getBlockData(id);
+        const renderType = blockData?.renderType ?? 'cube';
+
+        // --- Neighborhood-Aware Face Culling for Box/Cube geometries ---
+        if (renderType === 'cube' || id === 'glass' || id.includes('glass')) {
+            const [ax, ay, az] = chunk.world.keyToCoords(key);
+            
+            const isOpaque = (neighborId) => {
+                if (!neighborId || neighborId === 'air') return false;
+                // Cull against self (removes walls between glass blocks)
+                if (neighborId === id) return true;
+                if (id.includes('glass') && neighborId.includes('glass')) return true;
+
+                const nData = chunk.world.getBlockData(neighborId);
+                // Opaque blocks cull everything behind them.
+                return nData && !nData.transparent && !nData.deco;
+            };
+
+            // Top
+            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay + 1, az)))) add(id + ':top', key);
+            // Bottom
+            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay - 1, az)))) add(id + ':bottom', key);
+            // Sides
+            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax + 1, ay, az)))) add(id + ':px', key);
+            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax - 1, ay, az)))) add(id + ':nx', key);
+            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay, az + 1)))) add(id + ':pz', key);
+            if (!isOpaque(chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay, az - 1)))) add(id + ':nz', key);
+            
             continue;
         }
 
@@ -259,7 +284,7 @@ function _rebuildChunkInstancedMeshesInner(chunk) {
                 if (id.includes(':x')) tempEuler.z = Math.PI / 2;
                 else if (id.includes(':z')) tempEuler.x = Math.PI / 2;
 
-                if (id.includes('_stairs')) {
+                if (id.includes('_stairs') || id.includes('glazed_terracotta')) {
                     if (id.endsWith('_n')) tempEuler.y = Math.PI;
                     else if (id.endsWith('_e')) tempEuler.y = Math.PI / 2;
                     else if (id.endsWith('_w')) tempEuler.y = -Math.PI / 2;
@@ -303,7 +328,7 @@ function _rebuildChunkInstancedMeshesInner(chunk) {
 
     for (const [id, keys] of byType.entries()) {
         try {
-            const baseId = id.startsWith('water') ? 'water' : id.split(':')[0];
+            const baseId = id.startsWith('water') ? 'water' : normalizeBlockVariantId(id);
             const blockData = chunk.world.getBlockData(baseId);
             if (shouldSkipStandaloneTypeRender(blockData)) continue;
 

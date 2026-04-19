@@ -559,11 +559,9 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             return material;
         }
 
-        const stairMatch = id.match(/(.*_stairs)(_[nswe])$/);
-        const slabMatch = id.match(/(.*_slab)(_[nswe])$/);
+        const normalizedId = normalizeBlockVariantId(id);
+        let targetId = normalizedId || id;
         let strippedId = normalizedId || id;
-        if (stairMatch) strippedId = stairMatch[1];
-        else if (slabMatch) strippedId = slabMatch[1];
 
         if (strippedId.endsWith('_stairs')) {
             targetId = strippedId.replace('_stairs', '_planks');

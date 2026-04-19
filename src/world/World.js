@@ -339,8 +339,15 @@ export class World {
         if (this.visuals.miningCracks) {
             const stage = Math.floor(ratio * 9);
             const mat = this.registry.getBreakingMaterial(stage);
-            this.visuals.updateMiningCracks(hit.cell.x, hit.cell.y, hit.cell.z, true, mat);
-            this.visuals.miningCracks.scale.setScalar(1.01);
+            const blockData = this.getBlockData(blockId);
+            const crackGeo = this.visuals.sharedChunkGeometries[blockData?.renderType === 'plant' || blockData?.deco ? 'deco' : 'solid'] 
+                            || this.visuals.sharedChunkGeometries.solid;
+            
+            this.visuals.updateMiningCracks(hit.cell.x, hit.cell.y, hit.cell.z, true, mat, crackGeo);
+            
+            // Inflate slightly to prevent Z-fighting
+            const s = (blockData?.renderType === 'plant' || blockData?.deco) ? 1.02 : 1.01;
+            this.visuals.miningCracks.scale.setScalar(s);
         }
         window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio, id: blockId, done: false } }));
         if (this.state.miningState.progress < this.state.miningState.required) {
@@ -399,7 +406,7 @@ export class World {
             else finalId += ':y'; // Default vertical
         }
 
-        if (blockId.includes('_stairs')) {
+        if (blockId.includes('_stairs') || blockId.includes('glazed_terracotta')) {
             const yaw = ((camera.rotation.y % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
             const pi = Math.PI;
             if (yaw >= 7 * pi / 4 || yaw < pi / 4) finalId += '_s';

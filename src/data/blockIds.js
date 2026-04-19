@@ -5,8 +5,8 @@ export function normalizeBlockVariantId(id) {
     if (!raw) return '';
 
     const base = raw.split(':')[0];
-    const stairMatch = base.match(/^(.*_stairs)_[nswe]$/);
-    if (stairMatch) return stairMatch[1];
+    const dirMatch = base.match(/^(.*)_[nswe]$/);
+    if (dirMatch) return dirMatch[1];
 
     return base;
 }

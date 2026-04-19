@@ -108,6 +108,7 @@ export class Game {
         this.currentVersionId = 'v1.1';
         this.features = { ...FEATURES };
         this.notifications = new NotificationSystem();
+        this.multiplayer = new MultiplayerManager(this);
 
         this.profiler = { physicsMs: 0, worldMs: 0, uiMs: 0, renderMs: 0 };
         this.clock = new THREE.Timer();
@@ -767,6 +768,31 @@ export class Game {
             this._camDesired.z += shakeZ;
             this.camera.instance.position.lerp(this._camDesired, 0.4);
             this.camera.instance.lookAt(this._camHead);
+        }
+
+        // --- Multiplayer Sync ---
+        if (this.multiplayer && this.multiplayer.connections.size > 0) {
+            // Throttled position broadcast (e.g. every frame for now, or every 2-3 frames)
+            this.multiplayer.broadcastPosition(
+                this.physics.playerBody.translation(),
+                { yaw: this.viewYaw, pitch: this.viewPitch }
+            );
+        }
+
+        // --- Shadow Update ---
+        if (this.playerShadow) {
+            const floorY = this.world.getColumnHeight(pos.x, pos.z);
+            const dist = pos.y - floorY;
+            
+            if (dist > 15) {
+                this.playerShadow.visible = false;
+            } else {
+                this.playerShadow.visible = true;
+                this.playerShadow.position.set(pos.x, floorY + 0.05, pos.z);
+                this.playerShadow.material.opacity = Math.max(0, 0.35 - (dist * 0.04));
+                const s = Math.max(0.2, 1.0 - (dist * 0.05));
+                this.playerShadow.scale.set(s, s, s);
+            }
         }
     }
 
