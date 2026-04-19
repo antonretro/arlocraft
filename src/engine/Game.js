@@ -1014,14 +1014,14 @@ export class Game {
     updateSelection() {
         const hit = this.world.raycastBlocks?.(this.camera.instance, 6, false);
         if (hit) {
-            this.world.visuals.updateHover(hit.x, hit.y, hit.z, true);
+            this.world.visuals.updateHover(hit.cell.x, hit.cell.y, hit.cell.z, true);
             
             // Placement Ghost Logic
             const item = this.gameState.inventory[this.gameState.selectedSlot];
             if (item && item.kind === 'block') {
-                const px = hit.x + hit.normal.x;
-                const py = hit.y + hit.normal.y;
-                const pz = hit.z + hit.normal.z;
+                const px = hit.previous?.x ?? hit.x;
+                const py = hit.previous?.y ?? hit.y;
+                const pz = hit.previous?.z ?? hit.z;
                 this.world.visuals.updatePlacement(px, py, pz, true);
             } else {
                 this.world.visuals.updatePlacement(0, 0, 0, false);
