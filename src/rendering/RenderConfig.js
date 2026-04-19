@@ -4,8 +4,8 @@ export const CLOUD_SETTINGS = {
     widthMax: 34,
     depthMin: 7,
     depthMax: 18,
-    yMin: 78,
-    yMax: 105,
+    yMin: 200,
+    yMax: 240,
     spread: 1300,
     speedMin: 0.45,
     speedMax: 1.1
@@ -27,24 +27,24 @@ export const FOG_SETTINGS = {
 
 export const ATMOSPHERIC_COLORS = {
     DAY: {
-        top:    0x0d5fd6,  // Deep rich sky blue at zenith
-        bottom: 0x7ec8f0,  // Lighter blue at horizon
-        sun:    0xfffae8   // Warm pale yellow sunlight
+        top:    0x0256cc,  // More vivid, saturated zenith
+        bottom: 0x86cefb,  // Lighter, more airy horizon
+        sun:    0xfffbe8   // Bright warm sun
     },
     NIGHT: {
-        top:    0x020812,  // Near-black deep space
-        bottom: 0x08132a,  // Dark navy at horizon
-        sun:    0x2a3d66   // Cold blue moonlight
+        top:    0x01050c,  // Deep, near-black space
+        bottom: 0x071124,  // Moody dark navy
+        sun:    0x3a4d7c   // More luminous moonlight
     },
     DAWN: {
-        top:    0x1a3060,  // Cool dark blue upper sky
-        bottom: 0xff7733,  // Vivid amber-orange horizon
-        sun:    0xffddaa   // Warm golden dawn light
+        top:    0x142852,  // Saturated twilight zenith
+        bottom: 0xff6622,  // Harder orange transition
+        sun:    0xffcc88   // Warm peach light
     },
     DUSK: {
-        top:    0x12103a,  // Deep purple upper sky
-        bottom: 0xe84f1a,  // Fiery red-orange horizon
-        sun:    0xff6622   // Orange sunset light
+        top:    0x100832,  // Royal violet-purple upper
+        bottom: 0xff3a00,  // Deep fiery red horizon
+        sun:    0xff5511   // Intense red-orange light
     }
 };
 

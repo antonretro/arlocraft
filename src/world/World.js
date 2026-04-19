@@ -12,6 +12,8 @@ import { WorldVisuals } from './visuals/WorldVisuals.js';
 import { WorldMutationService } from './WorldMutationService.js';
 import { WorldInteractionService } from './WorldInteractionService.js';
 import { WorldPersistenceService } from './WorldPersistenceService.js';
+import { FluidSystem } from './FluidSystem.js';
+import { getBlockHandler } from '../engine/BlockHandlerRegistry.js';
 
 export class World {
     constructor(scene, game) {
@@ -28,6 +30,7 @@ export class World {
         this.mutations = new WorldMutationService(this);
         this.interaction = new WorldInteractionService(this);
         this.persistence = new WorldPersistenceService(this);
+        this.fluids = new FluidSystem(this);
 
         this.registry = new BlockRegistry();
         this.blockRegistry = this.registry;
@@ -71,6 +74,7 @@ export class World {
         
         // 1. Chunk Management
         this.chunkManager.update(playerPos, delta);
+        this.fluids.update(performance.now());
         
         // 2. Visuals & Animations
         this.visuals.update(time);
@@ -96,7 +100,7 @@ export class World {
     isReplaceableForPlacement(id) { return this.blocks.isReplaceableForPlacement(id); }
     
     getChunkCoord(v) { return this.coords.getChunkCoord(v); }
-    getChunkKey(cx, cz) { return this.coords.getChunkKey(cx, cz); }
+    getChunkKey(cx, cy, cz) { return this.coords.getChunkKey(cx, cy, cz); }
     getKey(x, y, z) { return this.coords.getKey(x, y, z); }
     keyToCoords(k) { return this.coords.keyToCoords(k); }
 
@@ -137,15 +141,14 @@ export class World {
             
             const cx = this.getChunkCoord(gx);
             const cz = this.getChunkCoord(gz);
-            const chunk = this.chunkManager.getChunk(cx, cz);
-            // If the chunk exists and is NOT destroyed, we trust its blockMap data.
-            // If it doesn't exist yet, we must fall back to noise height to prevent falling thru void.
-            const isChunkReady = chunk && !chunk.destroyed;
-            
             const terrainY = this.terrain.getColumnHeight(px, pz);
             
             // Search from player's feet downwards
             for (let gy = startY; gy > -128; gy--) {
+                const cy = this.getChunkCoord(gy);
+                const chunk = this.chunkManager.getChunk(cx, cy, cz);
+                const isChunkReady = chunk && !chunk.destroyed;
+                
                 const key = this.coords.getKey(gx, gy, gz);
                 const id = this.state.blockMap.get(key);
                 
@@ -175,15 +178,20 @@ export class World {
     }
 
     // Chunk Manager Proxies used by Physics
-    ensureCriticalChunks(cx, cz, r) { this.chunkManager.ensureCriticalChunks?.(cx, cz, r); }
-    processChunkLoadQueue(cx, cz, budget) { this.chunkManager.processChunkLoadQueue?.(cx, cz, budget); }
+    ensureCriticalChunks(cx, cy, cz, r) { this.chunkManager.ensureCriticalChunks?.(cx, cy, cz, r); }
+    processChunkLoadQueue(cx, cy, cz, budget) { this.chunkManager.processChunkLoadQueue?.(cx, cy, cz, budget); }
     flushPriorityChunkRebuilds(budget) { this.chunkManager.flushPriorityChunkRebuilds?.(budget); }
-    ensureChunksAround(cx, cz, r) { this.chunkManager.ensureChunksAround(cx, cz, r); }
+    ensureChunksAround(cx, cy, cz, r) { this.chunkManager.ensureChunksAround(cx, cy, cz, r); }
 
     // Terrain proxies
     getBiomeAt(x, z) { return this.terrain.getBiomeAt(x, z); }
     getTerrainHeight(x, z) { return this.terrain.getTerrainHeight(x, z); }
     getColumnHeight(x, z) { return this.terrain.getColumnHeight(x, z); }
+    getTopBlockIdAt(x, z) {
+        const fx = Math.floor(x), fz = Math.floor(z);
+        const y = this.terrain.getColumnHeight(fx, fz);
+        return this.getBlockAt(fx, y, fz);
+    }
     hash2D(x, z) { return this.terrain.hash2D(x, z); }
     hash3D(x, y, z) { return this.terrain.hash3D(x, y, z); }
     isPathAt(x, z) { return this.terrain.isPathAt(x, z); }
@@ -193,7 +201,7 @@ export class World {
     shouldForceSpawnZone(x, z) { return this.terrain.shouldForceSpawnZone(x, z); }
     shouldPlaceTree(x, z, h, b) { return this.terrain.shouldPlaceTree(x, z, h, b); }
     shouldPlaceVirus(x, z, h) { return this.terrain.shouldPlaceVirus(x, z, h); }
-    shouldPlaceArlo(x, z, h) { return this.terrain.shouldPlaceArlo(x, z, h); }
+    shouldPlaceAnton(x, z, h) { return this.terrain.shouldPlaceAnton(x, z, h); }
     shouldPlaceVillageChunk(cx, cz) { return this.terrain.shouldPlaceVillageChunk(cx, cz); }
     shouldPlaceStructureChunk(cx, cz) { return this.terrain.shouldPlaceStructureChunk(cx, cz); }
 
@@ -293,7 +301,7 @@ export class World {
         }
         this.state.changedBlocks.set(key, null);
         this.removeBlockByKey(key, { skipChangeTracking: true });
-        this.flushPriorityChunkRebuilds(20);
+        this.chunkManager.flushPriorityChunkRebuilds(20);
         this.spawnBreakParticles(x, y, z, id);
         this.spawnPickupEffect(x, y, z, dropId, this.game?.getPlayerPosition?.());
         window.dispatchEvent(new CustomEvent('block-mined', { detail: { id: dropId, x, y, z } }));
@@ -321,8 +329,8 @@ export class World {
         if (this.visuals.miningCracks) {
             this.visuals.miningCracks.visible = true;
             this.visuals.miningCracks.position.set(hit.cell.x, hit.cell.y, hit.cell.z);
-            const shrink = 1 - ratio * 0.15;
-            this.visuals.miningCracks.scale.setScalar(shrink);
+            // Fixed overlay scale — never shrinks the block during mining
+            this.visuals.miningCracks.scale.setScalar(1.01);
         }
         window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio, id: blockId, done: false } }));
         if (this.state.miningState.progress < this.state.miningState.required) return false;
@@ -333,8 +341,11 @@ export class World {
 
     placeBlock(camera, slotId) {
         const item = this.game?.gameState?.inventory?.[slotId];
-        if (!item?.id || item.kind === 'tool') return false;
-        const blockId = this.getBlockPickId(item.id);
+        if (!item?.id) return false;
+
+        const isBucket = item.id.endsWith('_bucket') && item.id !== 'bucket';
+        const blockId = isBucket ? item.id.replace('_bucket', '') : this.getBlockPickId(item.id);
+        
         if (!blockId) return false;
         const blockData = this.getBlockData(blockId);
         if (!blockData) return false;
@@ -368,7 +379,10 @@ export class World {
             else if (yaw < 5 * pi / 4) finalId += '_n';
             else finalId += '_w';
         }
-        const ownerKey = this.getChunkKey(this.getChunkCoord(px), this.getChunkCoord(pz));
+        const cx = this.getChunkCoord(px);
+        const cy = this.getChunkCoord(py);
+        const cz = this.getChunkCoord(pz);
+        const ownerKey = this.getChunkKey(cx, cy, cz);
         const pairId = blockData?.pairId;
         const pairOffsetY = Number(blockData?.pairOffsetY);
         if (pairId && Number.isFinite(pairOffsetY) && pairOffsetY !== 0) {
@@ -381,6 +395,14 @@ export class World {
         }
         this.state.changedBlocks.set(key, finalId);
         this.addBlock(px, py, pz, finalId, ownerKey, !!existingId);
+        
+        // If it was a bucket placement, return it to empty
+        if (isBucket) {
+            item.id = 'bucket';
+            window.dispatchEvent(new CustomEvent('inventory-changed'));
+        }
+
+        this.chunkManager.flushPriorityChunkRebuilds(20);
         window.dispatchEvent(new CustomEvent('block-placed', { detail: { id: finalId } }));
         return true;
     }
@@ -389,9 +411,75 @@ export class World {
         const hit = this.raycastBlocks(camera, 6, true);
         if (!hit) return false;
         const { id: blockId, cell } = hit;
+
+        const selectedItem = this.game?.gameState?.getSelectedItem();
+        const isAxe = selectedItem?.id?.includes('axe');
+
+        // Axe Stripping logic
+        if (isAxe) {
+            const STRIP_MAP = {
+                'oak_log': 'stripped_oak_log',
+                'spruce_log': 'stripped_spruce_log',
+                'birch_log': 'stripped_birch_log',
+                'jungle_log': 'stripped_jungle_log',
+                'acacia_log': 'stripped_acacia_log',
+                'dark_oak_log': 'stripped_dark_oak_log',
+                'mangrove_log': 'stripped_mangrove_log',
+                'cherry_log': 'stripped_cherry_log',
+                'crimson_stem': 'stripped_crimson_stem',
+                'warped_stem': 'stripped_warped_stem'
+            };
+
+            const baseId = blockId.split(':')[0];
+            const strippedBase = STRIP_MAP[baseId];
+
+            if (strippedBase) {
+                const suffix = blockId.includes(':') ? ':' + blockId.split(':')[1] : '';
+                const finalId = strippedBase + suffix;
+                
+                const cx = this.getChunkCoord(cell.x);
+                const cy = this.getChunkCoord(cell.y);
+                const cz = this.getChunkCoord(cell.z);
+                const ownerKey = this.getChunkKey(cx, cy, cz);
+                
+                this.addBlock(cell.x, cell.y, cell.z, finalId, ownerKey, true);
+                
+                // Play stripping sound effect via custom event
+                window.dispatchEvent(new CustomEvent('action-success')); 
+                return true;
+            }
+        }
+
+        // Route to modular block handler if one is registered
+        const handler = getBlockHandler(blockId);
+        if (handler) {
+            const blockKey = this.getKey(cell.x, cell.y, cell.z);
+            handler.open(blockKey, this.game);
+            return true;
+        }
+
         if (blockId === 'crafting_table') {
             window.dispatchEvent(new CustomEvent('interact-crafting-table'));
             return true;
+        }
+
+        // --- Bucket Handling (Fill) ---
+        if (selectedItem?.id === 'bucket') {
+            if (blockId === 'water' || blockId === 'lava') {
+                const cx = this.getChunkCoord(cell.x);
+                const cy = this.getChunkCoord(cell.y);
+                const cz = this.getChunkCoord(cell.z);
+                const ownerKey = this.getChunkKey(cx, cy, cz);
+
+                // Remove the liquid block
+                this.addBlock(cell.x, cell.y, cell.z, 'air', ownerKey, true);
+                
+                // Update item
+                selectedItem.id = blockId + '_bucket';
+                window.dispatchEvent(new CustomEvent('inventory-changed'));
+                window.dispatchEvent(new CustomEvent('action-success')); // Sound hint
+                return true;
+            }
         }
         if (blockId === 'starter_chest') {
             const chestKey = this.getKey(cell.x, cell.y, cell.z);
@@ -411,11 +499,11 @@ export class World {
     }
 
     getAreaInfluence(position) {
-        if (!this.corruptionEnabled) return { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
-        if (!position) return { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+        if (!this.corruptionEnabled) return { x: 0, y: 0, z: 0, virus: 0, anton: 0 };
+        if (!position) return { x: 0, y: 0, z: 0, virus: 0, anton: 0 };
         const px = Math.round(position.x), py = Math.round(position.y), pz = Math.round(position.z);
         const radius = 3;
-        let virusHits = 0, arloHits = 0, samples = 0;
+        let virusHits = 0, antonHits = 0, samples = 0;
         for (let dx = -radius; dx <= radius; dx += 2) {
             for (let dz = -radius; dz <= radius; dz += 2) {
                 for (let dy = -1; dy <= 2; dy++) {
@@ -423,11 +511,11 @@ export class World {
                     if (!id) continue;
                     samples++;
                     if (id === 'virus') virusHits++;
-                    else if (id === 'arlo') arloHits++;
+                    else if (id === 'anton') antonHits++;
                 }
             }
         }
         const base = Math.max(1, samples);
-        return { x: px, y: py, z: pz, virus: Math.min(1, virusHits / Math.max(16, base * 0.9)), arlo: Math.min(1, arloHits / Math.max(4, base * 0.3)) };
+        return { x: px, y: py, z: pz, virus: Math.min(1, virusHits / Math.max(16, base * 0.9)), anton: Math.min(1, antonHits / Math.max(4, base * 0.3)) };
     }
 }

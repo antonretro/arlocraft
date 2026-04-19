@@ -1,8 +1,1 @@
-{
-    "name":  "Potato Stage 3",
-    "hardness":  0,
-    "xp":  0,
-    "deco":  true,
-    "transparent":  true,
-    "id":  "potato_stage3"
-}
+﻿{"name":"Potato","hardness":0,"xp":0,"deco":true,"transparent":true,"textureId":"potatoes_stage3","id":"potato_stage3"}

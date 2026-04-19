@@ -55,20 +55,19 @@ const TREE_PROFILES = {
 };
 
 export class Chunk {
-    constructor(world, cx, cz) {
+    constructor(world, cx, cy, cz) {
         this.world = world;
         this.cx = cx;
+        this.cy = cy;
         this.cz = cz;
-        this.key = world.getChunkKey(cx, cz);
+        this.key = world.getChunkKey(cx, cy, cz);
         this.blockKeys = new Set();
         this.visible = true;
         this.group = new THREE.Group();
-        this.group.position.set(cx * world.chunkSize, 0, cz * world.chunkSize);
+        this.group.position.set(cx * world.chunkSize, cy * world.chunkSize, cz * world.chunkSize);
         this.group.updateMatrix();
         this.group.matrixAutoUpdate = false;
-        // Disable THREE.js frustum culling on the group — bounding sphere is often
-        // wrong for large instanced chunks, causing entire chunks to vanish.
-        // Visibility is managed manually via setVisible().
+        // Disabled active culling on the group level for small cubic stability; children handle their own.
         this.group.frustumCulled = false;
         this.world.scene.add(this.group);
         
@@ -84,22 +83,23 @@ export class Chunk {
         this.touchedGenerationChunks.set(this.key, { key: this.key, cx: this.cx, cz: this.cz });
     }
 
-    getChunkTargetForWorldPos(x, z) {
+    getChunkTargetForWorldPos(x, y, z) {
         const cx = this.world.getChunkCoord(x);
+        const cy = this.world.getChunkCoord(y);
         const cz = this.world.getChunkCoord(z);
-        return { cx, cz, key: this.world.getChunkKey(cx, cz) };
+        return { cx, cy, cz, key: this.world.getChunkKey(cx, cy, cz) };
     }
 
-    noteTouchedGenerationChunk(x, z) {
-        const target = this.getChunkTargetForWorldPos(x, z);
+    noteTouchedGenerationChunk(x, y, z) {
+        const target = this.getChunkTargetForWorldPos(x, y, z);
         this.touchedGenerationChunks.set(target.key, target);
 
-        const loaded = this.world.chunkManager.getChunk(target.cx, target.cz);
+        const loaded = this.world.chunkManager.getChunk(target.cx, target.cy, target.cz);
         if (loaded && !loaded.destroyed) {
             loaded.dirty = true;
             this.world.chunkManager.priorityDirtyChunkKeys.add(target.key);
-        } else if (Math.abs(target.cx - this.cx) <= 1 && Math.abs(target.cz - this.cz) <= 1) {
-            this.world.chunkManager.queueChunkLoad(target.cx, target.cz);
+        } else if (Math.abs(target.cx - this.cx) <= 1 && Math.abs(target.cy - this.cy) <= 1 && Math.abs(target.cz - this.cz) <= 1) {
+            this.world.chunkManager.queueChunkLoad(target.cx, target.cy, target.cz);
         }
 
         return target;
@@ -107,7 +107,7 @@ export class Chunk {
 
     finalizeGenerationPass() {
         for (const target of this.touchedGenerationChunks.values()) {
-            const chunk = this.world.chunkManager.getChunk(target.cx, target.cz);
+            const chunk = this.world.chunkManager.getChunk(target.cx, target.cy, target.cz);
             if (!chunk || chunk.destroyed) continue;
             chunk.dirty = true;
             this.world.chunkManager.priorityDirtyChunkKeys.add(target.key);
@@ -120,7 +120,7 @@ export class Chunk {
 
         const override = this.world.state.changedBlocks.get(key);
         const finalId = override ?? id;
-        const owner = this.noteTouchedGenerationChunk(x, z);
+        const owner = this.noteTouchedGenerationChunk(x, y, z);
         this.world.addBlock(x, y, z, finalId, owner.key, false, options);
     }
 
@@ -203,6 +203,10 @@ export class Chunk {
 
     // ... existing terrain gen methods ...
     generateTerrainColumn(wx, wz) {
+        const cs = this.world.chunkSize;
+        const startY = this.cy * cs;
+        const endY = (this.cy + 1) * cs - 1;
+        
         const terrainHeight = this.world.getColumnHeight(wx, wz);
         const inForcedSpawnZone = this.world.shouldForceSpawnZone(wx, wz)
             || this.world.shouldPlaceStructureChunk(this.cx, this.cz)
@@ -221,7 +225,9 @@ export class Chunk {
         if (!inForcedSpawnZone && terrainHeight > 58 && surfaceId !== 'path_block') {
             surfaceId = 'snow_block';
         }
-        this.addGeneratedBlock(wx, terrainHeight, wz, surfaceId);
+        if (terrainHeight >= startY && terrainHeight <= endY) {
+            this.addGeneratedBlock(wx, terrainHeight, wz, surfaceId);
+        }
 
         const nx = this.world.getColumnHeight(wx + 1, wz);
         const px = this.world.getColumnHeight(wx - 1, wz);
@@ -275,8 +281,8 @@ export class Chunk {
 
         if (this.world.shouldPlaceVirus(wx, wz, terrainHeight)) {
             this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'virus');
-        } else if (this.world.shouldPlaceArlo(wx, wz, terrainHeight)) {
-            this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'arlo');
+        } else if (this.world.shouldPlaceAnton(wx, wz, terrainHeight)) {
+            this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'anton');
         }
 
         if (!inForcedSpawnZone && terrainHeight > waterLevel) {
@@ -393,6 +399,27 @@ export class Chunk {
         if (structKey === 'spinning_ride' && this.world.hash2D(x - 207, z + 519) < 0.5) return;
 
         const blocks = struct.blueprints(x, y, z);
+        
+        // --- FOUNDATION PASS ---
+        // For every structure, we ensure it has a solid foundation down to the ground.
+        // We track the lowest Y placed at each XZ coordinate to fill downwards.
+        const lowestYAtXZ = new Map();
+        for (const b of blocks) {
+            const xzKey = `${b.x},${b.z}`;
+            if (!lowestYAtXZ.has(xzKey) || b.y < lowestYAtXZ.get(xzKey)) {
+                lowestYAtXZ.set(xzKey, b.y);
+            }
+        }
+
+        const terrainFiller = biome.fillerBlock || 'dirt';
+        for (const [xzStr, minY] of lowestYAtXZ.entries()) {
+            const [fx, fz] = xzStr.split(',').map(Number);
+            const groundY = this.world.getColumnHeight(fx, fz);
+            for (let fy = groundY; fy < minY; fy++) {
+                this.addGeneratedBlock(fx, fy, fz, terrainFiller);
+            }
+        }
+
         for (const b of blocks) {
             this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
         }
@@ -424,7 +451,7 @@ export class Chunk {
         if (!supportId || supportId === 'water' || supportId === 'path_block' || supportId === 'cobblestone') return;
 
         const roll = this.world.hash2D((x * 53) + 17, (z * 61) - 29);
-        if (roll > 0.65) return;
+        if (roll > 0.50) return;
 
         const pick = Math.floor(this.world.hash2D(x - 919, z + 771) * choices.length);
         const plantId = choices[pick];
@@ -566,12 +593,13 @@ export class Chunk {
         if (this.destroyed || this.blockKeys.size > 0) return 0;
         const startX = this.cx * this.world.chunkSize;
         const startZ = this.cz * this.world.chunkSize;
-        const minY = this.world.deepMinY;
-        const maxY = this.world.maxTerrainY + 12;
+        const cs = this.world.chunkSize;
+        const minY = this.cy * cs;
+        const maxY = (this.cy + 1) * cs - 1;
         let recovered = 0;
 
-        for (let lx = 0; lx < this.world.chunkSize; lx++) {
-            for (let lz = 0; lz < this.world.chunkSize; lz++) {
+        for (let lx = 0; lx < cs; lx++) {
+            for (let lz = 0; lz < cs; lz++) {
                 const wx = startX + lx;
                 const wz = startZ + lz;
                 for (let y = minY; y <= maxY; y++) {
@@ -600,7 +628,7 @@ export class Chunk {
         try {
             rebuildChunkInstancedMeshes(this);
         } catch (e) {
-            console.error('[ArloCraft] rebuildMeshes failed:', this.key, e);
+            console.error('[AntonCraft] rebuildMeshes failed:', this.key, e);
         }
     }
 
@@ -611,7 +639,7 @@ export class Chunk {
             this.beginGenerationPass();
             if (this.world.chunkGenerator && this.world.chunkGenerator.available) {
                 try {
-                    const results = await this.world.chunkGenerator.generateChunk(this.cx, this.cz);
+                    const results = await this.world.chunkGenerator.generateChunk(this.cx, this.cy, this.cz);
                     if (this.destroyed) return;
                     if (results && results.data) {
                         const { data, palette } = results;
@@ -651,7 +679,7 @@ export class Chunk {
                         return;
                     }
                 } catch (error) {
-                    console.warn('[ArloCraft] Chunk Worker failed, falling back to sync', error);
+                    console.warn('[AntonCraft] Chunk Worker failed, falling back to sync', error);
                 }
             }
 
@@ -724,10 +752,30 @@ export class Chunk {
             const houseType = isManor ? STRUCTURES.village_manor : STRUCTURES.village_hut;
             
             const blocks = houseType.blueprints(hx, hy, hz);
+            
+            // --- VILLAGE FOUNDATION PASS ---
+            const lowestYAtXZ = new Map();
+            for (const b of blocks) {
+                const xzKey = `${b.x},${b.z}`;
+                if (!lowestYAtXZ.has(xzKey) || b.y < lowestYAtXZ.get(xzKey)) {
+                    lowestYAtXZ.set(xzKey, b.y);
+                }
+            }
+
+            const biome = this.world.getBiomeAt(hx, hz);
+            const terrainFiller = biome.fillerBlock || 'dirt';
+            for (const [xzStr, minY] of lowestYAtXZ.entries()) {
+                const [fx, fz] = xzStr.split(',').map(Number);
+                const groundY = this.world.getColumnHeight(fx, fz);
+                for (let fy = groundY; fy < minY; fy++) {
+                    this.addGeneratedBlock(fx, fy, fz, terrainFiller);
+                }
+            }
+
             for (const block of blocks) this.addGeneratedBlock(block.x, block.y, block.z, block.id);
             this.placeLampPost(hx + 2, hy, hz + 2);
             if (this.world.game?.entities && this.world.game.entities.entities.length < this.world.game.entities.maxEntities) {
-                this.world.game.entities.spawn('villager_arlo', hx + 0.5, hy + 1.2, hz + 0.5);
+                this.world.game.entities.spawn('villager_anton', hx + 0.5, hy + 1.2, hz + 0.5);
             }
             placed.push({ x: hx, z: hz, y: hy });
         }
@@ -737,7 +785,7 @@ export class Chunk {
         }
         this.placeLampPost(centerX, centerY, centerZ);
         if (this.world.game?.entities && this.world.game.entities.entities.length < this.world.game.entities.maxEntities) {
-            this.world.game.entities.spawn('villager_arlo', centerX + 0.5, centerY + 1.2, centerZ + 0.5);
+            this.world.game.entities.spawn('villager_anton', centerX + 0.5, centerY + 1.2, centerZ + 0.5);
         }
     }
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { TOOLS } from '../data/tools.js';
 import { normalizeBlockVariantId } from '../data/blockIds.js';
 
@@ -17,7 +18,7 @@ for (const [path, module] of Object.entries(blockTextureModules)) {
 }
 
 const TOOL_MAP = {
-    // Basic Tools (ArloCraft IDs)
+    // Basic Tools (AntonCraft IDs)
     'pick_wood': 'wooden_pickaxe',
     'axe_wood': 'wooden_axe',
     'sword_wood': 'wooden_sword',
@@ -55,7 +56,10 @@ const TOOL_MAP = {
     'iron_ingot': 'iron_ingot',
     'gold_ingot': 'gold_ingot',
     'diamond': 'diamond',
-    'stick': 'stick'
+    'stick': 'stick',
+    'musket': 'musket',
+    'pistol': 'pistol',
+    'blunderbuss': 'blunderbuss'
 };
 const GRASS_PREVIEW_TINT = 0x79c05a;
 
@@ -73,22 +77,28 @@ export class PlayerHand {
         this.armGeometry = new THREE.BoxGeometry(0.21, 0.63, 0.21);
         this.armGeometry.rotateX(Math.PI / 2); // Map Top (Shoulder) to Z+ and Bottom (Hand) to Z-
         
-        this.armMaterial = new THREE.MeshLambertMaterial({ color: 0x4a9eff }); // Initial Arlo Blue
+        this.armMaterial = new THREE.MeshLambertMaterial({ color: 0x4a9eff }); // Initial Anton Blue
         this.arm = new THREE.Mesh(this.armGeometry, this.armMaterial);
-        this.arm.rotation.y = Math.PI; // Flip to show correct outer face
+        this.arm.rotation.y = 0; // Point away from player
         this.arm.position.set(0, 0, 0.3); // Push forward
         this.group.add(this.arm);
 
         // Item Slot (Where blocks/tools are held)
         this.itemSlot = new THREE.Group();
-        this.itemSlot.position.set(0, 0.15, -0.5);
-        this.itemSlot.rotation.set(0.2, 0.5, 0);
+        this.itemSlot.position.set(0, 0.15, -0.6); // Slightly further forward
+        this.itemSlot.rotation.set(0.4, -0.2, 0); // Point forward naturally
         this.group.add(this.itemSlot);
 
         this.heldItemMesh = null;
         this.swingTime = 0;
+        this.swingType = 'CHOP';
         this.bobCycle = 0;
         this.toolById = new Map(TOOLS.map((tool) => [tool.id, tool]));
+        this.canvas = document.createElement('canvas'); // For pixel reading
+        this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+        this.geometryCache = new Map(); // Cache for merged voxel geometries
+        this.lastParentRot = new THREE.Euler();
+        this.swayOffset = new THREE.Vector2();
     }
 
     disposeHeldObject(object) {
@@ -164,21 +174,8 @@ export class PlayerHand {
         const url = ITEM_TEXTURES.get(texName) || ITEM_TEXTURES.get('stick');
 
         if (url) {
-            const texture = new THREE.TextureLoader().load(url);
-            texture.magFilter = THREE.NearestFilter;
-            texture.minFilter = THREE.NearestFilter;
-            texture.colorSpace = THREE.SRGBColorSpace;
-            const mat = new THREE.MeshLambertMaterial({
-                map: texture,
-                transparent: true,
-                alphaTest: 0.1,
-                side: THREE.DoubleSide
-            });
-            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), mat);
-            mesh.rotation.set(0, -0.6, 0); // Angle it slightly inwards
-            mesh.position.set(0.15, 0.25, -0.1);
-            mesh.userData.ownedGeometry = true;
-            mesh.userData.ownedMaterial = true;
+            const mesh = this.createVoxelMesh(url);
+            mesh.position.set(0, 0.25, -0.1);
             return mesh;
         }
 
@@ -191,6 +188,90 @@ export class PlayerHand {
         return model;
     }
 
+    createVoxelMesh(url) {
+        const group = new THREE.Group();
+        const loader = new THREE.TextureLoader();
+        
+        loader.load(url, (texture) => {
+            const img = texture.image;
+            this.canvas.width = img.width;
+            this.canvas.height = img.height;
+            this.ctx.clearRect(0, 0, img.width, img.height);
+            this.ctx.drawImage(img, 0, 0);
+            
+            const imageData = this.ctx.getImageData(0, 0, img.width, img.height);
+            const data = imageData.data;
+            const w = img.width;
+            const h = img.height;
+            
+            const boxGeo = new THREE.BoxGeometry(1/w, 1/h, 1/16); // 1-pixel depth relative to size
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            const mat = new THREE.MeshLambertMaterial({ map: texture, transparent: true, alphaTest: 0.5 });
+            
+            const front = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), mat);
+            front.position.z = 0.02;
+            group.add(front);
+            
+            const back = front.clone();
+            back.rotation.y = Math.PI;
+            back.position.z = -0.02;
+            group.add(back);
+
+            // Pixel Extrusion (Minecraft style 3D depth) - Optimized with Merging
+            const pixelW = 0.7 / w;
+            const pixelH = 0.7 / h;
+            const sideMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
+            
+            // Check cache first
+            if (this.geometryCache.has(url)) {
+                const cachedGeo = this.geometryCache.get(url);
+                const sideMesh = new THREE.Mesh(cachedGeo, sideMat);
+                group.add(sideMesh);
+                return;
+            }
+
+            const edgeGeometries = [];
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const idx = (y * w + x) * 4;
+                    const alpha = data[idx + 3];
+                    if (alpha < 128) continue;
+
+                    const up = y > 0 ? data[((y - 1) * w + x) * 4 + 3] : 0;
+                    const down = y < h - 1 ? data[((y + 1) * w + x) * 4 + 3] : 0;
+                    const left = x > 0 ? data[(y * w + (x - 1)) * 4 + 3] : 0;
+                    const right = x < w - 1 ? data[(y * w + (x + 1)) * 4 + 3] : 0;
+
+                    if (up < 128 || down < 128 || left < 128 || right < 128) {
+                        const posX = (x / w - 0.5) * 0.7 + (pixelW * 0.5);
+                        const posY = (0.5 - y / h) * 0.7 - (pixelH * 0.5);
+                        
+                        const geo = new THREE.BoxGeometry(pixelW, pixelH, 0.04);
+                        geo.translate(posX, posY, 0);
+                        edgeGeometries.push(geo);
+                    }
+                }
+            }
+
+            if (edgeGeometries.length > 0) {
+                const mergedGeo = BufferGeometryUtils.mergeGeometries(edgeGeometries);
+                const sideMesh = new THREE.Mesh(mergedGeo, sideMat);
+                group.add(sideMesh);
+                
+                // Store in cache for next time
+                this.geometryCache.set(url, mergedGeo);
+                
+                // Cleanup individual geometries
+                edgeGeometries.forEach(g => g.dispose());
+            }
+        });
+
+        group.userData.ownedGeometry = true;
+        group.userData.ownedMaterial = true;
+        return group;
+    }
+
     setHeldItem(itemId, registry, selectedItem = null) {
         // Clear previous item
         while (this.itemSlot.children.length > 0) {
@@ -199,7 +280,7 @@ export class PlayerHand {
             try {
                 this.disposeHeldObject(child);
             } catch (error) {
-                console.warn('[ArloCraft] Held-item cleanup skipped due to disposal error:', error);
+                console.warn('[AntonCraft] Held-item cleanup skipped due to disposal error:', error);
             }
         }
 
@@ -209,6 +290,16 @@ export class PlayerHand {
         const tool = this.toolById.get(normalizedId);
         const blockConfig = registry.blocks.get(normalizedId);
         const isTool = selectedItem?.kind === 'tool' || Boolean(tool);
+        
+        // Determine Swing Type
+        if (isTool) {
+            if (itemId.includes('sword') || itemId.includes('blade') || itemId.includes('dagger')) this.swingType = 'SLASH';
+            else if (itemId.includes('pick') || itemId.includes('axe') || itemId.includes('hammer') || itemId.includes('drill')) this.swingType = 'CHOP';
+            else if (itemId.includes('musket') || itemId.includes('pistol') || itemId.includes('blunderbuss')) this.swingType = 'RECOIL';
+            else this.swingType = 'CHOP';
+        } else {
+            this.swingType = 'SHAKE';
+        }
         const isDeco = blockConfig?.deco;
         let textureKey = blockConfig?.textureId || normalizedId;
         if (blockConfig?.pairId && typeof textureKey === 'string' && textureKey.endsWith('_bottom')) {
@@ -245,23 +336,14 @@ export class PlayerHand {
                     texture.magFilter = THREE.NearestFilter;
                     texture.minFilter = THREE.NearestFilter;
                     texture.colorSpace = THREE.SRGBColorSpace;
-                    const mat = new THREE.MeshLambertMaterial({
-                        map: texture,
-                        transparent: true,
-                        alphaTest: 0.1,
-                        side: THREE.DoubleSide
-                    });
                     
-                    // Apply biome tint if it's grass or foliage
+                    const mesh = this.createVoxelMesh(url || texture.image.src);
+                    mesh.position.set(0, 0.25, -0.1);
+                    
                     if (textureKey === 'grass' || textureKey.includes('grass') || textureKey.includes('fern') || textureKey.includes('leaves')) {
-                        mat.color.set(0x79c05a); // Standard biome green
+                         mesh.traverse(child => { if (child.material) child.material.color?.set(0x79c05a); });
                     }
 
-                    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), mat);
-                    mesh.rotation.set(0, -0.6, 0);
-                    mesh.position.set(0.15, 0.25, -0.1);
-                    mesh.userData.ownedGeometry = true;
-                    mesh.userData.ownedMaterial = true;
                     this.itemSlot.add(mesh);
                     this.heldItemMesh = mesh;
                     return;
@@ -298,31 +380,67 @@ export class PlayerHand {
     }
 
     update(delta, bobCycle, isMoving) {
-        // Update bobbing
+        // Item Sway (Procedural weight/inertia)
+        const parent = this.group.parent;
+        if (parent) {
+            const rotDeltaX = (parent.rotation.x - this.lastParentRot.x);
+            const rotDeltaY = (parent.rotation.y - this.lastParentRot.y);
+            
+            // Limit deltas to avoid massive snaps on wrap-around
+            const safeDX = Math.abs(rotDeltaX) > 1 ? 0 : rotDeltaX;
+            const safeDY = Math.abs(rotDeltaY) > 1 ? 0 : rotDeltaY;
+
+            this.swayOffset.x = THREE.MathUtils.lerp(this.swayOffset.x, safeDY * 0.45, delta * 10);
+            this.swayOffset.y = THREE.MathUtils.lerp(this.swayOffset.y, safeDX * 0.45, delta * 10);
+            
+            this.lastParentRot.copy(parent.rotation);
+        }
+
+        // Apply animations
         if (isMoving) {
             this.bobCycle = bobCycle;
-            const bobX = Math.sin(this.bobCycle * 0.5) * 0.04;
-            const bobY = Math.abs(Math.cos(this.bobCycle)) * 0.05;
+            const bobX = (Math.sin(this.bobCycle * 0.5) * 0.014) + this.swayOffset.x;
+            const bobY = (Math.abs(Math.cos(this.bobCycle)) * 0.018) + this.swayOffset.y;
             this.group.position.x = 0.65 + bobX;
             this.group.position.y = -0.62 + bobY;
         } else {
             // Idle breathing
             const breathe = Math.sin(performance.now() * 0.002) * 0.015;
-            this.group.position.y = THREE.MathUtils.lerp(this.group.position.y, -0.55 + breathe, delta * 4);
-            this.group.position.x = THREE.MathUtils.lerp(this.group.position.x, 0.65, delta * 4);
+            this.group.position.y = THREE.MathUtils.lerp(this.group.position.y, -0.55 + breathe + this.swayOffset.y, delta * 4);
+            this.group.position.x = THREE.MathUtils.lerp(this.group.position.x, 0.65 + this.swayOffset.x, delta * 4);
         }
 
         // Action Swing Animation
         if (this.swingTime > 0) {
             this.swingTime -= delta;
             const t = 1 - (this.swingTime / 0.35); // 0 to 1
-            const swingZ = Math.sin(t * Math.PI) * -0.6;
-            const swingRotX = Math.sin(t * Math.PI) * -1.2;
-            this.group.position.z = -0.75 + swingZ;
-            this.group.rotation.x = 0.1 + swingRotX;
+            const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+            if (this.swingType === 'SLASH') {
+                const angle = (eased * Math.PI * 1.2) - (Math.PI / 2);
+                this.group.rotation.y = -0.4 + Math.sin(angle) * 1.5;
+                this.group.rotation.z = Math.cos(angle) * 0.8;
+                this.group.position.x = 0.65 + Math.sin(angle) * 0.4;
+            } else if (this.swingType === 'CHOP') {
+                const chop = Math.sin(t * Math.PI);
+                this.group.rotation.x = 0.1 - chop * 1.6;
+                this.group.position.z = -0.75 - chop * 0.4;
+            } else if (this.swingType === 'RECOIL') {
+                const recoil = Math.sin(t * Math.PI * 0.5); // Peak at the very start
+                const snap = Math.pow(1 - t, 4); // Quick recovery 
+                this.group.position.z = -0.75 + (snap * 0.25);
+                this.group.rotation.x = 0.1 - (snap * 0.6);
+            } else {
+                // SHAKE (Blocks)
+                const shake = Math.sin(t * Math.PI * 2) * 0.15;
+                this.group.position.x = 0.65 + shake;
+                this.group.rotation.z = shake * 0.5;
+            }
         } else {
             this.group.position.z = THREE.MathUtils.lerp(this.group.position.z, -0.75, delta * 6);
             this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, 0.1, delta * 6);
+            this.group.rotation.y = THREE.MathUtils.lerp(this.group.rotation.y, -0.4, delta * 6);
+            this.group.rotation.z = THREE.MathUtils.lerp(this.group.rotation.z, 0, delta * 6);
         }
     }
 

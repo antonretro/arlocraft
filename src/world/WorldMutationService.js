@@ -12,14 +12,18 @@ export class WorldMutationService {
         const gy = Math.round(y);
         const gz = Math.round(z);
         const allowCorruption = Boolean(options?.allowCorruption);
-        if (!allowCorruption && !this.world.corruptionEnabled && (id === 'virus' || id === 'arlo')) return null;
+        if (!allowCorruption && !this.world.corruptionEnabled && (id === 'virus' || id === 'anton')) return null;
         
         const key = this.world.coords.getKey(gx, gy, gz);
-        const owner = ownerKey ?? this.world.coords.getChunkKey(this.world.coords.getChunkCoord(gx), this.world.coords.getChunkCoord(gz));
+        
+        const cx = this.world.coords.getChunkCoord(gx);
+        const cy = this.world.coords.getChunkCoord(gy);
+        const cz = this.world.coords.getChunkCoord(gz);
+        const owner = ownerKey ?? this.world.coords.getChunkKey(cx, cy, cz);
         
         const existing = this.world.state.blockMap.get(key);
         if (existing && !replace) {
-            const ownerChunk = this.world.chunkManager.getChunk(this.world.coords.getChunkCoord(gx), this.world.coords.getChunkCoord(gz));
+            const ownerChunk = this.world.chunkManager.getChunk(cx, cy, cz);
             if (ownerChunk && !ownerChunk.blockKeys.has(key)) {
                 ownerChunk.blockKeys.add(key);
                 ownerChunk.dirty = true;
@@ -38,7 +42,7 @@ export class WorldMutationService {
         
         if (id === 'virus') this.world.state.virusBlockCount++;
         
-        const ownerChunk = this.world.chunkManager.getChunk(this.world.coords.getChunkCoord(gx), this.world.coords.getChunkCoord(gz));
+        const ownerChunk = this.world.chunkManager.getChunk(cx, cy, cz);
         if (ownerChunk) {
             ownerChunk.blockKeys.add(key);
             ownerChunk.dirty = true;
@@ -47,9 +51,13 @@ export class WorldMutationService {
 
         this.world.chunkManager.updateNeighborsDirty(gx, gy, gz);
         
-        if (id === 'virus' || id === 'arlo') {
+        if (id === 'virus' || id === 'anton') {
             const radius = this.world.config.virus?.influenceRadiusBlocks ?? 3;
-            this.world.chunkManager.markChunksWithinBlockRadiusDirty(gx, gz, radius, true);
+            this.world.chunkManager.markChunksWithinBlockRadiusDirty(gx, gy, gz, radius, true);
+        }
+
+        if (id === 'water' || id === 'lava') {
+            this.world.fluids?.scheduleSpread(gx, gy, gz, id, 0);
         }
 
         return id;
@@ -70,7 +78,11 @@ export class WorldMutationService {
         if (id === 'virus' && this.world.state.virusBlockCount > 0) this.world.state.virusBlockCount--;
         
         const [x, y, z] = this.world.coords.keyToCoords(key);
-        const ownerChunk = this.world.chunkManager.getChunk(this.world.coords.getChunkCoord(x), this.world.coords.getChunkCoord(z));
+        const ownerChunk = this.world.chunkManager.getChunk(
+            this.world.coords.getChunkCoord(x), 
+            this.world.coords.getChunkCoord(y), 
+            this.world.coords.getChunkCoord(z)
+        );
         if (ownerChunk) {
             ownerChunk.blockKeys.delete(key);
             ownerChunk.dirty = true;
@@ -79,9 +91,9 @@ export class WorldMutationService {
 
         this.world.chunkManager.updateNeighborsDirty(x, y, z);
         
-        if (id === 'virus' || id === 'arlo') {
+        if (id === 'virus' || id === 'anton') {
             const radius = this.world.config.virus?.influenceRadiusBlocks ?? 3;
-            this.world.chunkManager.markChunksWithinBlockRadiusDirty(x, z, radius, true);
+            this.world.chunkManager.markChunksWithinBlockRadiusDirty(x, y, z, radius, true);
         }
         return true;
     }

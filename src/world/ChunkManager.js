@@ -44,8 +44,8 @@ export class ChunkManager {
         return this.chunks.get(key);
     }
 
-    getChunk(cx, cz) {
-        return this.chunks.get(this.world.getChunkKey(cx, cz));
+    getChunk(cx, cy, cz) {
+        return this.chunks.get(this.world.getChunkKey(cx, cy, cz));
     }
 
     getBlockAt(x, y, z) {
@@ -55,43 +55,51 @@ export class ChunkManager {
     updateNeighborsDirty(x, y, z) {
         const cs = this.world.chunkSize;
         const lx = ((x % cs) + cs) % cs;
+        const ly = ((y % cs) + cs) % cs;
         const lz = ((z % cs) + cs) % cs;
 
-        // Only dirty neighbors if we are on the edge of a chunk
-        if (lx === 0) this._dirtyChunkAt(x - 1, z);
-        if (lx === cs - 1) this._dirtyChunkAt(x + 1, z);
-        if (lz === 0) this._dirtyChunkAt(x, z - 1);
-        if (lz === cs - 1) this._dirtyChunkAt(x, z + 1);
+        // Neighbor dirtying for all 6 faces in 3D
+        if (lx === 0) this._dirtyChunkAt(x - 1, y, z);
+        if (lx === cs - 1) this._dirtyChunkAt(x + 1, y, z);
+        if (ly === 0) this._dirtyChunkAt(x, y - 1, z);
+        if (ly === cs - 1) this._dirtyChunkAt(x, y + 1, z);
+        if (lz === 0) this._dirtyChunkAt(x, y, z - 1);
+        if (lz === cs - 1) this._dirtyChunkAt(x, y, z + 1);
     }
 
-    _dirtyChunkAt(wx, wz) {
+    _dirtyChunkAt(wx, wy, wz) {
         const cx = this.world.getChunkCoord(wx);
+        const cy = this.world.getChunkCoord(wy);
         const cz = this.world.getChunkCoord(wz);
-        const chunk = this.getChunk(cx, cz);
+        const chunk = this.getChunk(cx, cy, cz);
         if (chunk) {
             chunk.dirty = true;
             this.priorityDirtyChunkKeys.add(chunk.key);
         }
     }
 
-    markChunksWithinBlockRadiusDirty(x, z, radius, prioritize = false) {
+    markChunksWithinBlockRadiusDirty(x, y, z, radius, prioritize = false) {
         const minCx = this.world.getChunkCoord(x - radius);
         const maxCx = this.world.getChunkCoord(x + radius);
+        const minCy = this.world.getChunkCoord(y - radius);
+        const maxCy = this.world.getChunkCoord(y + radius);
         const minCz = this.world.getChunkCoord(z - radius);
         const maxCz = this.world.getChunkCoord(z + radius);
         for (let cx = minCx; cx <= maxCx; cx++) {
-            for (let cz = minCz; cz <= maxCz; cz++) {
-                const key = this.world.getChunkKey(cx, cz);
-                const chunk = this.chunks.get(key);
-                if (!chunk) continue;
-                chunk.dirty = true;
-                if (prioritize) this.priorityDirtyChunkKeys.add(key);
+            for (let cy = minCy; cy <= maxCy; cy++) {
+                for (let cz = minCz; cz <= maxCz; cz++) {
+                    const key = this.world.getChunkKey(cx, cy, cz);
+                    const chunk = this.chunks.get(key);
+                    if (!chunk) continue;
+                    chunk.dirty = true;
+                    if (prioritize) this.priorityDirtyChunkKeys.add(key);
+                }
             }
         }
     }
 
-    getByCoord(cx, cz) {
-        return this.chunks.get(this.world.getChunkKey(cx, cz));
+    getByCoord(cx, cy, cz) {
+        return this.chunks.get(this.world.getChunkKey(cx, cy, cz));
     }
 
     values() {
@@ -108,13 +116,13 @@ export class ChunkManager {
 
     // ─── Loading ──────────────────────────────────────────────────────
 
-    loadChunk(cx, cz, forceSync = false) {
-        const key = this.world.getChunkKey(cx, cz);
+    loadChunk(cx, cy, cz, forceSync = false) {
+        const key = this.world.getChunkKey(cx, cy, cz);
         if (this.chunks.has(key)) {
             this.pendingChunkSet.delete(key);
             return;
         }
-        const chunk = new Chunk(this.world, cx, cz);
+        const chunk = new Chunk(this.world, cx, cy, cz);
         this.chunks.set(key, chunk);
         try {
             chunk.resyncBlockKeysFromWorld?.();
@@ -130,7 +138,7 @@ export class ChunkManager {
                 if (forceSync) chunk.update();
             }
         } catch (error) {
-            console.warn('[ArloCraft] Chunk generation failed:', key, error);
+            console.warn('[AntonCraft] Chunk generation failed:', key, error);
             chunk.destroy();
             this.chunks.delete(key);
         } finally {
@@ -152,12 +160,15 @@ export class ChunkManager {
 
     // ─── Unloading ────────────────────────────────────────────────────
 
-    unloadFarChunks(centerCx, centerCz) {
+    unloadFarChunks(centerCx, centerCy, centerCz) {
         const unloadRadius = this.world.renderDistance + 3;
+        const vUnloadRadius = (this.world.config.renderDistance.vertical || 2) + 2;
+
         for (const [key, chunk] of this.chunks.entries()) {
             const dx = Math.abs(chunk.cx - centerCx);
+            const dy = Math.abs(chunk.cy - centerCy);
             const dz = Math.abs(chunk.cz - centerCz);
-            if (dx <= unloadRadius && dz <= unloadRadius) continue;
+            if (dx <= unloadRadius && dy <= vUnloadRadius && dz <= unloadRadius) continue;
             chunk.destroy();
             this.chunks.delete(key);
         }
@@ -165,8 +176,9 @@ export class ChunkManager {
         if (this.pendingChunkLoads.length > 0) {
             this.pendingChunkLoads = this.pendingChunkLoads.filter((pending) => {
                 const dx = Math.abs(pending.cx - centerCx);
+                const dy = Math.abs(pending.cy - centerCy);
                 const dz = Math.abs(pending.cz - centerCz);
-                const keep = dx <= unloadRadius && dz <= unloadRadius;
+                const keep = dx <= unloadRadius && dy <= vUnloadRadius && dz <= unloadRadius;
                 if (!keep) this.pendingChunkSet.delete(pending.key);
                 return keep;
             });
@@ -181,42 +193,48 @@ export class ChunkManager {
 
     // ─── Queued loading ───────────────────────────────────────────────
 
-    queueChunkLoad(cx, cz) {
-        const key = this.world.getChunkKey(cx, cz);
+    queueChunkLoad(cx, cy, cz) {
+        const key = this.world.getChunkKey(cx, cy, cz);
         if (this.chunks.has(key) || this.pendingChunkSet.has(key)) return;
         this.pendingChunkSet.add(key);
-        this.pendingChunkLoads.push({ cx, cz, key });
+        this.pendingChunkLoads.push({ cx, cy, cz, key });
     }
 
-    ensureChunksAround(centerCx, centerCz) {
+    ensureChunksAround(centerCx, centerCy, centerCz) {
         const preloadRadius = this.world.renderDistance + 1;
+        const vRadius = (this.world.config.renderDistance.vertical || 2);
         for (let dx = -preloadRadius; dx <= preloadRadius; dx++) {
-            for (let dz = -preloadRadius; dz <= preloadRadius; dz++) {
-                this.queueChunkLoad(centerCx + dx, centerCz + dz);
+            for (let dy = -vRadius; dy <= vRadius; dy++) {
+                for (let dz = -preloadRadius; dz <= preloadRadius; dz++) {
+                    this.queueChunkLoad(centerCx + dx, centerCy + dy, centerCz + dz);
+                }
             }
         }
     }
 
-    ensureCriticalChunks(centerCx, centerCz, radius = 1) {
+    ensureCriticalChunks(centerCx, centerCy, centerCz, radius = 1) {
         for (let dx = -radius; dx <= radius; dx++) {
-            for (let dz = -radius; dz <= radius; dz++) {
-                const cx = centerCx + dx;
-                const cz = centerCz + dz;
-                const key = this.world.getChunkKey(cx, cz);
-                const chunk = this.chunks.get(key);
-                if (!chunk) {
-                    const isInner = Math.abs(dx) <= 1 && Math.abs(dz) <= 1;
-                    this.loadChunk(cx, cz, isInner);
-                    continue;
-                }
-                if (chunk.dirty && !chunk.destroyed) {
-                    chunk.update();
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dz = -radius; dz <= radius; dz++) {
+                    const cx = centerCx + dx;
+                    const cy = centerCy + dy;
+                    const cz = centerCz + dz;
+                    const key = this.world.getChunkKey(cx, cy, cz);
+                    const chunk = this.chunks.get(key);
+                    if (!chunk) {
+                        const isInner = Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && Math.abs(dz) <= 1;
+                        this.loadChunk(cx, cy, cz, isInner);
+                        continue;
+                    }
+                    if (chunk.dirty && !chunk.destroyed) {
+                        chunk.update();
+                    }
                 }
             }
         }
     }
 
-    processChunkLoadQueue(centerCx, centerCz, explicitBudget = null) {
+    processChunkLoadQueue(centerCx, centerCy, centerCz, explicitBudget = null) {
         if (this.pendingChunkLoads.length === 0) return;
 
         let budget = explicitBudget;
@@ -229,17 +247,18 @@ export class ChunkManager {
 
         budget = Math.max(1, Math.floor(budget));
         const cx = Number.isFinite(centerCx) ? centerCx : 0;
+        const cy = Number.isFinite(centerCy) ? centerCy : 0;
         const cz = Number.isFinite(centerCz) ? centerCz : 0;
 
-        // Optimization: Sorting is expensive. We only sort when a major change happens (like a chunk cross).
-        // Since budget is usually 1, there's no need to sort every frame.
         if (this.needsQueueSort) {
             this.pendingChunkLoads.sort((a, b) => {
                 const adx = Math.abs(a.cx - cx);
+                const ady = Math.abs(a.cy - cy);
                 const adz = Math.abs(a.cz - cz);
                 const bdx = Math.abs(b.cx - cx);
+                const bdy = Math.abs(b.cy - cy);
                 const bdz = Math.abs(b.cz - cz);
-                return (adx * adx) + (adz * adz) - ((bdx * bdx) + (bdz * bdz));
+                return (adx * adx) + (ady * ady) + (adz * adz) - ((bdx * bdx) + (bdy * bdy) + (bdz * bdz));
             });
             this.needsQueueSort = false;
         }
@@ -247,7 +266,7 @@ export class ChunkManager {
         while (budget > 0 && this.pendingChunkLoads.length > 0) {
             const next = this.pendingChunkLoads.shift();
             if (!next) break;
-            this.loadChunk(next.cx, next.cz);
+            this.loadChunk(next.cx, next.cy, next.cz);
             budget -= 1;
         }
     }
@@ -276,6 +295,7 @@ export class ChunkManager {
         if (!playerPosition) return;
         
         const pcx = this.world.getChunkCoord(playerPosition.x);
+        const pcy = this.world.getChunkCoord(playerPosition.y);
         const pcz = this.world.getChunkCoord(playerPosition.z);
 
         // 1. Emergency Rebuilds: Immediate 5x5 chunks ignore budget
@@ -285,35 +305,14 @@ export class ChunkManager {
         const maxRebuildsPerFrame = 2;
 
         for (let dx = -1; dx <= 1; dx++) {
-            if (rebuildsDone >= maxRebuildsPerFrame) break;
-            for (let dz = -1; dz <= 1; dz++) {
-                if (rebuildsDone >= maxRebuildsPerFrame) break;
-                const key = this.world.getChunkKey(pcx + dx, pcz + dz);
-                const chunk = this.chunks.get(key);
-                if (chunk?.dirty && !chunk.destroyed) {
-                    chunk.update();
-                    rebuildsDone++;
-                }
-            }
-        }
-
-        // 2. Mesh Watchdog: Catch 'Ghost Chunks' (loaded data but no meshes)
-        // Sweep the full render distance every 8 frames to revive invisible chunks
-        this.meshSanityTick = (this.meshSanityTick + 1) % 8;
-        if (this.meshSanityTick === 0) {
-            const rd = this.world.renderDistance + 1;
-            for (let dx = -rd; dx <= rd; dx++) {
-                for (let dz = -rd; dz <= rd; dz++) {
-                    const ck = this.world.getChunkKey(pcx + dx, pcz + dz);
-                    const c = this.chunks.get(ck);
-                    if (!c || c.destroyed || c.generating) continue;
-                    const hasMeshGap = c.blockKeys.size > 0 && c.instancedMeshes.size === 0;
-                    const isDesyncedEmpty = c.blockKeys.size === 0 && c.instancedMeshes.size === 0;
-                    if (isDesyncedEmpty) c.resyncBlockKeysFromWorld?.();
-                    const needsMeshRebuild = hasMeshGap || (isDesyncedEmpty && c.blockKeys.size > 0);
-                    if (needsMeshRebuild) {
-                        c.dirty = true;
-                        this.priorityDirtyChunkKeys.add(ck);
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dz = -1; dz <= 1; dz++) {
+                    if (rebuildsDone >= maxRebuildsPerFrame) break;
+                    const key = this.world.getChunkKey(pcx + dx, pcy + dy, pcz + dz);
+                    const chunk = this.chunks.get(key);
+                    if (chunk?.dirty && !chunk.destroyed) {
+                        chunk.update();
+                        rebuildsDone++;
                     }
                 }
             }
@@ -328,8 +327,8 @@ export class ChunkManager {
         const chunks = [];
         for (const c of this.chunks.values()) {
             if (!c.dirty || c.destroyed) continue;
-            const wx = c.cx * cs, wz = c.cz * cs;
-            const h = this.world.getTerrainHeight(wx, wz);
+            const wx = c.cx * cs, wy = c.cy * cs, wz = c.cz * cs;
+            const h = wy + (cs / 2); // Center height of cube for distance sorting
             const dSq = (wx - px) ** 2 + (h - py) ** 2 + (wz - pz) ** 2;
             chunks.push({ chunk: c, dSq });
         }
@@ -351,6 +350,7 @@ export class ChunkManager {
             // console.debug(`[ChunkManager] Rebuilt ${rebuilt} chunks in ${(performance.now() - startTime).toFixed(2)}ms`);
         }
     }
+
 
     // ─── Mesh-color sanity audit ──────────────────────────────────────
 
@@ -417,8 +417,9 @@ export class ChunkManager {
         if (!playerPosition) return;
 
         const playerCx = this.world.getChunkCoord(playerPosition.x);
+        const playerCy = this.world.getChunkCoord(playerPosition.y);
         const playerCz = this.world.getChunkCoord(playerPosition.z);
-        const key = this.world.getChunkKey(playerCx, playerCz);
+        const key = this.world.getChunkKey(playerCx, playerCy, playerCz);
         
         // Force visibility re-sync during resume grace period
         if (this.world.game?.resumeGraceFrames > 0) {
@@ -435,25 +436,21 @@ export class ChunkManager {
 
         // Always ensure current chunk is loaded and meshed
         if (!this.chunks.has(key)) {
-            this.loadChunk(playerCx, playerCz, true);
+            this.loadChunk(playerCx, playerCy, playerCz, true);
         }
 
         if (this.lastPlayerChunkKey !== key) {
-            // Safety: If this is the first move detected (lastPlayerChunkKey is null),
-            // or if we detection a massive teleport (more than 128 blocks jump),
-            // we should be cautious about purging. Massive jumps on resume 
-            // often mean stale data.
-            // Clean up distant chunks on every chunk-boundary crossing, 
-            // including after large teleports, to prevent memory leaks from "orphaned" areas.
-            this.unloadFarChunks(playerCx, playerCz);
-            this.ensureChunksAround(playerCx, playerCz);
+            this.unloadFarChunks(playerCx, playerCy, playerCz);
+            this.ensureChunksAround(playerCx, playerCy, playerCz);
             
-            // Boundary Flush: Force remesh 3x3 area to prevent voids during movement
+            // Boundary Flush: Force remesh 3x3x3 area to prevent voids during movement
             for (let dx = -1; dx <= 1; dx++) {
-                for (let dz = -1; dz <= 1; dz++) {
-                    const ck = this.world.getChunkKey(playerCx + dx, playerCz + dz);
-                    const c = this.chunks.get(ck);
-                    if (c) c.dirty = true;
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        const ck = this.world.getChunkKey(playerCx + dx, playerCy + dy, playerCz + dz);
+                        const c = this.chunks.get(ck);
+                        if (c) c.dirty = true;
+                    }
                 }
             }
 
@@ -464,14 +461,14 @@ export class ChunkManager {
 
         this.chunkRefreshTick = (this.chunkRefreshTick + 1) % 12;
         if (this.chunkRefreshTick === 0) {
-            this.ensureChunksAround(playerCx, playerCz);
+            this.ensureChunksAround(playerCx, playerCy, playerCz);
         }
 
         this.criticalChunkTick = (this.criticalChunkTick + 1) % 4;
         if (this.criticalChunkTick === 0) {
-            this.ensureCriticalChunks(playerCx, playerCz, 2);
+            this.ensureCriticalChunks(playerCx, playerCy, playerCz, 2);
         }
-        this.processChunkLoadQueue(playerCx, playerCz);
+        this.processChunkLoadQueue(playerCx, playerCy, playerCz);
 
         // Ensure all loaded chunks stay visible (prevents "invisible" holes)
         this.visibilityScanTick = (this.visibilityScanTick + 1) % 10;

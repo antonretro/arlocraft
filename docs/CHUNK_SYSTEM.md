@@ -1,10 +1,10 @@
-# ArloCraft Chunk & Rendering System
+# AntonCraft Chunk & Rendering System
 
-This document provides a technical overview of how ArloCraft manages large procedural worlds while maintaining a high frame rate.
+This document provides a technical overview of how AntonCraft manages large procedural worlds while maintaining a high frame rate.
 
 ## 1. Architectural Overview
 
-ArloCraft uses a **Voxel-based Instancing** approach. Instead of building one massive mesh for the entire world (which is slow to update), the world is divided into smaller **Chunks**.
+AntonCraft uses a **Voxel-based Instancing** approach. Instead of building one massive mesh for the entire world (which is slow to update), the world is divided into smaller **Chunks**.
 
 ### Core Components
 - **BlockMap**: A global registry (`Map`) that stores every block's ID by a unique 53-bit integer key. This allows for extremely fast lookups (`O(1)`).

@@ -2,10 +2,13 @@ import { BLOCKS } from '../data/blocks.js';
 import { TOOLS } from '../data/tools.js';
 import { blockIdToDisplayName, normalizeBlockVariantId } from '../data/blockIds.js';
 import { CraftingSystem } from '../engine/CraftingSystem.js';
+import { BLOCKDEX } from '../data/blockdex.js';
+import { RECIPE_BOOK } from '../data/recipeBook.js';
+import { ACHIEVEMENTS } from '../data/achievements.js';
 
 const itemTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/item/*.png', { eager: true, query: '?url' });
 const blockTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/block/*.png', { eager: true, query: '?url' });
-const contentBlockAllModules = import.meta.glob('../content/blocks/*/all.png', { eager: true, query: '?url' });
+const contentBlockTextureModules = import.meta.glob('../content/blocks/*/*.png', { eager: true, query: '?url' });
 const GRASS_PREVIEW_TINT_CLASS = 'tint-grass-face';
 
 export class HUD {
@@ -14,6 +17,7 @@ export class HUD {
         this.game = game;
         this.blockById = new Map(BLOCKS.map((block) => [block.id, block]));
         this.toolById = new Map(TOOLS.map((tool) => [tool.id, tool]));
+        this.activeTab = 'pack';
         this.craftingSystem = new CraftingSystem();
 
         this.itemTextures = {};
@@ -27,15 +31,23 @@ export class HUD {
             const fileName = path.split('/').pop().replace('.png', '');
             this.blockTextures[fileName] = module.default || module;
         }
-        for (const [path, module] of Object.entries(contentBlockAllModules)) {
+        for (const [path, module] of Object.entries(contentBlockTextureModules)) {
             const parts = path.split('/');
-            const folderId = parts[parts.length - 2];
-            this.blockTextures[folderId] = module.default || module;
+            const fileName = parts[parts.length - 1];
+            let folderId = parts[parts.length - 2];
+            const baseName = fileName.replace('.png', '');
+
+            if (baseName === 'all') {
+                this.blockTextures[folderId] = module.default || module;
+            } else {
+                // Map top.png to folderId_top etc.
+                this.blockTextures[`${folderId}_${baseName}`] = module.default || module;
+            }
         }
 
         
         this.availableIconIds = new Set([
-            'arlo',
+            'anton',
             'data_drill',
             'decoder_wand',
             'dirt',
@@ -69,21 +81,8 @@ export class HUD {
             ice: 'water',
             cloud_block: 'water',
             lava: 'water',
-            apple: 'grass',
-            tomato: 'grass',
-            carrot: 'grass',
-            potato: 'dirt',
-            corn: 'grass',
-            blueberry: 'grass',
-            strawberry: 'grass',
-            melon_slice: 'grass',
-            pumpkin_pie: 'dirt',
-            bread: 'dirt',
-            steak: 'dirt',
+            blueberry: 'sweet_berries',
             cooked_fish: 'water',
-            mushroom_brown: 'dirt',
-            honey_bottle: 'grass',
-            cookie: 'dirt',
             byte_axe: 'power_blade',
             echo_dagger: 'glitch_saber',
             arc_spear: 'sledge_iron',
@@ -121,7 +120,9 @@ export class HUD {
         this.generateHotbar();
         this.updateHotbarSelection(this.gameState.selectedSlot);
         this.renderSelectedItem();
-        this.setFace('happy');
+        this.loadSkinFace();
+        this.initTabSystem();
+        this.initVersionSelector();
 
         window.addEventListener('inventory-toggle', (event) => this.toggleInventoryUI(Boolean(event.detail)));
         window.addEventListener('mode-changed', (event) => {
@@ -154,6 +155,23 @@ export class HUD {
         window.addEventListener('action-success', () => this.flashPrompt('SYNC SUCCESS', '#b7ff83'));
         window.addEventListener('action-fail', () => this.flashPrompt('SYNC FAILED', '#ff8585'));
         window.addEventListener('mining-progress', (event) => this.updateMiningProgress(event.detail));
+        
+        // --- Discovery Listeners ---
+        window.addEventListener('discovery-block', (e) => {
+            this.game?.notifications?.show('NEW DISCOVERY', e.detail.id.split('_').join(' ').toUpperCase(), 'block');
+            this.renderBlocklog();
+        });
+        window.addEventListener('discovery-recipe', (e) => {
+            const recipe = RECIPE_BOOK.find(r => r.id === e.detail.id);
+            this.game?.notifications?.show('RECIPE UNLOCKED', (recipe?.name || e.detail.id).toUpperCase(), 'recipe');
+            this.renderRecipes();
+        });
+        window.addEventListener('achievement-unlocked', (e) => {
+            const ach = ACHIEVEMENTS.find(a => a.id === e.detail.id);
+            this.game?.notifications?.show('ACHIEVEMENT UNLOCKED', (ach?.name || e.detail.id).toUpperCase(), 'medal');
+            this.renderMedals();
+        });
+        window.addEventListener('check-recipes', () => this.checkRecipeDiscovery());
 
         const closeButton = document.getElementById('btn-inventory-close');
         if (closeButton) {
@@ -169,14 +187,14 @@ export class HUD {
     }
 
     setFace(mood, reset = 0) {
-        const img = document.getElementById('arlo-face-image');
+        const img = document.getElementById('anton-face-image');
         if (!img) return;
 
         const faces = {
-            happy: 'faces/arlo_happy.png',
-            sad: 'faces/arlo_sad.png',
-            surprised: 'faces/arlo_surprised.png',
-            mad: 'faces/arlo_mad.png'
+            happy: 'faces/anton_happy.png',
+            sad: 'faces/anton_sad.png',
+            surprised: 'faces/anton_surprised.png',
+            mad: 'faces/anton_mad.png'
         };
 
         if (!img.dataset.faceFallbackBound) {
@@ -189,7 +207,12 @@ export class HUD {
         }
 
         img.dataset.faceFallbackApplied = '0';
-        img.src = this.resolveAsset(faces[mood] ?? faces.happy);
+        const faceUrl = this.resolveAsset(faces[mood] ?? faces.happy);
+        img.src = faceUrl;
+
+        // Sync with inventory preview
+        const previewImg = document.getElementById('anton-preview-img');
+        if (previewImg) previewImg.src = faceUrl;
 
         if (this.faceResetTimer) {
             clearTimeout(this.faceResetTimer);
@@ -199,6 +222,31 @@ export class HUD {
         if (reset > 0) {
             this.faceResetTimer = setTimeout(() => this.setFace('happy'), reset);
         }
+    }
+
+    loadSkinFace(username = null) {
+        const img = document.getElementById('anton-face-image');
+        if (!img) return;
+
+        const skinUrl = username
+            ? `https://minotar.net/skin/${username}`
+            : 'https://minotar.net/helm/MHF_Steve/128.png';
+
+        const skinImg = new Image();
+        skinImg.crossOrigin = 'anonymous';
+        skinImg.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 8;
+            canvas.height = 8;
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(skinImg, 8, 8, 8, 8, 0, 0, 8, 8);
+            img.src = canvas.toDataURL();
+        };
+        skinImg.onerror = () => {
+            if (skinUrl !== '/assets/steve.png') this.loadSkinFace(null);
+        };
+        skinImg.src = skinUrl;
     }
 
     createDragGhost() {
@@ -260,7 +308,7 @@ export class HUD {
         const biomeLabel = this.formatBiomeLabel(biome);
         const mode = this.gameState?.mode ?? 'SURVIVAL';
         const worldTime = this.getWorldTimeLabel(this.game?.timeOfDay ?? 0);
-        const seed = world?.seedString ?? 'arlocraft';
+        const seed = world?.seedString ?? 'antoncraft';
 
         el.textContent = [
             `XYZ: ${bx} / ${by} / ${bz}`,
@@ -278,6 +326,16 @@ export class HUD {
         if (biomePill) biomePill.textContent = biomeLabel.toUpperCase();
         const miniContext = document.getElementById('minimap-context');
         if (miniContext) miniContext.textContent = `Seed ${seed} | ${biomeLabel}`;
+
+        // Sync mini-stats in bag tab
+        const miniStats = document.getElementById('ni-stats-mini');
+        if (miniStats) {
+            miniStats.innerHTML = `
+                <div class="mini-stat">HP ${Math.ceil(this.gameState.hp)}/20</div>
+                <div class="mini-stat">MODE ${mode}</div>
+                <div class="mini-stat">${worldTime} | ${biomeLabel.toUpperCase()}</div>
+            `;
+        }
     }
 
     updateDragGhost() {
@@ -299,6 +357,7 @@ export class HUD {
         const ratio = Math.max(0, Math.min(1, detail?.ratio ?? 0));
         if (ratio <= 0 || detail?.done) {
             prompt.style.opacity = '0';
+            prompt.classList.remove('mining-active');
             return;
         }
 
@@ -306,6 +365,7 @@ export class HUD {
         prompt.textContent = `MINING ${pct}%`;
         prompt.style.color = '#ffd884';
         prompt.style.opacity = '1';
+        prompt.classList.add('mining-active');
     }
 
     toggleInventoryUI(isOpen) {
@@ -313,20 +373,171 @@ export class HUD {
         if (!overlay) return;
         overlay.style.display = isOpen ? 'flex' : 'none';
         if (isOpen) {
-            this.updateInventoryUI();
+            this.switchTab(this.activeTab);
             this.setFace('surprised', 900);
         } else {
             this.returnCarryToInventory();
         }
     }
 
+    initTabSystem() {
+        const tabs = document.querySelectorAll('.ni-inv-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabId = tab.dataset.tab;
+                this.switchTab(tabId);
+            });
+        });
+    }
+
+    switchTab(tabId) {
+        this.activeTab = tabId;
+        const tabs = document.querySelectorAll('.ni-inv-tab');
+        const panes = document.querySelectorAll('.ni-inv-pane');
+
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
+        panes.forEach(p => p.classList.toggle('active', p.id === `tab-${tabId}`));
+
+        if (tabId === 'pack') this.updateInventoryUI();
+        if (tabId === 'blocklog') this.renderBlocklog();
+        if (tabId === 'recipes') this.renderRecipes();
+        if (tabId === 'medals') this.renderMedals();
+    }
+
+    renderBlocklog() {
+        const grid = document.getElementById('blocklog-grid');
+        const countLabel = document.getElementById('blocklog-count');
+        if (!grid) return;
+
+        grid.innerHTML = '';
+        const discovered = this.gameState.discoveredBlocks;
+        
+        BLOCKDEX.forEach(entry => {
+            const isDiscovered = discovered.has(entry.id);
+            const item = document.createElement('div');
+            item.className = `ni-log-item ${isDiscovered ? '' : 'locked'}`;
+            item.title = isDiscovered ? `${entry.name} (#${entry.idNum})` : 'Unknown Block';
+            
+            if (isDiscovered) {
+                const icon = this.createItemElement({ id: entry.id, count: 1, kind: 'block' });
+                item.appendChild(icon);
+            }
+            grid.appendChild(item);
+        });
+
+        if (countLabel) {
+            countLabel.textContent = `${discovered.size}/${BLOCKDEX.length}`;
+        }
+    }
+
+    renderRecipes() {
+        const list = document.getElementById('recipe-list');
+        if (!list) return;
+
+        list.innerHTML = '';
+        const discovered = this.gameState.discoveredRecipes;
+
+        RECIPE_BOOK.forEach(recipe => {
+            const isDiscovered = discovered.has(recipe.id);
+            if (!isDiscovered) return; // Only show discovered recipes
+
+            const card = document.createElement('div');
+            card.className = 'ni-recipe-card';
+            
+            const resultIcon = this.createItemElement({ id: recipe.resultId, count: recipe.resultCount, kind: 'block' });
+            
+            card.innerHTML = `
+                <div class="ni-recipe-result"></div>
+                <div class="ni-recipe-info">
+                    <div class="ni-recipe-name">${recipe.name.toUpperCase()}</div>
+                    <div class="ni-recipe-desc" style="font-size: 0.7rem; color: var(--ni-text-muted);">${recipe.ingredients.map(i => i.id).join(', ')}</div>
+                </div>
+                <div class="ni-recipe-type" style="font-size: 0.6rem; color: var(--ni-blue); text-align: right;">${recipe.pattern ? 'CRAFT' : 'SHAPELESS'}</div>
+            `;
+            card.querySelector('.ni-recipe-result').appendChild(resultIcon);
+            list.appendChild(card);
+        });
+    }
+
+    renderMedals() {
+        const grid = document.getElementById('medals-grid');
+        if (!grid) return;
+
+        grid.innerHTML = '';
+        const unlocked = this.gameState.unlockedAchievements;
+
+        ACHIEVEMENTS.forEach(ach => {
+            const isUnlocked = unlocked.has(ach.id);
+            const item = document.createElement('div');
+            item.className = `ni-log-item ${isUnlocked ? '' : 'locked'}`;
+            item.title = isUnlocked ? `${ach.name}: ${ach.description}` : 'Locked Achievement';
+            item.style.borderRadius = '50%'; // Medals are round
+
+            if (isUnlocked) {
+                const icon = document.createElement('div');
+                icon.className = 'item-icon';
+                icon.style.fontSize = '1.5rem';
+                icon.textContent = '🏅';
+                item.appendChild(icon);
+                item.style.borderColor = 'var(--ni-blue)';
+                item.style.background = 'rgba(0, 195, 227, 0.1)';
+            }
+            grid.appendChild(item);
+        });
+    }
+
+    initVersionSelector() {
+        const dropdown = document.getElementById('ni-version-dropdown');
+        if (!dropdown || !this.game) return;
+
+        dropdown.innerHTML = '';
+        this.game.versions.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v.id;
+            opt.textContent = v.name;
+            if (v.id === this.game.currentVersionId) opt.selected = true;
+            dropdown.appendChild(opt);
+        });
+
+        dropdown.addEventListener('change', (e) => {
+            this.game.setGameVersion(e.target.value);
+        });
+    }
+
+    checkRecipeDiscovery() {
+        // Logic to check if any new recipes should be unlocked based on inventory
+        const inventoryIds = new Set(this.gameState.inventory.filter(i => i).map(i => i.id));
+        
+        RECIPE_BOOK.forEach(recipe => {
+            if (this.gameState.discoveredRecipes.has(recipe.id)) return;
+            
+            // Check if ingredients property exists (shapeless recipes)
+            if (recipe.ingredients && Array.isArray(recipe.ingredients)) {
+                const canMake = recipe.ingredients.every(ing => {
+                    const ingId = typeof ing === 'string' ? ing : ing.id;
+                    return this.gameState.discoveredBlocks.has(ingId);
+                });
+                if (canMake) {
+                    this.gameState.discoverRecipe(recipe.id);
+                }
+            } else if (recipe.type === 'shaped' && recipe.key) {
+                // For shaped: check if all unique keys are discovered
+                const keys = Object.values(recipe.key);
+                const canMake = keys.every(keyId => this.gameState.discoveredBlocks.has(keyId));
+                if (canMake) {
+                    this.gameState.discoverRecipe(recipe.id);
+                }
+            }
+        });
+    }
+
     updateInventoryUI() {
         this.checkCrafting();
-        const mainGrid = document.getElementById('main-inventory-grid');
-        const hotbarGrid = document.getElementById('hotbar-inventory-grid');
-        const craftingGrid = document.getElementById('crafting-grid-3x3');
-        const resultSlot = document.getElementById('crafting-result-slot');
-        const hint = document.getElementById('crafting-hint');
+        const mainGrid = document.getElementById('inventory-grid');
+        const hotbarGrid = document.getElementById('hotbar-grid');
+        const craftingGrid = document.getElementById('crafting-grid');
+        const resultSlot = document.getElementById('crafting-result');
+        const hint = document.getElementById('inventory-hint');
         if (!mainGrid || !hotbarGrid || !craftingGrid || !resultSlot) return;
 
         mainGrid.innerHTML = '';
@@ -339,8 +550,10 @@ export class HUD {
             hotbarGrid.appendChild(this.createSlot(i, 'inventory'));
         }
 
+        // Player inventory crafting is 2x2 — map these to a 3x3 square [0,1,3,4]
         craftingGrid.innerHTML = '';
-        for (let i = 0; i < 9; i++) {
+        const inventoryCraftingIndices = [0, 1, 3, 4];
+        for (const i of inventoryCraftingIndices) {
             craftingGrid.appendChild(this.createSlot(i, 'crafting'));
         }
 
@@ -350,7 +563,7 @@ export class HUD {
             resultSlot.title = this.currentCraftingMatch?.recipeName ?? 'Crafted item';
             if (hint) hint.textContent = `Recipe: ${this.currentCraftingMatch?.recipeName ?? 'Unknown'}`;
         } else if (hint) {
-            hint.textContent = 'Drag items into the 3x3 grid to discover recipes.';
+            hint.textContent = 'Use a Crafting Table [right-click] for 3x3 recipes.';
         }
         resultSlot.onclick = () => this.handleResultClick();
         this.updateDragGhost();
@@ -728,8 +941,6 @@ export class HUD {
                 || this.getGeneratedIconPath(normalizedId);
         }
 
-        const alias = this.resolveIconAlias(normalizedId) || normalizedId;
-        
         const toolMap = {
             // Picks / drills
             pick_wood:      'wooden_pickaxe',
@@ -777,7 +988,9 @@ export class HUD {
             mushroom_brown: 'brown_mushroom',
             mushroom_red:   'red_mushroom',
         };
-        const mcId = toolMap[alias] || alias;
+        const directToolTexture = toolMap[normalizedId];
+        const alias = directToolTexture ? normalizedId : (this.resolveIconAlias(normalizedId) || normalizedId);
+        const mcId = directToolTexture || toolMap[alias] || alias;
 
         if (this.itemTextures && this.itemTextures[mcId]) return this.itemTextures[mcId];
         if (this.blockTextures && this.blockTextures[mcId]) return this.blockTextures[mcId];
@@ -888,7 +1101,7 @@ export class HUD {
             pick_wood: '#ffcf8d',
             magnet_glove: '#ffd28f',
             virus: '#d08bff',
-            arlo: '#ffb0d7'
+            anton: '#ffb0d7'
         };
         if (palette[alias]) return palette[alias];
 
@@ -1031,7 +1244,8 @@ export class HUD {
         const maxHp = Math.max(1, this.gameState?.maxHp ?? 20);
         const hp = Math.max(0, Math.min(maxHp, Number(value) || 0));
         const ratio = hp / maxHp;
-        container.innerHTML = `<span class="bar-label">HP</span><div class="hud-meter"><div class="hud-meter-fill hp-fill" style="width:${(ratio * 100).toFixed(1)}%"></div></div><span class="bar-value">${Math.round(hp)}/${maxHp}</span>`;
+        
+        container.innerHTML = `<span class="bar-label">HP</span><div class="hud-meter"><div class="hud-meter-fill hp-fill ${hp <= 4 ? 'hp-critical' : ''}" style="width:${(ratio * 100).toFixed(1)}%"></div></div><span class="bar-value">${Math.round(hp)}/${maxHp}</span>`;
     }
 
     updateFood(value) {

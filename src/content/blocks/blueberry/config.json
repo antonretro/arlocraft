@@ -5,5 +5,6 @@
     "foodVal":  1,
     "color":  "0x3f51b5",
     "deco":  true,
-    "textureId": "sweet_berry_bush_stage3"
+    "textureId": "blueberry",
+    "aliases": ["blueberry"]
 }

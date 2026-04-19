@@ -64,7 +64,9 @@ export class BlockRulesService {
     }
 
     isReplaceableForPlacement(id) {
-        return !id || id === 'water' || id === 'air' || id === 'virus';
+        if (!id || id === 'water' || id === 'air' || id === 'virus') return true;
+        const data = this.getBlockData(normalizeBlockVariantId(id));
+        return Boolean(data?.deco);
     }
 
     isGravityBlock(id) {
@@ -105,6 +107,11 @@ export class BlockRulesService {
     }
 
     getBlockPickId(id) {
+        if (id === 'potato') return 'potato_stage3';
+        if (id === 'carrot') return 'carrot_stage3';
+        if (id === 'beetroot') return 'beetroot_stage3';
+        if (id === 'wheat') return 'wheat_stage7';
+        
         const normalizedId = normalizeBlockVariantId(id);
         const data = this.getBlockData(normalizedId);
         return data?.pickId || normalizedId;

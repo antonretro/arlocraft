@@ -134,14 +134,14 @@ export const BIOMES = [
         id: 'tundra',
         name: 'Tundra',
         surfaceBlock: 'snow_block',
-        fillerBlock: 'dirt',
+        fillerBlock: 'snow_block',
         mcDepth: 3,
         mcScale: 0.12,
         ridgeStrength: 0.2,
         detailStrength: 0.58,
         waterLevelOffset: -1,
         treeDensity: 0.02,
-        color: 0x80b497,
+        color: 0xffffff,
         waterColor: 0x3d57d6
     },
     {

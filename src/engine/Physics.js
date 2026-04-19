@@ -177,7 +177,9 @@ export class Physics {
     }
 
     isGrounded() {
-        return this.position.y <= (this.getGroundYAt(this.position.x, this.position.z, this.position.y) + 0.03);
+        const groundY = this.getGroundYAt(this.position.x, this.position.z, this.position.y);
+        // Loosen epsilon from 0.06 to 0.14 for much more reliable jumping on steps/slabs
+        return this.position.y <= groundY + 0.14;
     }
 
     resolveHorizontalCollisions() {
@@ -377,14 +379,14 @@ export class Physics {
         }
 
         // Ctrl+W also starts sprint
-        if (ctrlPressed && wPressed && !this.isCrouching) this.isSprinting = true;
+        // (Removing Ctrl speedup as requested)
 
         // Sprint cancels on: stop forward movement, crouch, enter water, hit a wall
         if (!wPressed || this.isCrouching || inWater) this.isSprinting = false;
 
         const sprinting = this.mode === 'SURVIVAL' && this.isSprinting;
         const speed = this.mode === 'CREATIVE'
-            ? (ctrlPressed ? this.creativeSpeed * 2.2 : this.creativeSpeed)
+            ? this.creativeSpeed
             : (this.isCrouching ? this.crouchSpeed : (sprinting ? this.sprintSpeed : this.walkSpeed));
 
         let inputX = 0;
@@ -568,7 +570,7 @@ export class Physics {
             // --- FINAL SAFETY GUARD ---
             // If position becomes invalid (NaN/Infinity), rescue immediately to last safe spot.
             if (!Number.isFinite(this.position.x) || !Number.isFinite(this.position.y) || !Number.isFinite(this.position.z)) {
-                console.warn('[ArloCraft] Physics NaN detected! Rescuing player...');
+                console.warn('[AntonCraft] Physics NaN detected! Rescuing player...');
                 this.position.copy(this.lastSafePosition);
                 this.velocity.set(0, 0, 0);
             }

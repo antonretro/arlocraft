@@ -1,8 +1,1 @@
-{
-    "name":  "Carrot Stage 3",
-    "hardness":  0,
-    "xp":  0,
-    "deco":  true,
-    "transparent":  true,
-    "id":  "carrot_stage3"
-}
+﻿{"name":"Carrot","hardness":0,"xp":0,"deco":true,"transparent":true,"textureId":"carrots_stage3","id":"carrot_stage3"}

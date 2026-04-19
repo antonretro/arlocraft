@@ -47,7 +47,7 @@ export class HelpPanel {
         }
         if (persist) {
             try {
-                window.localStorage.setItem('arlocraft_help_collapsed', this.collapsed ? '1' : '0');
+                window.localStorage.setItem('antoncraft_help_collapsed', this.collapsed ? '1' : '0');
             } catch {}
         }
     }
@@ -58,7 +58,7 @@ export class HelpPanel {
 
     restoreCollapsedPreference() {
         try {
-            const value = window.localStorage.getItem('arlocraft_help_collapsed');
+            const value = window.localStorage.getItem('antoncraft_help_collapsed');
             if (value === '1') this.setCollapsed(true, false);
             else if (value === '0') this.setCollapsed(false, false);
         } catch {}

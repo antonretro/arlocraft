@@ -7,9 +7,11 @@ const GROUND_LIFE_IDS = [
     'fern', 'dandelion', 'poppy', 'red_tulip', 'orange_tulip', 'pink_tulip',
     'white_tulip', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'allium',
     'blueberry', 'strawberry', 'mushroom_brown', 'mushroom_red',
-    'lilac', 'peony', 'rose_bush', 'tomato', 'carrot', 'potato', 'corn',
+    'lilac', 'peony', 'rose_bush', 'tomato', 'carrot', 'potato', 'beetroot', 'wheat', 'corn',
     'dead_bush', 'sea_pickle', 'kelp', 'tube_coral_block', 'brain_coral_block',
 ];
+
+const VIRTUAL_ID_SKIP = ['potato', 'carrot', 'beetroot', 'wheat'];
 
 const TREE_IDS = [
     'oak_log', 'oak_leaves', 'birch_log', 'birch_leaves',
@@ -19,7 +21,7 @@ const TREE_IDS = [
 ];
 
 const TERRAIN_IDS = [
-    'grass_block', 'dirt', 'stone', 'sand', 'gravel', 'snow', 'ice',
+    'grass_block', 'dirt', 'stone', 'sand', 'gravel', 'snow_block', 'ice',
     'sandstone', 'red_sand', 'terracotta', 'water', 'bedrock',
     'deepslate', 'cobbled_deepslate', 'tuff', 'calcite', 'andesite',
     'diorite', 'granite', 'coal', 'iron', 'gold', 'lapis_ore',
@@ -77,7 +79,7 @@ export function validateBlocks() {
     const pairWarnings = [];
 
     const check = (id, context) => {
-        if (!id) return;
+        if (!id || VIRTUAL_ID_SKIP.includes(id)) return;
         const block = blockDataById.get(id);
         if (!block) {
             missing.push(`[${context}] "${id}" - no config found`);
@@ -85,6 +87,7 @@ export function validateBlocks() {
     };
 
     const checkDeco = (id, context) => {
+        if (VIRTUAL_ID_SKIP.includes(id)) return;
         const block = blockDataById.get(id);
         if (block && !block.deco) {
             missingDeco.push(`[${context}] "${id}" has config but deco:true missing - will render as a solid block`);
@@ -101,12 +104,12 @@ export function validateBlocks() {
     validatePairLinks(pairWarnings);
 
     if (missing.length || missingDeco.length || pairWarnings.length) {
-        console.group('%c[ArloCraft] Block Validation Warnings', 'color: orange; font-weight: bold');
+        console.group('%c[AntonCraft] Block Validation Warnings', 'color: orange; font-weight: bold');
         for (const warning of missing) console.warn(warning);
         for (const warning of missingDeco) console.warn(warning);
         for (const warning of pairWarnings) console.warn(warning);
         console.groupEnd();
     } else {
-        console.log('%c[ArloCraft] Block validation passed - all IDs and pair links resolved', 'color: #4caf50');
+        console.log('%c[AntonCraft] Block validation passed - all IDs and pair links resolved', 'color: #4caf50');
     }
 }

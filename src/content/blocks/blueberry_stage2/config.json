@@ -1,8 +1,1 @@
-{
-    "name":  "Blueberry Stage 2",
-    "hardness":  0,
-    "xp":  0,
-    "deco":  true,
-    "transparent":  true,
-    "id":  "blueberry_stage2"
-}
+﻿{"name":"Blueberry","hardness":0,"xp":0,"deco":true,"transparent":true,"textureId":"sweet_berry_bush_stage2","id":"blueberry_stage2"}

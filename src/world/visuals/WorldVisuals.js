@@ -87,6 +87,16 @@ export class WorldVisuals {
                 merged.setIndex([...idx1, ...idx2]);
                 return withWhiteVertexColors(merged);
             })(),
+            decoLOD: (() => {
+                const geo = new THREE.PlaneGeometry(1, 1);
+                geo.translate(0, 0, 0);
+                return withWhiteVertexColors(geo);
+            })(),
+            tallDecoLOD: (() => {
+                const geo = new THREE.PlaneGeometry(1, 2);
+                geo.translate(0, 0.5, 0);
+                return withWhiteVertexColors(geo);
+            })(),
             stair: (() => {
                 const base = new THREE.BoxGeometry(1, 0.5, 1);
                 base.translate(0, -0.25, 0);
@@ -187,12 +197,11 @@ export class WorldVisuals {
             crackGeo,
             new THREE.MeshBasicMaterial({
                 transparent: true,
-                alphaTest: 0.1,
-                side: THREE.FrontSide,
+                opacity: 0,
                 depthWrite: false,
                 polygonOffset: true,
-                polygonOffsetFactor: -1,
-                polygonOffsetUnits: -1
+                polygonOffsetFactor: -1.5,
+                polygonOffsetUnits: -1.5
             })
         );
         mesh.visible = false;

@@ -4,10 +4,8 @@ import { normalizeBlockVariantId } from '../data/blockIds.js';
 
 const textureModules = import.meta.glob([
     '../content/blocks/*/*.png', 
-    '../Igneous 1.19.4/assets/minecraft/textures/block/*.png'
+    '../Igneous*/**/*.png'
 ], { eager: true, query: '?url' });
-
-
 
 export class BlockRegistry {
     constructor() {
@@ -18,6 +16,7 @@ export class BlockRegistry {
         this.atlasTileCache = new Map();
         this.pixelTextures = new Map();
         this.breakingTextures = [];
+        this.breakingMaterialCache = [];
         this.animatedGif = null;
         this.idAliases = {
             'wood': 'oak_log',
@@ -36,22 +35,40 @@ export class BlockRegistry {
             'leaves_willow': 'mangrove_leaves',
             'tall_grass': 'tall_grass_bottom',
             'mushroom_red': 'red_mushroom',
-            'mushroom_brown': 'brown_mushroom'
+            'berry_bush': 'sweet_berry_bush',
+            'short_grass': 'grass',
+            'nuke': 'nuke'
         };
+        this.missingTexture = this.createMissingTexture();
         this.init();
+    }
+
+    createMissingTexture() {
+        const size = 16;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        // Magenta/Black Checkerboard (The standard "Missing Texture" tell)
+        ctx.fillStyle = '#ff00ff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, size/2, size/2);
+        ctx.fillRect(size/2, size/2, size/2, size/2);
+        
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.magFilter = THREE.NearestFilter;
+        tex.minFilter = THREE.NearestFilter;
+        return tex;
     }
 
     init() {
         this.blockTextures = new Map();
         const igneousOwnedBlocks = new Set();
         
-        // Sort: Igneous loads first (base), content folder loads last (wins over Igneous).
-        // This ensures custom per-block textures in content/blocks/ override animated
-        // Igneous sprite sheets that would otherwise display squished/tiled.
         const entries = Object.entries(textureModules).sort((a, b) => {
             const aIsIgneous = a[0].includes('Igneous');
             const bIsIgneous = b[0].includes('Igneous');
-            // Igneous assets (the pack) should come FIRST so that custom blocks in /content/ override them
             if (aIsIgneous && !bIsIgneous) return -1;
             if (!aIsIgneous && bIsIgneous) return 1;
             return 0;
@@ -62,36 +79,47 @@ export class BlockRegistry {
             let blockId = segments[segments.length - 2];
             let fileName = segments[segments.length - 1];
             const isIgneous = path.includes('Igneous');
-
-            if (blockId === 'block') { // Igneous texture pack handling
-                const baseName = fileName.replace('.png', '');
+            const baseName = fileName.replace('.png', '');
+            
+            if (baseName.startsWith('destroy_stage_')) {
+                const stage = parseInt(baseName.replace('destroy_stage_', ''));
+                const url = module.default || module;
+                this.breakingTextures[stage] = url;
                 
-                // Breaking stage textures
-                if (baseName.startsWith('destroy_stage_')) {
-                    const stage = parseInt(baseName.replace('destroy_stage_', ''));
-                    this.breakingTextures[stage] = module.default || module;
-                    continue;
-                }
-
-                // Igneous tall foliage handling: keep _top and _bottom suffixes for distinct IDs
-                const isTallFoliage = /tall_grass|sunflower|rose_bush|lilac|peony/.test(baseName);
+                const tex = this.textureLoader.load(url);
+                tex.magFilter = THREE.NearestFilter;
+                tex.minFilter = THREE.NearestFilter;
                 
-                if (baseName.endsWith('_top') && !isTallFoliage) {
-                    blockId = baseName.substring(0, baseName.length - 4);
-                    fileName = 'top.png';
-                } else if (baseName.endsWith('_side') && !isTallFoliage) {
-                    blockId = baseName.substring(0, baseName.length - 5);
-                    fileName = 'side.png';
-                } else if (baseName.endsWith('_bottom') && !isTallFoliage) {
-                    blockId = baseName.substring(0, baseName.length - 7);
-                    fileName = 'bottom.png';
-                } else if (baseName.endsWith('_front') && !isTallFoliage) {
-                    blockId = baseName.substring(0, baseName.length - 6);
-                    fileName = 'front.png';
-                } else {
-                    blockId = baseName;
-                    fileName = 'all.png';
-                }
+                this.breakingMaterialCache[stage] = new THREE.MeshBasicMaterial({
+                    map: tex,
+                    transparent: true,
+                    blending: THREE.MultiplyBlending,
+                    side: THREE.FrontSide,
+                    depthWrite: false,
+                    polygonOffset: true,
+                    polygonOffsetFactor: -1.5,
+                    polygonOffsetUnits: -1.5
+                });
+                continue;
+            }
+
+            const isTallFoliage = /tall_grass|sunflower|rose_bush|lilac|peony/.test(baseName);
+            
+            if (baseName.endsWith('_top') && !isTallFoliage) {
+                blockId = baseName.substring(0, baseName.length - 4);
+                fileName = 'top.png';
+            } else if (baseName.endsWith('_side') && !isTallFoliage) {
+                blockId = baseName.substring(0, baseName.length - 5);
+                fileName = 'side.png';
+            } else if (baseName.endsWith('_bottom') && !isTallFoliage) {
+                blockId = baseName.substring(0, baseName.length - 7);
+                fileName = 'bottom.png';
+            } else if (baseName.endsWith('_front') && !isTallFoliage) {
+                blockId = baseName.substring(0, baseName.length - 6);
+                fileName = 'front.png';
+            } else {
+                blockId = baseName;
+                fileName = 'all.png';
             }
 
             if (isIgneous) {
@@ -112,7 +140,7 @@ export class BlockRegistry {
 
     async loadStunningExpansion() {
         const paths = {
-            arlo: 'arlo_real.png'
+            anton: 'anton_real.png'
         };
 
         const loadOne = (id, path) => {
@@ -159,6 +187,49 @@ export class BlockRegistry {
         }
     }
 
+    injectWindShader(material, options = {}) {
+        if (!material) return;
+        if (Array.isArray(material)) {
+            for (const entry of material) this.injectWindShader(entry, options);
+            return;
+        }
+        if (material.userData?.windInjected) return;
+        material.userData.windInjected = true;
+
+        const speed = options.speed || 1.15;
+        const scale = options.scale || 0.12;
+        const frequency = options.frequency || 2.5;
+
+        material.onBeforeCompile = (shader) => {
+            shader.uniforms.uTime = { value: 0 };
+            shader.uniforms.uWindParams = { value: new THREE.Vector3(speed, scale, frequency) };
+
+            shader.vertexShader = shader.vertexShader
+                .replace(
+                    '#include <common>',
+                    `#include <common>
+                    uniform float uTime;
+                    uniform vec3 uWindParams;`
+                )
+                .replace(
+                    '#include <begin_vertex>',
+                    `
+                    #include <begin_vertex>
+                    // Wind swaying logic
+                    float t = uTime * uWindParams.x;
+                    // Factor top-heaviness: displace more as Y increases
+                    float factor = max(0.0, transformed.y + 0.5); 
+                    float swayX = sin(t + (position.x + position.z) * uWindParams.z) * uWindParams.y * factor;
+                    float swayZ = cos(t * 0.8 + (position.x - position.z) * uWindParams.z) * uWindParams.y * factor;
+                    transformed.x += swayX;
+                    transformed.z += swayZ;
+                    `
+                );
+            material.userData.shader = shader;
+        };
+        material.needsUpdate = true;
+    }
+
     enhanceFaceShading(material, options = {}) {
         if (!material) return;
         if (Array.isArray(material)) {
@@ -203,7 +274,8 @@ uniform float uFaceAoEdgeWidth;`
                     `#include <map_fragment>
 float faceAoEdgeDist = min(min(vFaceAoUv.x, 1.0 - vFaceAoUv.x), min(vFaceAoUv.y, 1.0 - vFaceAoUv.y));
 float faceAoMask = 1.0 - smoothstep(0.0, uFaceAoEdgeWidth, faceAoEdgeDist);
-float faceAoCorner = pow(faceAoMask, 1.35);
+// Refined curve: sharper corners, smoother falloff for a more 'baked' look
+float faceAoCorner = pow(faceAoMask, 1.6);
 diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
                 );
         };
@@ -221,8 +293,6 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         }
         const alphaCutout = Number(material.alphaTest) > 0.001 || Boolean(material.userData?.alphaCutout);
         if (alphaCutout) {
-            // Cutout foliage should render in the opaque queue with alpha testing.
-            // That keeps thin sprites stable and avoids transparent-object sorting bugs.
             material.transparent = false;
             material.opacity = 1;
             material.alphaToCoverage = false;
@@ -242,17 +312,9 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         texture.minFilter = THREE.NearestFilter;
         texture.colorSpace = THREE.SRGBColorSpace;
         
-        // SURGICAL FIX: Handle Igneous animated strips (like sea_lantern.png)
-        // If the texture is a vertical strip, we only show the first frame to prevent 'squishing'.
         if (src.includes('sea_lantern')) {
             texture.wrapS = THREE.ClampToEdgeWrapping;
-            texture.wrapT = THREE.RepeatWrapping; // Use repeat for the strip but set repeat.y to a slice
-            
-            // Note: Since load is async, we set up a callback or just set immediate safe repeats
-            // For Sea Lantern in Igneous, it's usually 5 or more frames. 
-            // Setting repeat.y to 0.2 (1/5) is a safe bet for most animated Minecraft textures 
-            // to show at least one frame normally instead of squishing all of them.
-            // Better: We check if it's from Igneous and an animated block.
+            texture.wrapT = THREE.RepeatWrapping;
             if (src.includes('Igneous')) {
                 texture.repeat.set(1, 0.2); 
             }
@@ -321,17 +383,14 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     }
 
     getAtlasTileTexture(tileX, tileY) {
-        const columns = Math.max(1, BLOCK_TEXTURE_ATLAS.columns);
-        const rows = Math.max(1, BLOCK_TEXTURE_ATLAS.rows);
+        const columns = 16;
+        const rows = 16;
         const safeX = Math.max(0, Math.min(columns - 1, Number(tileX) || 0));
         const safeY = Math.max(0, Math.min(rows - 1, Number(tileY) || 0));
         const key = `${safeX}|${safeY}`;
         if (this.atlasTileCache.has(key)) return this.atlasTileCache.get(key);
 
-        // Load a fresh texture per tile (TextureLoader caches the underlying Image,
-        // so no duplicate network requests) - this guarantees each tile gets its own
-        // needsUpdate event when the image finishes loading, preventing black tiles.
-        const tile = this.textureLoader.load(BLOCK_TEXTURE_ATLAS.src);
+        const tile = this.textureLoader.load('atlas.png');
         tile.magFilter = THREE.NearestFilter;
         tile.minFilter = THREE.NearestFilter;
         tile.colorSpace = THREE.SRGBColorSpace;
@@ -356,13 +415,55 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     }
 
     createAtlasMaterial(id, config) {
-        return null; // Atlas logic deprecated in favor of folder-based textures
+        return null;
     }
 
     updateShaderMaterials(timeSeconds) {
-        const mat = this.materialCache.get('water');
-        if (!mat || !mat.uniforms?.uTime) return;
-        mat.uniforms.uTime.value = timeSeconds;
+        // Update all materials in cache that have shaders needing time
+        for (const material of this.materialCache.values()) {
+            if (Array.isArray(material)) {
+                for (const m of material) this._updateSingleMaterialTime(m, timeSeconds);
+            } else {
+                this._updateSingleMaterialTime(material, timeSeconds);
+            }
+        }
+    }
+
+    _updateSingleMaterialTime(material, time) {
+        if (!material) return;
+        
+        // Custom ShaderMaterials (like Water)
+        if (material.uniforms?.uTime) {
+            material.uniforms.uTime.value = time;
+        }
+        
+        // Standard materials with onBeforeCompile injections (like Wind)
+        if (material.userData?.shader?.uniforms?.uTime) {
+            material.userData.shader.uniforms.uTime.value = time;
+        }
+    }
+
+    getBreakingMaterial(stage = 0) {
+        const safeStage = Math.max(0, Math.min(9, Math.floor(Number(stage) || 0)));
+        if (this.breakingMaterialCache[safeStage]) return this.breakingMaterialCache[safeStage];
+
+        const url = this.breakingTextures[safeStage];
+        if (!url) return null;
+
+        const tex = this.loadTexture(url);
+        const material = new THREE.MeshBasicMaterial({
+            map: tex,
+            transparent: true,
+            blending: THREE.MultiplyBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            polygonOffset: true,
+            polygonOffsetFactor: -1.5,
+            polygonOffsetUnits: -1.5
+        });
+
+        this.breakingMaterialCache[safeStage] = material;
+        return material;
     }
 
     isCutoutBlockId(id, isDeco = false) {
@@ -384,7 +485,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         );
     }
 
-        getMaterial(id) {
+    getMaterial(id) {
         if (this.materialCache.has(id)) return this.materialCache.get(id);
         
         const alias = this.idAliases[id];
@@ -395,9 +496,69 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         }
         const normalizedId = normalizeBlockVariantId(id);
         let targetId = normalizedId || id;
+
+        // --- AURA ENGINE: FLUID OVERRIDES ---
+        if (targetId === 'water' || targetId === 'lava') {
+            const isLava = targetId === 'lava';
+            const fluidColor = isLava ? 0xff4500 : 0x3ea1ff;
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    uTime: { value: 0 },
+                    uWaterColor: { value: new THREE.Color(fluidColor) }
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    varying vec3 vWorldPos;
+                    uniform float uTime;
+                    void main() {
+                        vUv = uv;
+                        vec4 local = vec4(position, 1.0);
+                        #ifdef USE_INSTANCING
+                            local = instanceMatrix * local;
+                        #endif
+                        vec4 worldPos = modelMatrix * local;
+                        vWorldPos = worldPos.xyz;
+                        
+                        // Subtle height bobbing (sin waves)
+                        float h = sin(vWorldPos.x * 2.0 + uTime * 1.5) * 0.015 + cos(vWorldPos.z * 1.8 - uTime * 1.2) * 0.015;
+                        local.y += h;
+                        #ifdef USE_INSTANCING
+                            worldPos.y += h;
+                        #endif
+
+                        gl_Position = projectionMatrix * viewMatrix * worldPos;
+                    }
+                `,
+                fragmentShader: `
+                    uniform float uTime;
+                    uniform vec3 uWaterColor;
+                    varying vec2 vUv;
+                    varying vec3 vWorldPos;
+
+                    void main() {
+                        // Layered scrolling patterns for a 'shimmer' ripple effect
+                        float rippleA = sin((vWorldPos.x * 3.5) + (uTime * 1.8)) * 0.5 + 0.5;
+                        float rippleB = cos((vWorldPos.z * 4.2) - (uTime * 2.2)) * 0.5 + 0.5;
+                        float noise = (rippleA + rippleB) * 0.25;
+                        
+                        float highlight = smoothstep(0.65, 0.95, noise);
+                        vec3 color = mix(uWaterColor * 0.85, uWaterColor * 1.3, noise);
+                        color = mix(color, vec3(1.0), highlight * 0.35);
+
+                        gl_FragColor = vec4(color, ${isLava ? '1.0' : '0.8'});
+                    }
+                `,
+                transparent: !isLava,
+                side: THREE.DoubleSide,
+                depthWrite: isLava
+            });
+            material.userData.isWaterShader = true;
+            this.materialCache.set(id, material);
+            return material;
+        }
+
         const stairMatch = id.match(/(.*_stairs)(_[nswe])$/);
-        const slabMatch = id.match(/(.*_slab)(_[nswe])$/); // Slabs might have half-height positioning later
-        
+        const slabMatch = id.match(/(.*_slab)(_[nswe])$/);
         let strippedId = normalizedId || id;
         if (stairMatch) strippedId = stairMatch[1];
         else if (slabMatch) strippedId = slabMatch[1];
@@ -410,13 +571,9 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             if (!this.blockTextures.has(targetId)) targetId = strippedId.replace('_slab', '');
         }
 
-        // Feature: Split Grass Block support for separate tinting
         if (id === 'grass_block_top' || id === 'grass_block_sides') {
             const baseMat = this.getMaterial('grass_block');
-            if (id === 'grass_block_top') return baseMat[2]; // Index 2 is TOP
-            
-            // For sides, we MUST ensure the array has no tintable materials,
-            // otherwise InstancedMesh.setColorAt will tint the whole block.
+            if (id === 'grass_block_top') return baseMat[2];
             const sideMats = baseMat.map(m => {
                 if (m.userData?.tintable) {
                     const clone = m.clone();
@@ -437,15 +594,10 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         const load = (name) => {
             const url = textures[name];
             if (url) return this.loadTexture(url);
-            
-            // IGNEOUS FALLBACK: Check if filename exists without 'all.png' or 'bottom.png' etc
-            // Handle both {id}.png and {textureId}_{suffix}.png (e.g. tall_grass_bottom.png)
             const baseFallback = `${textureId}.png`;
             const suffixFallback = name !== 'all.png' ? `${textureId}_${name.replace('.png','')}.png` : baseFallback;
-            
             const fallbackUrl = textures[baseFallback] || textures[suffixFallback] || textures[name];
             if (fallbackUrl) return this.loadTexture(fallbackUrl);
-
             return null;
         };
 
@@ -453,16 +605,11 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         const sideTex = load('side.png') || allTex;
         const topTex = load('top.png') || allTex;
         const bottomTex = load('bottom.png') || allTex;
-        
-        // For decals/sprites in texture packs (like grass), they often only provide one of these fileName patterns.
-        // We define a decoTex fallback but ensure it doesn't override specific block sides like log bark.
         const decoTex = allTex || sideTex || bottomTex || topTex;
-        
         const frontTex = load('front.png') || sideTex || decoTex;
         const backTex = load('back.png') || sideTex || decoTex;
         const leftTex = load('left.png') || sideTex || decoTex;
         const rightTex = load('right.png') || sideTex || decoTex;
-        
         const finalTopTex = topTex || decoTex;
         const finalBottomTex = bottomTex || decoTex;
 
@@ -472,7 +619,6 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             material = this.createStarterChestMaterial();
         }
 
-        // Face order: px, nx, py, ny, pz, nz (Right, Left, Top, Bottom, Front, Back)
         if (!material && (topTex || bottomTex || sideTex || frontTex || backTex || leftTex || rightTex)) {
             const isDeco = Boolean(config.deco);
             const cutoutBlock = this.isCutoutBlockId(id, isDeco);
@@ -494,21 +640,18 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
                 new THREE.MeshLambertMaterial({ ...matConfig, map: frontTex }),
                 new THREE.MeshLambertMaterial({ ...matConfig, map: backTex })
             ];
+
             if (isCutout) {
-                for (const mat of mats) {
-                    mat.userData.alphaCutout = true;
-                }
+                for (const mat of mats) mat.userData.alphaCutout = true;
             }
             
             const isFoliage = (
                 (isDeco && (textureId === 'grass' || textureId.includes('grass') || textureId.includes('fern') || textureId === 'vine' || textureId === 'sugar_cane' || textureId.includes('roots') || textureId.includes('sprouts')))
                 || textureId.includes('leaves')
             );
-            // Grass top texture is already baked green in this pack; avoid instance tinting
-            // to prevent rare black-top failures from per-instance color paths.
             const isGrassTopOnly = id === 'grass_block' || id === 'grass';
             
-                        for (let i = 0; i < mats.length; i++) {
+            for (let i = 0; i < mats.length; i++) {
                 const m = mats[i];
                 if ((isGrassTopOnly && i === 2) || isFoliage) {
                     m.userData.tintable = true;
@@ -516,87 +659,51 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
                     m.userData.tintable = false;
                 }
             }
-            // If all sides are identical and no specific ones provided, use a single material
+
             if (!textures['top.png'] && !textures['bottom.png'] && !textures['side.png'] && 
                 !textures['front.png'] && !textures['back.png'] && !textures['left.png'] && !textures['right.png'] && allTex) {
                 material = mats[0];
             } else {
                 material = mats;
             }
+        } else if (!material) {
+            const isDeco = Boolean(config.deco);
+            const cutoutBlock = this.isCutoutBlockId(id, isDeco);
+            const isCutout = cutoutBlock;
+            const isTransparent = Boolean(config.transparent) && !isCutout;
+            material = new THREE.MeshLambertMaterial({
+                map: this.missingTexture,
+                color: config.color ? parseInt(config.color) : 0xffffff,
+                transparent: isTransparent,
+                opacity: isTransparent ? 0.82 : 1,
+                alphaTest: isCutout ? 0.08 : 0,
+                depthWrite: isCutout ? true : !isTransparent,
+                side: isDeco ? THREE.DoubleSide : THREE.FrontSide
+            });
+            if (isCutout) material.userData.alphaCutout = true;
+            console.warn(`[AntonCraft] Missing texture for block: ${id}. Using Magenta Fallback.`);
         }
 
-        if (!material) {
-
-            if (id === 'water') {
-                material = new THREE.ShaderMaterial({
-                    uniforms: {
-                        uTime: { value: 0 }
-                    },
-                    vertexShader: `
-                        varying vec2 vUv;
-                        varying vec3 vColor;
-                        void main() {
-                            vUv = uv;
-                            vColor = vec3(1.0);
-                            #ifdef USE_INSTANCING_COLOR
-                                vColor = instanceColor;
-                            #endif
-                            vec4 local = vec4(position, 1.0);
-                            #ifdef USE_INSTANCING
-                                local = instanceMatrix * local;
-                            #endif
-                            vec4 mvPosition = modelViewMatrix * local;
-                            gl_Position = projectionMatrix * mvPosition;
-                        }
-                    `,
-                    fragmentShader: `
-                        uniform float uTime;
-                        varying vec2 vUv;
-                        varying vec3 vColor;
-                        void main() {
-                            float waveA = sin((vUv.x * 18.0) + (uTime * 1.8)) * 0.08;
-                            float waveB = cos((vUv.y * 22.0) - (uTime * 1.4)) * 0.07;
-                            float wave = clamp((waveA + waveB) * 0.5 + 0.5, 0.0, 1.0);
-                            vec3 deep = vColor * 0.8;
-                            vec3 shallow = vColor * 1.2;
-                            vec3 color = mix(deep, shallow, wave);
-                            gl_FragColor = vec4(color, 0.82);
-                        }
-                    `,
-                    side: THREE.FrontSide
-                });
-                material.userData.tintable = true;
-                material.transparent = true;
-                material.opacity = 0.55; // Lower opacity to make 'walls' less prominent
-            } else {
-                const isDeco = Boolean(config.deco);
-                const cutoutBlock = this.isCutoutBlockId(id, isDeco);
-                const isCutout = cutoutBlock;
-                const isTransparent = Boolean(config.transparent) && !isCutout;
-                material = new THREE.MeshLambertMaterial({
-                    color: config.color ? parseInt(config.color) : 0x9c9c9c,
-                    transparent: isTransparent,
-                    opacity: isTransparent ? 0.82 : 1,
-                    alphaTest: isCutout ? 0.08 : 0,
-                    depthWrite: isCutout ? true : !isTransparent,
-                    side: isDeco ? THREE.DoubleSide : THREE.FrontSide
-                });
-                if (isCutout) material.userData.alphaCutout = true;
-            }
-
-            // Special handling for wool texture/grain
-            if (id.startsWith('wool_')) {
-                material.emissive = new THREE.Color(config.color ? parseInt(config.color) : 0x000000).multiplyScalar(0.08);
-            }
-
-            if (config.emissive) {
-                material.emissive = new THREE.Color(0x662100);
+        // Post-creation enhancements
+        if (material) {
+            const mats = Array.isArray(material) ? material : [material];
+            for (const m of mats) {
+                if (id.startsWith('wool_')) {
+                    m.emissive = new THREE.Color(config.color ? parseInt(config.color) : 0x000000).multiplyScalar(0.08);
+                }
+                if (config.emissive) {
+                    m.emissive = new THREE.Color(0x662100);
+                }
             }
         }
 
         const shouldEnhanceFaceShading = !config?.deco && id !== 'water' && id !== 'path_block' && id !== 'grass_block';
         if (shouldEnhanceFaceShading) {
             this.enhanceFaceShading(material);
+        }
+
+        if (id.includes('leaves') || (config?.deco && (textureId === 'grass' || textureId.includes('grass') || textureId.includes('fern') || textureId.includes('flower') || textureId.includes('sapling')))) {
+            this.injectWindShader(material);
         }
 
         this.configureTransparentMaterial(material);

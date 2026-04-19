@@ -132,7 +132,6 @@ export class Input {
 
         window.addEventListener('keyup', (event) => {
             delete this.keys[event.code];
-            delete this.justPressed[event.code];
         });
 
         document.addEventListener('mousemove', (event) => {

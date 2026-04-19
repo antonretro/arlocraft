@@ -2,11 +2,16 @@ import { BIOME_BY_ID } from '../../data/biomes.js';
 import { Noise } from '../Noise.js';
 import { NoiseRouter } from '../NoiseRouter.js';
 import { generateSettlementName } from '../naming/SettlementNameGenerator.js';
+import {
+    getContinentMask,
+    getRawTerrainHeight,
+    getColumnHeight as shapeColumnHeight
+} from './ContinentShaper.js';
 
 export class WorldTerrainService {
     constructor(world) {
         this.world = world;
-        this.seedString = 'arlocraft';
+        this.seedString = 'antoncraft';
         this.seed = 1;
         this.noise = null;
         this.router = null;
@@ -22,7 +27,7 @@ export class WorldTerrainService {
     }
 
     setSeed(seedValue) {
-        this.seedString = String(seedValue ?? 'arlocraft').trim() || 'arlocraft';
+        this.seedString = String(seedValue ?? 'antoncraft').trim() || 'antoncraft';
 
         const numeric = Number(this.seedString);
         if (Number.isFinite(numeric)) {
@@ -56,6 +61,11 @@ export class WorldTerrainService {
         return BIOME_BY_ID.get(id) ?? BIOME_BY_ID.get('plains');
     }
 
+    // ── Continent mask ──────────────────────────────────────────────────────
+    _getContinentMask(x, z) {
+        return getContinentMask(this.noise, x, z, this.seed);
+    }
+
     getTerrainHeight(x, z) {
         const gx = Math.round(x);
         const gz = Math.round(z);
@@ -63,24 +73,14 @@ export class WorldTerrainService {
         const cached = this.terrainHeightCache.get(key);
         if (cached !== undefined) return cached;
 
-        const routed = this.router.getTerrainHeight(gx, gz) - 63;
-        const height = Math.max(-64, Math.min(65, Math.round(routed)));
-
+        const clamped = getRawTerrainHeight(this.router, this.noise, gx, gz, this.seed);
         if (this.terrainHeightCache.size > 120000) this.terrainHeightCache.clear();
-        this.terrainHeightCache.set(key, height);
-        return height;
+        this.terrainHeightCache.set(key, clamped);
+        return clamped;
     }
 
     getColumnHeight(x, z) {
-        let h = this.getTerrainHeight(x, z);
-        const dist = Math.max(Math.abs(x), Math.abs(z));
-        if (dist <= 20) {
-            const flatHeight = this.world.seaLevel + 4;
-            const blend = Math.min(1, dist / 20);
-            h = Math.round(flatHeight + (h - flatHeight) * blend);
-            h = Math.max(h, this.world.seaLevel + 2);
-        }
-        return h;
+        return shapeColumnHeight(this.router, this.noise, x, z, this.seed);
     }
 
     isCorruptedAt(x, z) {
@@ -207,7 +207,7 @@ export class WorldTerrainService {
         return this.hash2D(x - 991, z + 417) > 0.9992;
     }
 
-    shouldPlaceArlo(x, z, height) {
+    shouldPlaceAnton(x, z, height) {
         if (!this.world.corruptionEnabled) return false;
         if (height < this.world.seaLevel + 1) return false;
         return this.hash2D(x + 613, z - 271) > 0.985;

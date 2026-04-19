@@ -1,8 +1,1 @@
-{
-    "name": "Wheat Stage 0",
-    "hardness": 0,
-    "xp": 0,
-    "deco": true,
-    "transparent": true,
-    "id": "wheat_stage0"
-}
+﻿{"name":"Wheat","hardness":0,"xp":0,"deco":true,"transparent":true,"textureId":"wheat_stage0","id":"wheat_stage0"}

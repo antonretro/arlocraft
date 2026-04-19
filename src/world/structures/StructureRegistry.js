@@ -36,6 +36,7 @@ import { village_manor } from './defs/village_manor.js';
 import { castle } from './defs/castle.js';
 import { ocean_ruins } from './defs/ocean_ruins.js';
 import { sunken_ship } from './defs/sunken_ship.js';
+import { village_farm } from './defs/village_farm.js';
 
 export const STRUCTURES = {
     ruined_tower,
@@ -71,5 +72,6 @@ export const STRUCTURES = {
     village_manor,
     castle,
     ocean_ruins,
-    sunken_ship
+    sunken_ship,
+    village_farm
 };

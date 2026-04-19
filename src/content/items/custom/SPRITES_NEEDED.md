@@ -1,6 +1,6 @@
 # Custom Item Sprites Needed
 
-These items are ArloCraft originals with no Minecraft equivalent.
+These items are AntonCraft originals with no Minecraft equivalent.
 Each needs a 16×16 or 32×32 PNG sprite placed in its folder as the filename listed below.
 
 | Item           | File               | Type    | Notes                              |

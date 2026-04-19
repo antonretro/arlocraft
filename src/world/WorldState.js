@@ -28,6 +28,6 @@ export class WorldState {
         this.gifTick = 0;
         this.auraSampleTick = 0;
         
-        this.areaInfluenceSample = { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+        this.areaInfluenceSample = { x: 0, y: 0, z: 0, virus: 0, anton: 0 };
     }
 }

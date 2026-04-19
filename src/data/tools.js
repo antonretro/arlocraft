@@ -1,4 +1,5 @@
 import { TOOLS as BASE_TOOLS } from '../content/items/base.js';
+import { BUCKETS } from '../content/items/buckets.js';
 
 const packModules = import.meta.glob('../content/items/packs/*.js', { eager: true });
 
@@ -56,6 +57,11 @@ function mergeTools() {
     const merged = new Map();
 
     for (const entry of BASE_TOOLS) {
+        const tool = normalizeTool(entry);
+        if (tool) merged.set(tool.id, tool);
+    }
+
+    for (const entry of BUCKETS) {
         const tool = normalizeTool(entry);
         if (tool) merged.set(tool.id, tool);
     }

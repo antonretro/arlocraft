@@ -2,9 +2,10 @@ export class WorldConfig {
     constructor() {
         this.chunkSize = 12;
         this.renderDistance = {
-            min: 2,
+            min: 1,
             max: 6,
-            default: 2
+            default: 2,
+            vertical: 2 // Number of cubes up/down to load
         };
         this.terrain = {
             minY: -64,

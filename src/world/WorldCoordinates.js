@@ -34,8 +34,8 @@ export class WorldCoordinates {
         return Math.floor(val / this.chunkSize);
     }
 
-    getChunkKey(cx, cz) {
-        return `${cx}|${cz}`;
+    getChunkKey(cx, cy, cz) {
+        return `${cx}|${cy}|${cz}`;
     }
 
     pointToBlockCoord(x, y, z) {

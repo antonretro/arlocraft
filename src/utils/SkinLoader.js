@@ -29,7 +29,7 @@ export class SkinLoader {
             }, undefined, (err) => {
                 // Absolute fallback to Igneous Steve on any error
                 if (url !== this.defaultSteve) {
-                    console.warn(`[ArloCraft] Failed to load skin for ${username}, falling back to Igneous Steve.`);
+                    console.warn(`[AntonCraft] Failed to load skin for ${username}, falling back to Igneous Steve.`);
                     this.loadSkin('Steve').then(resolve).catch(reject);
                 } else {
                     reject(err);

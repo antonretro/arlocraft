@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 
+const blockTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/block/*.png', { eager: true, query: '?url' });
+const contentBlockAllModules = import.meta.glob('../content/blocks/*/all.png', { eager: true, query: '?url' });
+
 /**
  * ExplosionSystem — manages all particle/debris effects for explosions and block breaking.
  *
@@ -24,6 +27,34 @@ export class ExplosionSystem {
         // Pickup magnet effects
         this.pickupEffects = [];
         this.pickupGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+
+        this.blockTextures = {};
+        for (const [path, module] of Object.entries(blockTextureModules)) {
+            const fileName = path.split('/').pop().replace('.png', '');
+            this.blockTextures[fileName] = module.default || module;
+        }
+        for (const [path, module] of Object.entries(contentBlockAllModules)) {
+            const parts = path.split('/');
+            const folderId = parts[parts.length - 2];
+            this.blockTextures[folderId] = module.default || module;
+        }
+
+        this.textureLoader = new THREE.TextureLoader();
+        this.textureCache = new Map();
+    }
+
+    getTexture(id) {
+        if (this.textureCache.has(id)) return this.textureCache.get(id);
+        
+        const path = this.blockTextures[id] || this.blockTextures[id.replace('_block', '')];
+        if (path) {
+            const tex = this.textureLoader.load(path);
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            this.textureCache.set(id, tex);
+            return tex;
+        }
+        return null;
     }
 
     // ─── Block Color Palette ──────────────────────────────────────────
@@ -50,7 +81,7 @@ export class ExplosionSystem {
             uranium: 0x7dff5d,
             platinum: 0xd8e8f8,
             mythril: 0x62f1ff,
-            arlo: 0xffaac9,
+            anton: 0xffaac9,
             obsidian: 0x3b3054
         };
         return palette[id] ?? 0xb8c0ca;
@@ -59,6 +90,7 @@ export class ExplosionSystem {
     // ─── Explosion ────────────────────────────────────────────────────
 
     explode(x, y, z, radius) {
+        const isNuke = radius > 10;
         const rSq = radius * radius;
         const blocksToRemove = [];
 
@@ -98,23 +130,36 @@ export class ExplosionSystem {
             const dir = new THREE.Vector3().subVectors(playerPos, new THREE.Vector3(x, y, z)).normalize();
             const falloff = 1 - Math.min(1, distToPlayer / (radius * 1.8));
             const force = falloff * radius * 1.5;
-            this.world.game.physics.applyKnockback(dir, force, force * 0.4);
-            this.world.game.screenShake = Math.max(this.world.game.screenShake, falloff * (radius / 5));
+            const shakeScale = isNuke ? 2.5 : 1.0;
+            this.world.game.physics.applyKnockback(dir, force * (isNuke ? 2 : 1), force * 0.4);
+            this.world.game.screenShake = Math.max(this.world.game.screenShake, falloff * (radius / (isNuke ? 2 : 5)) * shakeScale);
             if (distToPlayer < radius) {
-                this.world.game.gameState.takeDamage(Math.floor(falloff * radius * 4));
+                this.world.game.gameState.takeDamage(Math.floor(falloff * radius * (isNuke ? 10 : 4)));
             }
         }
 
         // Visual prompt
-        const type = radius > 10 ? 'NUCLEAR DETONATION' : 'TNT EXPLOSION';
+        const type = isNuke ? 'NUCLEAR DETONATION' : 'TNT EXPLOSION';
+        
+        if (isNuke) {
+            const flash = document.getElementById('nuke-flash-overlay');
+            if (flash) {
+                flash.classList.add('active');
+                setTimeout(() => flash.classList.remove('active'), 500);
+            }
+        }
+
         window.dispatchEvent(new CustomEvent('action-prompt', { detail: { type } }));
     }
 
     // ─── Flying Block Debris ──────────────────────────────────────────
 
     spawnFlyingBlock(x, y, z, blockId, originX, originY, originZ) {
-        const color = this.getBlockColor(blockId);
-        const material = new THREE.MeshLambertMaterial({ color });
+        const tex = this.getTexture(blockId);
+        const material = tex 
+            ? new THREE.MeshLambertMaterial({ map: tex })
+            : new THREE.MeshLambertMaterial({ color: this.getBlockColor(blockId) });
+        
         const mesh = new THREE.Mesh(this.world.sharedChunkGeometries.solid, material);
         mesh.scale.set(0.5, 0.5, 0.5);
         mesh.position.set(x, y, z);
@@ -179,13 +224,12 @@ export class ExplosionSystem {
     // ─── Break Particles (Mining) ─────────────────────────────────────
 
     spawnBreakParticles(x, y, z, blockId) {
-        const color = this.getBlockColor(blockId);
-        for (let i = 0; i < 6; i++) {
-            const material = new THREE.MeshBasicMaterial({
-                color,
-                transparent: true,
-                opacity: 0.9
-            });
+        const tex = this.getTexture(blockId);
+        for (let i = 0; i < 12; i++) {
+            const material = tex
+                ? new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.9 })
+                : new THREE.MeshBasicMaterial({ color: this.getBlockColor(blockId), transparent: true, opacity: 0.9 });
+            
             const mesh = new THREE.Mesh(this.breakParticleGeometry, material);
             mesh.position.set(
                 x + ((Math.random() - 0.5) * 0.4),

@@ -1,4 +1,4 @@
-# Extending ArloCraft
+# Extending AntonCraft
 
 This doc is the fast path for adding new features safely.
 

@@ -1,8 +1,0 @@
-{
-    "name":  "Carrot",
-    "hardness":  0.2,
-    "xp":  1,
-    "foodVal":  3,
-    "color":  "0xff9800",
-    "deco":  true
-}

@@ -35,6 +35,18 @@ export function resolveChunkGeometry(world, id, blockData) {
     return world.sharedChunkGeometries.solid;
 }
 
+export const DECO_LOD_DIST_SQ = 20 * 20; // 20 blocks as requested
+
+export function isDecoType(blockData) {
+    return blockData?.renderType === 'plant' || blockData?.renderType === 'paired_plant' || blockData?.deco;
+}
+
+export function resolveLODGeometry(world, blockData) {
+    if (!blockData) return null;
+    if (blockData.renderType === 'paired_plant') return world.sharedChunkGeometries.tallDecoLOD;
+    return world.sharedChunkGeometries.decoLOD;
+}
+
 export function shouldSkipChunkBlockInstance({ world, id, blockData, ax, ay, az, isNear }) {
 
     if (id === 'water') {

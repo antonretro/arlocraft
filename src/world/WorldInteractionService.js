@@ -71,10 +71,9 @@ export class WorldInteractionService {
         const ratio = Math.min(1, this.world.state.miningState.progress / this.world.state.miningState.required);
         
         if (this.world.visuals.miningCracks) {
-            this.world.visuals.updateMiningCracks(x, y, z, true);
-            // logic for choosing the crack texture stage based on ratio (approx 10 stages)
             const stage = Math.floor(ratio * 9);
-            // For now, using a placeholder texture update if the game has a cracked texture library
+            const mat = this.world.registry.getBreakingMaterial(stage);
+            this.world.visuals.updateMiningCracks(x, y, z, true, mat);
         }
 
         window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio, id, done: ratio >= 1 } }));
