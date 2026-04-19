@@ -3,8 +3,8 @@ export class SkinSystem {
         this.currentSkin = 'classic_steve';
         this.customSkinData = null;
         this.classicSkins = [
-            { id: 'classic_steve', name: 'Steve', url: '/assets/steve.png' },
-            { id: 'classic_alex', name: 'Alex', url: '/assets/alex.png' }
+            { id: 'classic_steve', name: 'Steve', username: 'steve', url: '/assets/steve.png', faceUrl: 'https://minotar.net/avatar/steve/64' },
+            { id: 'classic_alex', name: 'Alex', username: 'alex', url: '/assets/alex.png', faceUrl: 'https://minotar.net/avatar/alex/64' }
         ];
         this.randomSkins = this._generateRandomSkins(10);
     }

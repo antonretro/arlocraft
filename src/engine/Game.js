@@ -1299,12 +1299,11 @@ export class Game {
             // Update HUD avatar via crafatar for online username or canvas data for local skins
             const h = document.getElementById('anton-face-image');
             if (h) {
+                const resolvedName = username || 'steve';
                 if (materials.head?.[4]?.map?.image) {
                     h.src = materials.head[4].map.image.toDataURL();
-                } else if (username) {
-                    h.src = `https://crafatar.com/avatars/${username}?size=64&overlay`;
                 } else {
-                    h.src = 'faces/anton_happy.png';
+                    h.src = `https://minotar.net/avatar/${resolvedName}/64`;
                 }
             }
             this.settings.skinUsername = username;
