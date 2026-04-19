@@ -117,6 +117,10 @@ export class BlockRegistry {
             } else if (baseName.endsWith('_front') && !isTallFoliage) {
                 blockId = baseName.substring(0, baseName.length - 6);
                 fileName = 'front.png';
+            } else if (fileName === 'top.png' || fileName === 'side.png' || fileName === 'bottom.png' || fileName === 'front.png' || fileName === 'all.png') {
+                // Folder-named block with generic face file (e.g. copper/all.png, path_block/top.png)
+                // blockId is already set from folder name; just normalize fileName
+                // keep blockId as folder name, set fileName as-is
             } else {
                 blockId = baseName;
                 fileName = 'all.png';

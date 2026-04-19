@@ -488,7 +488,7 @@ export class HUD {
 
     initVersionSelector() {
         const dropdown = document.getElementById('ni-version-dropdown');
-        if (!dropdown || !this.game) return;
+        if (!dropdown || !this.game || !Array.isArray(this.game.versions)) return;
 
         dropdown.innerHTML = '';
         this.game.versions.forEach(v => {
