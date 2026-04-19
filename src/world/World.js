@@ -380,7 +380,7 @@ export class World {
         // Plant placement restrictions (only on soil/path)
         if (blockData?.deco && !blockId.includes('coral') && blockId !== 'sea_pickle') {
             const groundId = this.state.blockMap.get(this.getKey(px, py - 1, pz));
-            const validSoil = ['grass_block', 'dirt', 'mycelium', 'path_block', 'podzol', 'coarse_dirt', 'moss_block', 'rooted_dirt'];
+            const validSoil = ['grass_block', 'dirt', 'mycelium', 'path_block', 'podzol', 'coarse_dirt', 'moss_block', 'rooted_dirt', 'farmland'];
             if (!validSoil.includes(groundId)) {
                 this.game?.hud?.flashPrompt?.("Can only place plants on soil!", "#ff9999");
                 return false;
@@ -442,6 +442,48 @@ export class World {
 
         const selectedItem = this.game?.gameState?.getSelectedItem();
         const isAxe = selectedItem?.id?.includes('axe');
+        const isHoe = selectedItem?.id?.includes('hoe');
+        const isBoneMeal = selectedItem?.id === 'bone_meal';
+
+        // Hoe: till dirt/grass → farmland
+        if (isHoe && (blockId === 'dirt' || blockId === 'grass_block' || blockId === 'coarse_dirt')) {
+            const cx = this.getChunkCoord(cell.x), cy = this.getChunkCoord(cell.y), cz = this.getChunkCoord(cell.z);
+            this.addBlock(cell.x, cell.y, cell.z, 'farmland', this.getChunkKey(cx, cy, cz), true);
+            this.chunkManager.flushPriorityChunkRebuilds(20);
+            window.dispatchEvent(new CustomEvent('action-success'));
+            return true;
+        }
+
+        // Bone Meal: advance crop growth stage
+        if (isBoneMeal) {
+            const CROP_STAGES = {
+                carrot: ['carrot_stage0','carrot_stage1','carrot_stage2','carrot_stage3'],
+                potato: ['potato_stage0','potato_stage1','potato_stage2','potato_stage3'],
+                beetroot: ['beetroot_stage0','beetroot_stage1','beetroot_stage2','beetroot_stage3'],
+                wheat: ['wheat_stage0','wheat_stage1','wheat_stage2','wheat_stage3','wheat_stage4','wheat_stage5','wheat_stage6','wheat_stage7']
+            };
+            for (const stages of Object.values(CROP_STAGES)) {
+                const stageIdx = stages.indexOf(blockId);
+                if (stageIdx >= 0 && stageIdx < stages.length - 1) {
+                    const advance = Math.min(stages.length - 1, stageIdx + 1 + Math.floor(Math.random() * 2));
+                    const cx = this.getChunkCoord(cell.x), cy = this.getChunkCoord(cell.y), cz = this.getChunkCoord(cell.z);
+                    this.addBlock(cell.x, cell.y, cell.z, stages[advance], this.getChunkKey(cx, cy, cz), true);
+                    this.chunkManager.flushPriorityChunkRebuilds(20);
+                    // Consume one bone meal
+                    if (this.game?.gameState?.mode !== 'CREATIVE') {
+                        selectedItem.count = (selectedItem.count ?? 1) - 1;
+                        if (selectedItem.count <= 0) {
+                            const inv = this.game.gameState.inventory;
+                            const slot = inv.findIndex(s => s === selectedItem);
+                            if (slot >= 0) inv[slot] = null;
+                        }
+                        window.dispatchEvent(new CustomEvent('inventory-changed'));
+                    }
+                    window.dispatchEvent(new CustomEvent('action-success'));
+                    return true;
+                }
+            }
+        }
 
         // Axe Stripping logic
         if (isAxe) {

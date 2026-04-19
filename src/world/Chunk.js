@@ -402,13 +402,12 @@ export class Chunk {
         
         // ─── VOLUME CLEARING PASS ───
         const sw = struct.width || 7;
-        const sh = (struct.height || 6) + 3; // +3 overhead clearance
+        const sh = (struct.height || 6) + 1;
         const sd = struct.depth || 7;
-        const skirt = 2; // wider perimeter to prevent slope burial
 
-        for (let dx = -skirt; dx < sw + skirt; dx++) {
-            for (let dz = -skirt; dz < sd + skirt; dz++) {
-                for (let dy = -1; dy < sh; dy++) { // dy=-1 clears one block below base
+        for (let dx = 0; dx < sw; dx++) {
+            for (let dz = 0; dz < sd; dz++) {
+                for (let dy = 0; dy < sh; dy++) {
                     const bx = x + dx;
                     const by = y + dy;
                     const bz = z + dz;

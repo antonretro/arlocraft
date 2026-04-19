@@ -20,5 +20,9 @@ export const TOOLS = [
     { id: 'grappler', name: 'Grappler', type: 'utility', efficiency: 0, damage: 0, range: 6.5, cooldown: 0.35, knockback: 0.1, critChance: 0 },
     { id: 'scanner', name: 'Scanner', type: 'utility', efficiency: 0, damage: 0, range: 4.5, cooldown: 0.25, knockback: 0.1, critChance: 0 },
     { id: 'master_key', name: 'Master Key', type: 'utility', efficiency: 0, damage: 0, range: 3.2, cooldown: 0.25, knockback: 0.2, critChance: 0 },
-    { id: 'flint_and_steel', name: 'Flint and Steel', type: 'utility', efficiency: 0, damage: 0, range: 4.5, cooldown: 0.3, knockback: 0, critChance: 0 }
+    { id: 'flint_and_steel', name: 'Flint and Steel', type: 'utility', efficiency: 0, damage: 0, range: 4.5, cooldown: 0.3, knockback: 0, critChance: 0 },
+    { id: 'hoe_wood', name: 'Wooden Hoe', type: 'hoe', efficiency: 1, damage: 1, range: 3.5, cooldown: 0.3, knockback: 0, critChance: 0 },
+    { id: 'hoe_stone', name: 'Stone Hoe', type: 'hoe', efficiency: 2, damage: 1, range: 3.5, cooldown: 0.25, knockback: 0, critChance: 0 },
+    { id: 'hoe_iron', name: 'Iron Hoe', type: 'hoe', efficiency: 3, damage: 1, range: 3.5, cooldown: 0.2, knockback: 0, critChance: 0 },
+    { id: 'bone_meal', name: 'Bone Meal', type: 'special', efficiency: 0, damage: 0, range: 4.0, cooldown: 0.3, knockback: 0, critChance: 0 }
 ];

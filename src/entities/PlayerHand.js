@@ -59,7 +59,11 @@ const TOOL_MAP = {
     'stick': 'stick',
     'musket': 'musket',
     'pistol': 'pistol',
-    'blunderbuss': 'blunderbuss'
+    'blunderbuss': 'blunderbuss',
+    'hoe_wood': 'wooden_hoe',
+    'hoe_stone': 'stone_hoe',
+    'hoe_iron': 'iron_hoe',
+    'bone_meal': 'bone_meal'
 };
 const GRASS_PREVIEW_TINT = 0x79c05a;
 
