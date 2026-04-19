@@ -36,6 +36,7 @@ export class TouchControls {
         root.id = 'touch-controls';
         root.innerHTML = `
             <div id="tc-joystick-zone">
+                <div id="tc-dpad-hint"></div>
                 <div id="tc-joystick-base">
                     <div id="tc-joystick-knob"></div>
                 </div>
@@ -110,6 +111,7 @@ export class TouchControls {
         } else if (action === 'place') {
             input.mouseButtons.right = down;
             if (down) input.mouseButtons.rightJustPressed = true;
+            else input.mouseButtons.rightJustPressed = false;
         } else if (action === 'jump') {
             if (down) {
                 input.keys['Space'] = true;
@@ -126,12 +128,18 @@ export class TouchControls {
 
     _onStart(e) {
         if (!this.game.hasStarted || this.game.isPaused) return;
-        e.preventDefault();
+
+        // Only prevent default for joystick/look zones, not HUD/hotbar elements
+        const hasNonHudTouch = Array.from(e.changedTouches).some(t => {
+            const el = document.elementFromPoint(t.clientX, t.clientY);
+            return !el?.closest('#tc-action-btns') && !el?.closest('#hud');
+        });
+        if (hasNonHudTouch) e.preventDefault();
 
         for (const t of e.changedTouches) {
             const el = document.elementFromPoint(t.clientX, t.clientY);
-            // Skip if touch is on a button (handled separately)
-            if (el?.closest('#tc-action-btns')) continue;
+            // Skip if touch is on a button or HUD element
+            if (el?.closest('#tc-action-btns') || el?.closest('#hud')) continue;
 
             const onLeft = t.clientX < window.innerWidth * 0.45;
 

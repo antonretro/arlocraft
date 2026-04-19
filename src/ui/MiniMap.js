@@ -4,7 +4,7 @@ export class MiniMap {
         this.container = document.getElementById('minimap');
         this.canvas = document.getElementById('minimap-canvas');
         this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
-        this.visible = false;
+        this.visible = true;
         this.accumulator = 0;
         this.radius = 24;
         this.cells = 34;
@@ -40,7 +40,7 @@ export class MiniMap {
             sandstone: '#cbbd8f'
         };
 
-        if (this.container) this.container.style.display = 'none';
+        if (this.container) this.container.style.display = 'block';
     }
 
     toggle() {
@@ -55,7 +55,7 @@ export class MiniMap {
     }
 
     update(delta, playerPos, yaw) {
-        if (!this.visible || !this.ctx || !playerPos) return;
+        if (!this.visible || !this.ctx || !playerPos || !this.game.world) return;
 
         const quality = this.game?.qualityTier ?? 'balanced';
         const updateInterval = quality === 'low' ? 0.33 : (quality === 'balanced' ? 0.24 : 0.18);

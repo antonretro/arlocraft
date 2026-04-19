@@ -1168,6 +1168,31 @@ canvas { display: block; }
     -webkit-user-select: none;
 }
 
+/* ── MC PE-style circle pad hint (always-visible anchor) ── */
+#tc-dpad-hint {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.04);
+    pointer-events: none;
+}
+
+#tc-dpad-hint::after {
+    content: '';
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+}
+
 /* ── Left joystick zone ── */
 #tc-joystick-zone {
     position: absolute;
@@ -1291,32 +1316,106 @@ canvas { display: block; }
         gap: 3px;
     }
 
-    /* Pills, readout, stats, XP — all tiny */
-    #hud-headline        { zoom: 0.4; }
-    #selected-item-readout { zoom: 0.4; }
-    #stats-bars          { zoom: 0.4; }
-    #xp-bar-container    { zoom: 0.4; }
+    .hud-pill {
+        padding: 3px 7px;
+        font-size: 0.44rem;
+        letter-spacing: 0.6px;
+    }
 
-    /* Hotbar — larger so blocks are tappable */
-    #hotbar              { zoom: 0.68; }
+    #selected-item-readout {
+        padding: 4px 8px;
+        width: min(94vw, 200px);
+    }
+
+    #selected-item-name {
+        font-size: 0.52rem;
+    }
+
+    #selected-item-stats {
+        font-size: 0.42rem;
+        margin-top: 1px;
+    }
+
+    #stats-bars {
+        width: min(94vw, 200px);
+        gap: 4px;
+    }
+
+    .bar-container {
+        height: 18px;
+        padding: 0 6px;
+        gap: 4px;
+    }
+
+    .bar-label {
+        font-size: 0.38rem;
+    }
+
+    .hud-meter {
+        height: 5px;
+    }
+
+    #hotbar {
+        gap: 3px;
+        padding: 4px;
+        border-radius: 10px;
+    }
+
+    .slot {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+    }
+
+    .item-icon {
+        width: 20px;
+        height: 20px;
+        line-height: 20px;
+        font-size: 0.43rem;
+    }
+
+    .item-count {
+        font-size: 0.40rem;
+        min-width: 10px;
+        height: 10px;
+    }
+
+    #xp-bar-container {
+        width: min(94vw, 170px);
+        height: 5px;
+    }
 
     /* ── Corner widgets ── */
     #arlo-face-widget {
-        zoom: 0.4;
-        top: 8px;
-        left: 8px;
+        width: 36px;
+        height: 36px;
+        top: 10px;
+        left: 10px;
+        border-width: 2px;
     }
 
     #coords-display {
-        zoom: 0.4;
-        top: 38px;
-        left: 8px;
+        top: 54px;
+        left: 10px;
+        font-size: 0.52rem;
+        padding: 5px 8px;
     }
 
     #minimap {
-        zoom: 0.4;
+        width: 110px;
         top: 8px;
         right: 8px;
+        padding: 6px;
+    }
+
+    #minimap-canvas {
+        width: 98px;
+        height: 98px;
+    }
+
+    #minimap-caption {
+        font-size: 0.55rem;
+        margin-top: 3px;
     }
 
     /* ── Title screen ── */
@@ -1503,5 +1602,61 @@ canvas { display: block; }
     .ni-tab-heading {
         font-size: 0.95rem;
         margin-bottom: 12px;
+    }
+}
+
+/* ══════════════════════════════════════════════
+   PORTRAIT LOCK — show blocker on mobile portrait
+   ══════════════════════════════════════════════ */
+#rotate-prompt {
+    display: none; /* hidden by default (desktop / landscape) */
+}
+
+@media (max-width: 900px) and (orientation: portrait) {
+    #rotate-prompt {
+        display: flex;
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: #080c18;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+    }
+
+    #rotate-prompt-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+        text-align: center;
+        padding: 32px;
+    }
+
+    #rotate-icon {
+        font-size: 5rem;
+        animation: rotate-spin 2s ease-in-out infinite;
+        color: #00c3e3;
+        filter: drop-shadow(0 0 18px rgba(0,195,227,0.5));
+    }
+
+    #rotate-title {
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: #f0f4ff;
+        letter-spacing: 1px;
+    }
+
+    #rotate-subtitle {
+        font-size: 0.8rem;
+        color: rgba(200,220,255,0.5);
+        letter-spacing: 0.5px;
+    }
+
+    @keyframes rotate-spin {
+        0%   { transform: rotate(0deg); }
+        40%  { transform: rotate(90deg); }
+        60%  { transform: rotate(90deg); }
+        100% { transform: rotate(90deg) scale(1.05); }
     }
 }
