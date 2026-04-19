@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AntonCraft</title>
+    <title>ArloCraft</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="src/style.css" />
@@ -83,6 +83,7 @@
 
     <div id="inventory-overlay" class="ni-screen" style="display: none;">
         <div id="inventory-card">
+            <h1 id="menuTitle">ArloCraft</h1>
             <div id="ni-inventory-tabs">
                 <button class="ni-inv-tab active" data-tab="pack">BAG</button>
                 <button class="ni-inv-tab" data-tab="blocklog">LOG</button>
@@ -95,7 +96,7 @@
                 <div id="tab-pack" class="ni-inv-pane active">
                     <div id="inventory-layout">
                         <div id="inventory-section">
-                            <div class="ni-label" style="display:flex;align-items:center;justify-content:space-between;"><span><span class="label-icon">🎒</span> INVENTORY</span><button id="btn-sort-inv" style="font-size:0.6rem;padding:2px 8px;cursor:pointer;">SORT</button></div>
+                            <div class="ni-label" style="display:flex;align-items:center;justify-content:space-between;"><span><span class="label-icon">🎒</span> INVENTORY</span><button id="btn-sort-inv">SORT</button></div>
                             <div id="inventory-grid" class="ni-grid"></div>
                             
                             <div class="ni-label" style="margin-top: 24px;"><span class="label-icon">⚔️</span> HOTBAR</div>

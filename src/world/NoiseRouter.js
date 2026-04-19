@@ -19,7 +19,7 @@ function bilerp(v00, v10, v01, v11, tx, tz) {
 const DEFAULT_BIOME = BIOME_BY_ID.get('plains');
 
 export class NoiseRouter {
-    constructor(seedString = 'antoncraft') {
+    constructor(seedString = 'ArloCraft') {
         this.seed = this.hashSeed(seedString);
         this.biomeBlendCellSize = 24;
         this.maxBiomeCellCacheEntries = 4096;

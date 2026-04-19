@@ -632,7 +632,7 @@ export class Chunk {
         try {
             rebuildChunkInstancedMeshes(this);
         } catch (e) {
-            console.error('[AntonCraft] rebuildMeshes failed:', this.key, e);
+            console.error('[ArloCraft] rebuildMeshes failed:', this.key, e);
         }
     }
 
@@ -683,7 +683,7 @@ export class Chunk {
                         return;
                     }
                 } catch (error) {
-                    console.warn('[AntonCraft] Chunk Worker failed, falling back to sync', error);
+                    console.warn('[ArloCraft] Chunk Worker failed, falling back to sync', error);
                 }
             }
 

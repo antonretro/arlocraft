@@ -32,11 +32,11 @@ import { ParticleSystem } from './ParticleSystem.js';
 
 const LOCAL_APP_VERSION = 'v1.0';
 const GITHUB_REPO_OWNER = 'antonretro';
-const GITHUB_REPO_NAME = 'antoncraft';
+const GITHUB_REPO_NAME = 'ArloCraft';
 
 export class Game {
     constructor() {
-        console.log('[AntonCraft] Game constructor starting...');
+        console.log('[ArloCraft] Game constructor starting...');
 
         this.settingsManager = new SettingsManager();
         this.settings = this.settingsManager.getAll();
@@ -119,7 +119,7 @@ export class Game {
         this.setupSkinListeners();
 
         this.init().catch(e => {
-            console.error('[AntonCraft] Init Failure:', e);
+            console.error('[ArloCraft] Init Failure:', e);
         });
     }
 
@@ -615,7 +615,7 @@ export class Game {
     }
 
     async init() {
-        console.log("[AntonCraft] Starting engine init...");
+        console.log("[ArloCraft] Starting engine init...");
         await this.physics.init();
         
         this.applyQualityTier(this.settings.qualityTierPref ?? 'low');
@@ -857,7 +857,7 @@ export class Game {
         const cameraMode = this.cameraModes[this.cameraModeIndex];
         const renderInfo = this.renderer.instance.info.render;
         el.textContent = [
-            `AntonCraft ${this.debugFps} fps`,
+            `ArloCraft ${this.debugFps} fps`,
             `XYZ: ${playerPos.x.toFixed(2)} / ${playerPos.y.toFixed(2)} / ${playerPos.z.toFixed(2)}`,
             `Chunk: ${chunkX}, ${chunkZ} | Loaded chunks: ${this.world.chunks.size}`,
             `Biome: ${biomeId}`,
@@ -1241,7 +1241,7 @@ export class Game {
             try {
                 this.hand.setHeldItem(selectedId, this.world.blockRegistry, selected);
             } catch (error) {
-                console.warn('[AntonCraft] Failed to update held item viewmodel:', error);
+                console.warn('[ArloCraft] Failed to update held item viewmodel:', error);
             }
             this.hand.lastHeldId = selectedId;
         }
@@ -1364,7 +1364,7 @@ export class Game {
             }
             this.settings.skinUsername = username;
             this.saveSettings();
-        } catch (e) { console.error('[AntonCraft] Skin Error:', e); }
+        } catch (e) { console.error('[ArloCraft] Skin Error:', e); }
     }
 
     _applyLoadedSkin(materials, urlForHud = null) {

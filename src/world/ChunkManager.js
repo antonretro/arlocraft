@@ -138,7 +138,7 @@ export class ChunkManager {
                 if (forceSync) chunk.update();
             }
         } catch (error) {
-            console.warn('[AntonCraft] Chunk generation failed:', key, error);
+            console.warn('[ArloCraft] Chunk generation failed:', key, error);
             chunk.destroy();
             this.chunks.delete(key);
         } finally {

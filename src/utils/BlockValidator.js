@@ -104,12 +104,12 @@ export function validateBlocks() {
     validatePairLinks(pairWarnings);
 
     if (missing.length || missingDeco.length || pairWarnings.length) {
-        console.group('%c[AntonCraft] Block Validation Warnings', 'color: orange; font-weight: bold');
+        console.group('%c[ArloCraft] Block Validation Warnings', 'color: orange; font-weight: bold');
         for (const warning of missing) console.warn(warning);
         for (const warning of missingDeco) console.warn(warning);
         for (const warning of pairWarnings) console.warn(warning);
         console.groupEnd();
     } else {
-        console.log('%c[AntonCraft] Block validation passed - all IDs and pair links resolved', 'color: #4caf50');
+        console.log('%c[ArloCraft] Block validation passed - all IDs and pair links resolved', 'color: #4caf50');
     }
 }

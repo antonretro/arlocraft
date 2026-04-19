@@ -1,7 +1,8 @@
 {
-    "hardness":  1,
+    "hardness": 1,
     "transparent": false,
-    "name":  "Tube Coral Block",
-    "xp":  2,
-    "deco": false
+    "name": "Tube Coral Block",
+    "xp": 2,
+    "deco": false,
+    "renderType": "cube"
 }

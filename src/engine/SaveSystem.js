@@ -6,13 +6,13 @@ export class SaveSystem {
     }
 
     getSlotKey(slotId) {
-        return `antoncraft-world-save-${slotId}`;
+        return `ArloCraft-world-save-${slotId}`;
     }
 
     encode(data) {
         const json = JSON.stringify(data);
         return {
-            format: 'antoncraft-lz-v1',
+            format: 'ArloCraft-lz-v1',
             data: LZString.compressToBase64(json)
         };
     }
@@ -23,7 +23,7 @@ export class SaveSystem {
 
         const parsed = JSON.parse(text);
 
-        if (parsed?.format === 'antoncraft-lz-v1' && typeof parsed.data === 'string') {
+        if (parsed?.format === 'ArloCraft-lz-v1' && typeof parsed.data === 'string') {
             const decompressed = LZString.decompressFromBase64(parsed.data);
             if (!decompressed) throw new Error('Compressed save could not be decompressed');
             return JSON.parse(decompressed);
@@ -48,7 +48,7 @@ export class SaveSystem {
         return true;
     }
 
-    exportToFile(filename = 'antoncraft_world.json') {
+    exportToFile(filename = 'ArloCraft_world.json') {
         const data = this.game.getSaveData();
         const payload = JSON.stringify(this.encode(data));
         const blob = new Blob([payload], { type: 'application/json' });

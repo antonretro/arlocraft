@@ -1,5 +1,5 @@
 {
-  "name": "antoncraft",
+  "name": "arlocraft",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -14,8 +14,8 @@
     "start:desktop": "node desktop/start-desktop.cjs"
   },
   "build": {
-    "appId": "com.antoncraft.game",
-    "productName": "AntonCraft",
+    "appId": "com.arlocraft.game",
+    "productName": "ArloCraft",
     "directories": {
       "output": "release_v1_0_0"
     },

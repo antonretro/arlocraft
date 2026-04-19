@@ -19,7 +19,7 @@ for (const [path, module] of Object.entries(blockTextureModules)) {
 }
 
 const TOOL_MAP = {
-    // Basic Tools (AntonCraft IDs)
+    // Basic Tools (ArloCraft IDs)
     'pick_wood': 'wooden_pickaxe',
     'axe_wood': 'wooden_axe',
     'sword_wood': 'wooden_sword',
@@ -293,7 +293,7 @@ export class PlayerHand {
             try {
                 this.disposeHeldObject(child);
             } catch (error) {
-                console.warn('[AntonCraft] Held-item cleanup skipped due to disposal error:', error);
+                console.warn('[ArloCraft] Held-item cleanup skipped due to disposal error:', error);
             }
         }
 

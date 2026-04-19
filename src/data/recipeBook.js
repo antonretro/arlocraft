@@ -1,4 +1,4 @@
-// Central recipe registry for AntonCraft.
+// Central recipe registry for ArloCraft.
 // Supported recipe types:
 // - shaped: 3x3 symbolic pattern (spaces are empty)
 // - shapeless: ingredient list order does not matter

@@ -147,7 +147,7 @@ export class EntityManager {
                 if (!texture || entity.dead) return;
                 entity.applyTexture?.(texture);
             }).catch((error) => {
-                console.warn(`[AntonCraft] Failed to load entity texture for ${config.id}:`, error);
+                console.warn(`[ArloCraft] Failed to load entity texture for ${config.id}:`, error);
             });
         }
 

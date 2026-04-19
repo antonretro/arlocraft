@@ -159,7 +159,7 @@ export class HUDCore {
         const biomeLabel = this.formatBiomeLabel(biome);
         const mode = this.gameState?.mode ?? 'SURVIVAL';
         const worldTime = this.getWorldTimeLabel(this.game?.timeOfDay ?? 0);
-        const seed = world?.seedString ?? 'antoncraft';
+        const seed = world?.seedString ?? 'ArloCraft';
 
         el.textContent = [
             `XYZ: ${bx} / ${by} / ${bz}`,

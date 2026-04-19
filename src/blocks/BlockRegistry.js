@@ -559,8 +559,6 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             return material;
         }
 
-        const normalizedId = normalizeBlockVariantId(id);
-        let targetId = normalizedId || id;
         let strippedId = normalizedId || id;
 
         if (strippedId.endsWith('_stairs')) {
@@ -681,7 +679,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
                 side: isDeco ? THREE.DoubleSide : THREE.FrontSide
             });
             if (isCutout) material.userData.alphaCutout = true;
-            console.warn(`[AntonCraft] Missing texture for block: ${id}. Using Magenta Fallback.`);
+            console.warn(`[ArloCraft] Missing texture for block: ${id}. Using Magenta Fallback.`);
         }
 
         // Post-creation enhancements

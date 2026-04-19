@@ -36,7 +36,7 @@ export class SkinLoader {
             return { materials };
         } catch (err) {
             if (url !== this.defaultSteve) {
-                console.warn(`[AntonCraft] Skin load failed for ${username}, falling back to Steve.`);
+                console.warn(`[ArloCraft] Skin load failed for ${username}, falling back to Steve.`);
                 return this.loadSkin('Steve');
             }
             throw err;

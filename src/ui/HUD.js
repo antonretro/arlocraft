@@ -29,7 +29,7 @@ export class HUD {
     }
 
     init() {
-        console.log('[AntonCraft] HUD modular initialization starting...');
+        console.log('[ArloCraft] HUD modular initialization starting...');
         
         // 1. Core systems (bars, world info)
         this.core.init();
@@ -54,7 +54,7 @@ export class HUD {
             this.game?.notifications?.show('ACHIEVEMENT UNLOCKED', e.detail.id, 'medal');
         });
 
-        console.log('[AntonCraft] HUD modular initialization complete.');
+        console.log('[ArloCraft] HUD modular initialization complete.');
     }
 
     // --- Bridge Methods for Game.js / SurvivalSystem.js ---

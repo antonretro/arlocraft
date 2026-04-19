@@ -11,7 +11,7 @@ import {
 export class WorldTerrainService {
     constructor(world) {
         this.world = world;
-        this.seedString = 'antoncraft';
+        this.seedString = 'ArloCraft';
         this.seed = 1;
         this.noise = null;
         this.router = null;
@@ -27,7 +27,7 @@ export class WorldTerrainService {
     }
 
     setSeed(seedValue) {
-        this.seedString = String(seedValue ?? 'antoncraft').trim() || 'antoncraft';
+        this.seedString = String(seedValue ?? 'ArloCraft').trim() || 'ArloCraft';
 
         const numeric = Number(this.seedString);
         if (Number.isFinite(numeric)) {

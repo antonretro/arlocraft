@@ -12,16 +12,16 @@ export class Renderer {
             if (this.rendererType === 'webgpu') {
                 this.instance = new THREE.WebGPURenderer({ antialias: true });
                 this._initPromise = this.instance.init().then(() => {
-                    console.log('[AntonCraft] Using WebGPU renderer (Performance Mode)');
+                    console.log('[ArloCraft] Using WebGPU renderer (Performance Mode)');
                 }).catch(err => {
-                    console.warn('[AntonCraft] WebGPU init failed, falling back to WebGL2:', err);
+                    console.warn('[ArloCraft] WebGPU init failed, falling back to WebGL2:', err);
                     this.fallbackToWebGL();
                 });
             } else {
                 this.fallbackToWebGL();
             }
         } catch (e) {
-            console.warn('[AntonCraft] Renderer initialization failed:', e);
+            console.warn('[ArloCraft] Renderer initialization failed:', e);
             this.fallbackToWebGL();
         }
 
@@ -65,7 +65,7 @@ export class Renderer {
         this.instance.outputColorSpace = THREE.SRGBColorSpace;
         this.instance.setClearColor(0x87ceeb, 1);
         this._initPromise = Promise.resolve();
-        console.log('[AntonCraft] Using WebGL2 renderer (Stability Mode)');
+        console.log('[ArloCraft] Using WebGL2 renderer (Stability Mode)');
         
         // Update DOM if app exists
         const appElem = document.getElementById('app');

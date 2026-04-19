@@ -6,7 +6,7 @@ export const ACHIEVEMENTS = [
     {
         id: 'first_steps',
         name: 'First Steps',
-        description: 'Take your first few steps in the world of AntonCraft.',
+        description: 'Take your first few steps in the world of ArloCraft.',
         icon: '👟',
         check: (stats) => stats.distanceTravelled > 10
     },

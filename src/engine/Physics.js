@@ -611,7 +611,7 @@ export class Physics {
             // --- FINAL SAFETY GUARD ---
             // If position becomes invalid (NaN/Infinity), rescue immediately to last safe spot.
             if (!Number.isFinite(this.position.x) || !Number.isFinite(this.position.y) || !Number.isFinite(this.position.z)) {
-                console.warn('[AntonCraft] Physics NaN detected! Rescuing player...');
+                console.warn('[ArloCraft] Physics NaN detected! Rescuing player...');
                 this.position.copy(this.lastSafePosition);
                 this.velocity.set(0, 0, 0);
             }

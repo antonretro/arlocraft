@@ -1,5 +1,5 @@
 export class SettingsManager {
-    constructor(storageKey = 'antoncraft-settings') {
+    constructor(storageKey = 'ArloCraft-settings') {
         this.storageKey = storageKey;
         this.defaults = {
             sensitivity: 0.00145,
