@@ -251,10 +251,11 @@ export class World {
     computeMineDuration(id, item, mode) { return this.blocks.computeMineDuration(id, item, mode); }
 
     // Raycasting
-    raycastBlocks(camera, maxDistance = 6, includeFluids = false) {
+    raycastBlocks(camera, maxDistance = 6, includeFluids = false, originOverride = null, dirOverride = null) {
         if (!camera) return null;
-        const origin = camera.position;
-        camera.getWorldDirection(this.tmpRayDir).normalize();
+        const origin = originOverride ?? camera.position;
+        if (dirOverride) this.tmpRayDir.copy(dirOverride).normalize();
+        else camera.getWorldDirection(this.tmpRayDir).normalize();
         const dx = this.tmpRayDir.x, dy = this.tmpRayDir.y, dz = this.tmpRayDir.z;
         const stepX = dx > 0 ? 1 : -1, stepY = dy > 0 ? 1 : -1, stepZ = dz > 0 ? 1 : -1;
         const deltaX = Math.abs(1 / dx), deltaY = Math.abs(1 / dy), deltaZ = Math.abs(1 / dz);

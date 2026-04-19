@@ -991,7 +991,7 @@ export class Game {
 
     pickBlock() {
         if (!this.hasStarted || this.isPaused) return;
-        const hit = this.world.raycastBlocks?.(this.camera.instance, 6, false);
+        const hit = this.world.raycastBlocks?.(this.camera.instance, 6, false, this._camHead, this._camLook);
         if (!hit?.id) return;
         const id = this.world.getBlockPickId(hit.id);
         const blockName = this.world.getBlockData(id)?.name ?? id;
@@ -1014,7 +1014,7 @@ export class Game {
     }
 
     updateSelection() {
-        const hit = this.world.raycastBlocks?.(this.camera.instance, 6, false);
+        const hit = this.world.raycastBlocks?.(this.camera.instance, 6, false, this._camHead, this._camLook);
         if (hit) {
             this.world.visuals.updateHover(hit.cell.x, hit.cell.y, hit.cell.z, true);
             
