@@ -1613,3 +1613,59 @@ canvas { display: block; }
         margin-bottom: 16px;
     }
 }
+
+/* ══════════════════════════════════════════════
+   PORTRAIT LOCK — show blocker on mobile portrait
+   ══════════════════════════════════════════════ */
+#rotate-prompt {
+    display: none; /* hidden by default (desktop / landscape) */
+}
+
+@media (max-width: 900px) and (orientation: portrait) {
+    #rotate-prompt {
+        display: flex;
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: #080c18;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+    }
+
+    #rotate-prompt-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+        text-align: center;
+        padding: 32px;
+    }
+
+    #rotate-icon {
+        font-size: 5rem;
+        animation: rotate-spin 2s ease-in-out infinite;
+        color: #00c3e3;
+        filter: drop-shadow(0 0 18px rgba(0,195,227,0.5));
+    }
+
+    #rotate-title {
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: #f0f4ff;
+        letter-spacing: 1px;
+    }
+
+    #rotate-subtitle {
+        font-size: 0.8rem;
+        color: rgba(200,220,255,0.5);
+        letter-spacing: 0.5px;
+    }
+
+    @keyframes rotate-spin {
+        0%   { transform: rotate(0deg); }
+        40%  { transform: rotate(90deg); }
+        60%  { transform: rotate(90deg); }
+        100% { transform: rotate(90deg) scale(1.05); }
+    }
+}
