@@ -361,7 +361,8 @@ export class World {
         if (!item?.id) return false;
 
         const isBucket = item.id.endsWith('_bucket') && item.id !== 'bucket';
-        const blockId = isBucket ? item.id.replace('_bucket', '') : this.getBlockPickId(item.id);
+        const CROP_PLACE = { carrot: 'carrot_stage0', potato: 'potato_stage0', beetroot: 'beetroot_stage0', wheat: 'wheat_stage0' };
+        const blockId = isBucket ? item.id.replace('_bucket', '') : (CROP_PLACE[item.id] ?? this.getBlockPickId(item.id));
         
         if (!blockId) return false;
         const blockData = this.getBlockData(blockId);

@@ -429,15 +429,18 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
 
     _updateSingleMaterialTime(material, time) {
         if (!material) return;
-        
-        // Custom ShaderMaterials (like Water)
+
         if (material.uniforms?.uTime) {
             material.uniforms.uTime.value = time;
         }
-        
-        // Standard materials with onBeforeCompile injections (like Wind)
         if (material.userData?.shader?.uniforms?.uTime) {
             material.userData.shader.uniforms.uTime.value = time;
+        }
+        // Lantern flicker: modulate emissive intensity with noise-like sin combo
+        if (material.userData?.flicker && material.userData.flickerBaseColor) {
+            const base = material.userData.flickerBaseColor;
+            const flicker = 0.82 + 0.18 * Math.sin(time * 7.3) * Math.sin(time * 11.1 + 1.3);
+            material.emissive.setRGB(base.r * flicker, base.g * flicker, base.b * flicker);
         }
     }
 
@@ -693,6 +696,10 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
                 if (config.emissive) {
                     const emissiveHex = config.emissiveColor ? parseInt(config.emissiveColor) : 0x333333;
                     m.emissive = new THREE.Color(emissiveHex);
+                    if (config.flicker) {
+                        m.userData.flicker = true;
+                        m.userData.flickerBaseColor = new THREE.Color(emissiveHex);
+                    }
                 }
             }
 

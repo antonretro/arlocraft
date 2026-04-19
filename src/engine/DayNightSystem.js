@@ -18,56 +18,36 @@ export class DayNightSystem {
         const scene = this.renderer?.scene;
         if (!scene) return;
 
-        const loader = new THREE.TextureLoader();
         const planeGeo = new THREE.PlaneGeometry(18, 18);
 
-        // --- Sun ---
-        const sunMat = new THREE.MeshBasicMaterial({
-            color: 0xfffde8,
-            transparent: true,
-            opacity: 1.0,
-            depthWrite: false,
-            side: THREE.DoubleSide
-        });
-        loader.load(
-            '/src/content/textures/sun.png',
-            (tex) => {
+        const loadTex = (url, fallbackColor, cb) => {
+            const mat = new THREE.MeshBasicMaterial({
+                color: fallbackColor, transparent: true, opacity: 1.0,
+                depthWrite: false, side: THREE.DoubleSide
+            });
+            const img = new Image();
+            img.onload = () => {
+                const tex = new THREE.CanvasTexture(img);
                 tex.magFilter = THREE.NearestFilter;
                 tex.minFilter = THREE.NearestFilter;
-                sunMat.map = tex;
-                sunMat.color.set(0xffffff);
-                sunMat.needsUpdate = true;
-            },
-            undefined,
-            () => { /* no sun.png — solid yellow fallback is already set */ }
-        );
-        this.sunPlane = new THREE.Mesh(planeGeo, sunMat);
-        this.sunPlane.renderOrder = -1;
-        scene.add(this.sunPlane);
+                mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true;
+            };
+            img.src = url;
+            cb(mat);
+        };
 
-        // --- Moon ---
-        const moonMat = new THREE.MeshBasicMaterial({
-            color: 0xddeeff,
-            transparent: true,
-            opacity: 0.0,
-            depthWrite: false,
-            side: THREE.DoubleSide
+        loadTex('/textures/sky/sun.png', 0xfffde8, (mat) => {
+            this.sunPlane = new THREE.Mesh(planeGeo, mat);
+            this.sunPlane.renderOrder = -1;
+            scene.add(this.sunPlane);
         });
-        loader.load(
-            '/src/content/textures/moon_phases.png',
-            (tex) => {
-                tex.magFilter = THREE.NearestFilter;
-                tex.minFilter = THREE.NearestFilter;
-                moonMat.map = tex;
-                moonMat.color.set(0xffffff);
-                moonMat.needsUpdate = true;
-            },
-            undefined,
-            () => { /* no moon_phases.png — solid tint fallback */ }
-        );
-        this.moonPlane = new THREE.Mesh(planeGeo.clone(), moonMat);
-        this.moonPlane.renderOrder = -1;
-        scene.add(this.moonPlane);
+
+        loadTex('/textures/sky/moon.png', 0xddeeff, (mat) => {
+            mat.opacity = 0;
+            this.moonPlane = new THREE.Mesh(planeGeo.clone(), mat);
+            this.moonPlane.renderOrder = -1;
+            scene.add(this.moonPlane);
+        });
     }
 
     update(delta, getPlayerPosition) {
@@ -86,10 +66,7 @@ export class DayNightSystem {
         const daylight = Math.max(0.08, Math.min(1, (sunHeight + 0.3)));
         this.renderer.setDaylightLevel(daylight);
 
-        // --- Position sun & moon planes along sky arc ---
-        const camera = this.renderer?.instance?.xr?.getCamera?.() ?? null;
-        // We use the scene camera; grab it from renderer if available
-        const cam = this.renderer?._lastCamera;
+        const cam = this.renderer?.camera ?? this.renderer?._lastCamera;
         const camPos = cam ? cam.position : new THREE.Vector3(0, 64, 0);
 
         if (this.sunPlane) {

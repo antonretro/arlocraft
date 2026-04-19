@@ -14,7 +14,7 @@ export const BIOMES = [
         ridgeStrength: 0.08,
         detailStrength: 0.5,
         waterLevelOffset: 0,
-        treeDensity: 0.08,
+        treeDensity: 0.04,
         color: 0x91bd59,
         waterColor: 0x3f76e4
     },
@@ -28,7 +28,7 @@ export const BIOMES = [
         ridgeStrength: 0.16,
         detailStrength: 0.72,
         waterLevelOffset: 0,
-        treeDensity: 0.22,
+        treeDensity: 0.10,
         color: 0x79c05a,
         waterColor: 0x3f76e4
     },
@@ -56,7 +56,7 @@ export const BIOMES = [
         ridgeStrength: 0.03,
         detailStrength: 0.36,
         waterLevelOffset: 2,
-        treeDensity: 0.12,
+        treeDensity: 0.07,
         color: 0x6a7039,
         waterColor: 0x617b58
     },

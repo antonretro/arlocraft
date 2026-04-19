@@ -323,8 +323,8 @@ export class WorldTerrainService {
     shouldPlaceStructureChunk(cx, cz) {
         if (Math.abs(cx) <= 2 && Math.abs(cz) <= 2) return false;
         if (this.shouldPlaceVillageChunk(cx, cz)) return false;
-        if (this.getStructureChunkScore(cx, cz) < 0.82) return false;
-        // Increased radius from 2 to 3 (7x7 chunks or ~112x112 blocks) to prevent clumping
-        return this.isStructureChunkAnchor(cx, cz, 3);
+        if (this.getStructureChunkScore(cx, cz) < 0.88) return false;
+        // Radius 5 = ~160 blocks minimum between structures
+        return this.isStructureChunkAnchor(cx, cz, 5);
     }
 }

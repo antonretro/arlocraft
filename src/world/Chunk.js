@@ -401,15 +401,14 @@ export class Chunk {
         const blocks = struct.blueprints(x, y, z);
         
         // ─── VOLUME CLEARING PASS ───
-        // Ensures the structure generates in a pocket of air, preventing burial "dirt walls"
         const sw = struct.width || 7;
-        const sh = struct.height || 6;
+        const sh = (struct.height || 6) + 3; // +3 overhead clearance
         const sd = struct.depth || 7;
-        const skirt = 1; // cleared perimeter to prevent clashing on slopes
+        const skirt = 2; // wider perimeter to prevent slope burial
 
         for (let dx = -skirt; dx < sw + skirt; dx++) {
             for (let dz = -skirt; dz < sd + skirt; dz++) {
-                for (let dy = 0; dy < sh; dy++) {
+                for (let dy = -1; dy < sh; dy++) { // dy=-1 clears one block below base
                     const bx = x + dx;
                     const by = y + dy;
                     const bz = z + dz;

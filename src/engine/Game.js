@@ -44,7 +44,7 @@ export class Game {
         this.worldSlots = new WorldSlotManager(this.saveSystem);
         this.skinSystem = new SkinSystem();
         this.ui = new GameUI(this);
-        this.updateChecker = new UpdateChecker('antonretro', 'antoncraft');
+        this.updateChecker = new UpdateChecker('antonretro', 'arlocraft');
 
         this.selectedStartMode = this.settings.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
         this.selectedWorldSlot = this.settings.selectedWorldSlot ?? 'slot-1';

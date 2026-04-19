@@ -107,11 +107,12 @@ export class BlockRulesService {
     }
 
     getBlockPickId(id) {
-        if (id === 'potato') return 'potato_stage3';
-        if (id === 'carrot') return 'carrot_stage3';
-        if (id === 'beetroot') return 'beetroot_stage3';
-        if (id === 'wheat') return 'wheat_stage7';
-        
+        // Crop blocks in world → pick up the food item
+        if (id === 'potato' || id?.startsWith('potato_stage')) return 'potato';
+        if (id === 'carrot' || id?.startsWith('carrot_stage')) return 'carrot';
+        if (id === 'beetroot' || id?.startsWith('beetroot_stage')) return 'beetroot';
+        if (id === 'wheat' || id?.startsWith('wheat_stage')) return 'wheat';
+
         const normalizedId = normalizeBlockVariantId(id);
         const data = this.getBlockData(normalizedId);
         return data?.pickId || normalizedId;

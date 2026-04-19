@@ -109,21 +109,25 @@ export class EntityManager {
             return Promise.resolve(this.billboardTextureCache.get(cacheKey));
         }
 
-        const loadBaseTexture = () => {
+        const loadBaseImage = () => {
             if (this.loadedTextureCache.has(url)) return Promise.resolve(this.loadedTextureCache.get(url));
-
             return new Promise((resolve, reject) => {
-                this.textureLoader.load(url, (texture) => {
-                    texture.magFilter = THREE.NearestFilter;
-                    texture.minFilter = THREE.NearestFilter;
-                    texture.colorSpace = THREE.SRGBColorSpace;
-                    this.loadedTextureCache.set(url, texture);
-                    resolve(texture);
-                }, undefined, reject);
+                const img = new Image();
+                if (url.startsWith('http')) img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    const tex = new THREE.CanvasTexture(img);
+                    tex.magFilter = THREE.NearestFilter;
+                    tex.minFilter = THREE.NearestFilter;
+                    tex.colorSpace = THREE.SRGBColorSpace;
+                    this.loadedTextureCache.set(url, tex);
+                    resolve(tex);
+                };
+                img.onerror = reject;
+                img.src = url;
             });
         };
 
-        return loadBaseTexture().then((texture) => {
+        return loadBaseImage().then((texture) => {
             let finalTexture = texture;
             if (textureMode === 'humanoid_billboard') {
                 finalTexture = createTextureFromCanvas(createHumanoidBillboardCanvas(texture.image));

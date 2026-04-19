@@ -58,19 +58,48 @@ export class CollectionsUI {
         if (!list) return;
         list.innerHTML = '';
 
+        const isCreative = this.gameState.mode === 'CREATIVE';
         const discovered = this.gameState.discoveredBlocks || new Set();
-        BLOCKS.forEach(block => {
-            const isKnown = discovered.has(block.id);
-            const item = document.createElement('div');
-            item.className = `ni-log-item ${isKnown ? '' : 'locked'}`;
-            item.title = isKnown ? block.name : 'Unknown Block';
 
-            if (isKnown) {
-                const icon = iconService.createItemElement({ id: block.id, count: 1 });
-                item.appendChild(icon);
+        // In creative mode show all blocks; in survival show only discovered
+        const visibleBlocks = isCreative
+            ? BLOCKS.filter(b => !b.id.includes('_stage') && b.id !== 'air')
+            : BLOCKS.filter(b => discovered.has(b.id));
+
+        if (isCreative) {
+            const hint = document.createElement('div');
+            hint.style.cssText = 'grid-column:1/-1;color:var(--ni-blue);font-size:0.65rem;text-align:center;padding:4px 0;';
+            hint.textContent = 'CREATIVE — click any block to add 64 to inventory';
+            list.appendChild(hint);
+        }
+
+        visibleBlocks.forEach(block => {
+            const item = document.createElement('div');
+            item.className = 'ni-log-item';
+            item.title = block.name || block.id;
+            const icon = iconService.createItemElement({ id: block.id, count: 1 });
+            item.appendChild(icon);
+
+            if (isCreative) {
+                item.style.cursor = 'pointer';
+                item.addEventListener('click', () => {
+                    this._creativeGive(block.id, 64);
+                });
             }
             list.appendChild(item);
         });
+    }
+
+    _creativeGive(id, amount = 64) {
+        const inv = this.gameState.inventory;
+        // Find existing stack first
+        let slot = inv.findIndex(s => s?.id === id && (s?.count ?? 0) < 99);
+        if (slot === -1) slot = inv.findIndex(s => !s);
+        if (slot === -1) slot = 0; // overwrite first slot if full
+        const existing = inv[slot]?.count ?? 0;
+        const newCount = Math.min(99, existing + amount);
+        this.gameState.inventory[slot] = { id, count: newCount, kind: 'block' };
+        window.dispatchEvent(new CustomEvent('inventory-changed'));
     }
 
     renderRecipes() {

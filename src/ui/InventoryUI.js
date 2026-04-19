@@ -60,6 +60,9 @@ export class InventoryUI {
             this.refs.closeButton.addEventListener('click', () => this.gameState.toggleInventory());
         }
 
+        const sortBtn = document.getElementById('btn-sort-inv');
+        if (sortBtn) sortBtn.addEventListener('click', () => this.sortInventory());
+
         window.addEventListener('inventory-toggle', (event) => this.toggleInventoryUI(Boolean(event.detail)));
         window.addEventListener('slot-changed', (event) => {
             this.updateHotbarSelection(event.detail);
@@ -403,6 +406,45 @@ export class InventoryUI {
 
         name.textContent = `${blockIdToDisplayName(normalizedId).toUpperCase()} x${item.count ?? 1}`;
         stats.textContent = `Item ID ${normalizedId}`;
+    }
+
+    sortInventory() {
+        const inv = this.gameState.inventory;
+        // Collect main slots (9-35), merge stacks, sort by kind then id
+        const items = [];
+        for (let i = 9; i < 36; i++) {
+            if (inv[i]) items.push({ ...inv[i] });
+        }
+
+        // Merge identical stacks
+        const merged = [];
+        for (const item of items) {
+            const existing = merged.find(m => m.id === item.id && m.kind === item.kind && m.count < 99);
+            if (existing) {
+                const space = 99 - existing.count;
+                const take = Math.min(space, item.count ?? 1);
+                existing.count += take;
+                const leftover = (item.count ?? 1) - take;
+                if (leftover > 0) merged.push({ ...item, count: leftover });
+            } else {
+                merged.push({ ...item });
+            }
+        }
+
+        // Sort: tools first, then blocks; alphabetically within groups
+        merged.sort((a, b) => {
+            const ka = this.toolById.has(a.id) ? 0 : 1;
+            const kb = this.toolById.has(b.id) ? 0 : 1;
+            if (ka !== kb) return ka - kb;
+            return a.id.localeCompare(b.id);
+        });
+
+        for (let i = 9; i < 36; i++) {
+            inv[i] = merged[i - 9] ?? null;
+        }
+
+        this.onInventoryChanged();
+        window.dispatchEvent(new CustomEvent('inventory-changed'));
     }
 
     generateHotbar() {
