@@ -317,19 +317,57 @@ export class GameUI {
         }
     }
 
+    switchSettingsTab(tabId) {
+        document.querySelectorAll('.ni-tab-link').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabId);
+        });
+        document.querySelectorAll('.ni-tab-pane').forEach(pane => {
+            pane.classList.toggle('active', pane.id === tabId);
+        });
+    }
+
     bindPauseMenu() {
         const btnResume = this.get('btn-resume');
         const btnPauseSettings = this.get('btn-pause-settings');
         const btnPauseSave = this.get('btn-pause-save');
         const btnPauseLoad = this.get('btn-pause-load');
         const btnBackTitle = this.get('btn-back-title');
+        const btnPauseGraphics = this.get('btn-pause-graphics');
+        const btnPauseSystem = this.get('btn-pause-system');
+        const btnPauseSkins = this.get('btn-pause-skins');
 
         if (btnResume) btnResume.addEventListener('click', () => this.game.resumeGame());
 
         if (btnPauseSettings) {
             btnPauseSettings.addEventListener('click', () => {
                 this.showPause(false);
+                this.switchSettingsTab('tab-general');
                 this.showSettings(true);
+            });
+        }
+
+        if (btnPauseGraphics) {
+            btnPauseGraphics.addEventListener('click', () => {
+                this.showPause(false);
+                this.switchSettingsTab('tab-video');
+                this.showSettings(true);
+            });
+        }
+
+        if (btnPauseSystem) {
+            btnPauseSystem.addEventListener('click', () => {
+                this.showPause(false);
+                this.switchSettingsTab('tab-persistence');
+                this.showSettings(true);
+            });
+        }
+
+        if (btnPauseSkins) {
+            btnPauseSkins.addEventListener('click', () => {
+                this.showPause(false);
+                this.game.resumeGame();
+                this.setMenuScreen('skins');
+                this.showTitle(true);
             });
         }
 

@@ -648,7 +648,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             }
             
             const isFoliage = (
-                (isDeco && (textureId === 'grass' || textureId.includes('grass') || textureId.includes('fern') || textureId === 'vine' || textureId === 'sugar_cane' || textureId.includes('roots') || textureId.includes('sprouts') || textureId.includes('flower') || textureId.includes('sapling')))
+                (isDeco && (textureId === 'grass' || textureId.includes('grass') || textureId.includes('fern') || textureId === 'vine' || textureId === 'sugar_cane' || textureId.includes('roots') || textureId.includes('sprouts') || textureId.includes('sapling')))
                 || textureId.includes('leaves')
             );
             const isGrassTopOnly = id === 'grass_block' || id === 'grass';

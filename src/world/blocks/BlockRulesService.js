@@ -41,7 +41,7 @@ export class BlockRulesService {
         if (data?.deco || data?.transparent) {
              // Exception: glass/slabs/stairs might be technically solid but transparent.
              // Usually 'solid' in this engine means 'opaquely fills the cube'.
-             if (id.includes('glass') || id.includes('slab') || id.includes('stair')) return true;
+             if (id.includes('glass') || id.includes('slab') || id.includes('stair') || id.includes('leaves')) return true;
              return false;
         }
         return true;
@@ -73,7 +73,8 @@ export class BlockRulesService {
         if (!id) return false;
         const normalizedId = normalizeBlockVariantId(id);
         if (this.gravityBlockIds.has(normalizedId)) return true;
-        if (normalizedId.includes('leaves')) return true;
+        // leaves are solid — don't fall
+        // if (normalizedId.includes('leaves')) return true;
         return false;
     }
 

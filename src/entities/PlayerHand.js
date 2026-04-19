@@ -210,18 +210,26 @@ export class PlayerHand {
             const mat = new THREE.MeshLambertMaterial({ map: texture, transparent: true, alphaTest: 0.5 });
             
             const front = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), mat);
-            front.position.z = 0.02;
+            front.position.z = 0.025;
             group.add(front);
-            
+
             const back = front.clone();
             back.rotation.y = Math.PI;
-            back.position.z = -0.02;
+            back.position.z = -0.025;
             group.add(back);
 
             // Pixel Extrusion (Minecraft style 3D depth) - Optimized with Merging
             const pixelW = 0.7 / w;
             const pixelH = 0.7 / h;
-            const sideMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
+            // Sample average color from opaque pixels for edge tint
+            let rSum = 0, gSum = 0, bSum = 0, count = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i + 3] >= 128) { rSum += data[i]; gSum += data[i+1]; bSum += data[i+2]; count++; }
+            }
+            const edgeColor = count > 0
+                ? new THREE.Color(rSum/count/255, gSum/count/255, bSum/count/255).multiplyScalar(0.6)
+                : new THREE.Color(0x555555);
+            const sideMat = new THREE.MeshLambertMaterial({ color: edgeColor });
             
             // Check cache first
             if (this.geometryCache.has(url)) {
