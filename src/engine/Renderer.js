@@ -1,29 +1,38 @@
 import * as THREE from 'three';
 import { CLOUD_SETTINGS, computeFogDensity, ATMOSPHERIC_COLORS } from '../rendering/RenderConfig.js';
 
+THREE.ColorManagement.enabled = true;
+
 export class Renderer {
-    constructor() {
-        this.instance = new THREE.WebGLRenderer({
-            antialias: true,
-            powerPreference: 'high-performance'
-        });
-        this.instance.setSize(window.innerWidth, window.innerHeight);
-        this.instance.setPixelRatio(window.devicePixelRatio);
-        this.instance.shadowMap.enabled = true;
-        this.instance.shadowMap.type = THREE.PCFShadowMap;
-        this.instance.outputColorSpace = THREE.SRGBColorSpace;
-        this.instance.setClearColor(0x87ceeb, 1);
+    constructor(preferredAPI = 'webgl2') {
+        const canUseWebGPU = typeof THREE.WebGPURenderer === 'function' && navigator.gpu;
+        this.rendererType = (preferredAPI === 'webgpu' && canUseWebGPU) ? 'webgpu' : 'webgl2';
         
-        document.getElementById('app').appendChild(this.instance.domElement);
+        try {
+            if (this.rendererType === 'webgpu') {
+                this.instance = new THREE.WebGPURenderer({ antialias: true });
+                this._initPromise = this.instance.init().then(() => {
+                    console.log('[AntonCraft] Using WebGPU renderer (Performance Mode)');
+                }).catch(err => {
+                    console.warn('[AntonCraft] WebGPU init failed, falling back to WebGL2:', err);
+                    this.fallbackToWebGL();
+                });
+            } else {
+                this.fallbackToWebGL();
+            }
+        } catch (e) {
+            console.warn('[AntonCraft] Renderer initialization failed:', e);
+            this.fallbackToWebGL();
+        }
 
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87ceeb);
-        this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.012);
+        this.scene.background = new THREE.Color(0x7ec8f0);
+        this.scene.fog = new THREE.FogExp2(0x7ec8f0, 0.012);
 
         this.daylight = 1;
         this.submerged = false;
         this.fogDensityScale = 1.0;
-        this.areaInfluence = { virus: 0, arlo: 0 };
+        this.areaInfluence = { virus: 0, anton: 0 };
         this.lastCloudUpdateMs = performance.now();
 
         this.setupLights();
@@ -37,11 +46,50 @@ export class Renderer {
         });
     }
 
+    /**
+     * Controls the visibility of the 3D rendering canvas.
+     */
+    setVisible(visible) {
+        if (this.instance.domElement) {
+            this.instance.domElement.style.display = visible ? 'block' : 'none';
+        }
+    }
+
+    fallbackToWebGL() {
+        this.rendererType = 'webgl2';
+        this.instance = new THREE.WebGLRenderer({ antialias: true });
+        this.instance.setSize(window.innerWidth, window.innerHeight);
+        this.instance.setPixelRatio(window.devicePixelRatio);
+        this.instance.shadowMap.enabled = true;
+        this.instance.shadowMap.type = THREE.PCFShadowMap;
+        this.instance.outputColorSpace = THREE.SRGBColorSpace;
+        this.instance.setClearColor(0x87ceeb, 1);
+        this._initPromise = Promise.resolve();
+        console.log('[AntonCraft] Using WebGL2 renderer (Stability Mode)');
+        
+        // Update DOM if app exists
+        const appElem = document.getElementById('app');
+        if (appElem) {
+            // Remove existing canvas if any
+            const existing = appElem.querySelector('canvas');
+            if (existing && existing !== this.instance.domElement) {
+                existing.remove();
+            }
+            if (this.instance.domElement.parentNode !== appElem) {
+                appElem.appendChild(this.instance.domElement);
+                this.instance.domElement.style.display = 'none'; // Hidden until startGame
+            }
+        }
+    }
+
     setupLights() {
-        this.hemiLight = new THREE.HemisphereLight(0xb9e3ff, 0x3a301f, 0.72);
+        this.hemiLight = new THREE.HemisphereLight(0xcce8ff, 0x4a402f, 0.95);
         this.scene.add(this.hemiLight);
 
-        this.sun = new THREE.DirectionalLight(0xffffff, 1.0);
+        this.ambientFill = new THREE.AmbientLight(0xf4ead8, 0.38);
+        this.scene.add(this.ambientFill);
+
+        this.sun = new THREE.DirectionalLight(0xfffff5, 1.25);
         this.sun.position.set(20, 100, 20);
         this.sun.castShadow = true;
         this.sun.shadow.mapSize.width = 2048;
@@ -60,33 +108,50 @@ export class Renderer {
         const skyGeo = new THREE.SphereGeometry(450, 64, 32);
         const skyMat = new THREE.ShaderMaterial({
             uniforms: {
-                top: { value: new THREE.Color(0x1a72f5) },
-                bottom: { value: new THREE.Color(0x6fb8ff) },
-                offset: { value: 33 },
-                exponent: { value: 0.6 }
+                top:      { value: new THREE.Color(0x0a3fc8) },
+                bottom:   { value: new THREE.Color(0x7ec8f0) },
+                horizon:  { value: new THREE.Color(0xffd090) },
+                horizonStrength: { value: 0.0 },
+                offset:   { value: 0 },
+                exponent: { value: 2.2 }
             },
             vertexShader: `
-                varying vec3 vLocalPos;
+                varying float vHeight;
                 void main() {
-                    vLocalPos = position;
+                    vHeight = normalize(position).y;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                 }
             `,
             fragmentShader: `
                 uniform vec3 top;
                 uniform vec3 bottom;
+                uniform vec3 horizon;
+                uniform float horizonStrength;
                 uniform float offset;
                 uniform float exponent;
-                varying vec3 vLocalPos;
+                varying float vHeight;
                 void main() {
-                    float h = normalize(vLocalPos).y;
-                    // Clamp top/bottom mix to prevent color overshooting at horizons
-                    float factor = clamp(pow(max(h + offset / 100.0, 0.0), exponent), 0.0, 1.0);
-                    gl_FragColor = vec4(mix(bottom, top, factor), 1.0);
+                    float h = vHeight;
+                    // Improved gradient: sharper transition near horizon
+                    float factor = clamp(pow(max(h, 0.0), exponent), 0.0, 1.0);
+                    vec3 sky = mix(bottom, top, factor);
+                    
+                    // Horizon glow band: Use linear/smoothstep for better performance
+                    float horizonBand = clamp(1.0 - abs(h) * 2.0, 0.0, 1.0);
+                    horizonBand = smoothstep(0.0, 1.0, pow(horizonBand, 4.0)) * horizonStrength;
+                    sky = mix(sky, horizon, horizonBand);
+                    
+                    // Darken slightly below horizon
+                    if (h < 0.0) {
+                        sky = mix(bottom, vec3(0.0), clamp(-h * 0.4, 0.0, 0.2));
+                    }
+                    
+                    gl_FragColor = vec4(sky, 1.0);
                 }
             `,
             side: THREE.BackSide,
-            depthTest: false     // always render as background behind everything
+            depthTest: false,
+            depthWrite: false
         });
         this.skyDome = new THREE.Mesh(skyGeo, skyMat);
         this.scene.add(this.skyDome);
@@ -119,32 +184,75 @@ export class Renderer {
     }
 
     setupClouds() {
-        this.clouds = new THREE.Group();
-        this.cloudMeshes = [];
-        const cloudGeo = new THREE.BoxGeometry(1, 1, 1);
-        const cloudMat = new THREE.MeshBasicMaterial({ 
-            color: 0xffffff, 
-            transparent: true, 
-            opacity: 0.85,
+        this.cloudMeshes = []; // kept so nothing else breaks
+
+        const cloudGeo = new THREE.PlaneGeometry(800, 800, 60, 60);
+        // Rotate so the plane lies flat (horizontal)
+        cloudGeo.rotateX(-Math.PI / 2);
+
+        this.cloudMat = new THREE.ShaderMaterial({
+            uniforms: {
+                offset:       { value: new THREE.Vector2(0, 0) },
+                cloudOpacity: { value: 0.82 }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                uniform vec2 offset;
+                void main() {
+                    vUv = uv + offset;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                varying vec2 vUv;
+                uniform float cloudOpacity;
+
+                // Cheap fBm using layered sin/cos — no texture lookup needed
+                float hash(vec2 p) {
+                    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+                }
+
+                float noise(vec2 p) {
+                    vec2 i = floor(p);
+                    vec2 f = fract(p);
+                    vec2 u = f * f * (3.0 - 2.0 * f);
+                    return mix(
+                        mix(hash(i),             hash(i + vec2(1.0, 0.0)), u.x),
+                        mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+                        u.y
+                    );
+                }
+
+                float fbm(vec2 p) {
+                    float v = 0.0;
+                    float a = 0.5;
+                    for (int i = 0; i < 5; i++) {
+                        v += a * noise(p);
+                        p  = p * 2.1 + vec2(1.7, 9.2);
+                        a *= 0.5;
+                    }
+                    return v;
+                }
+
+                void main() {
+                    float n = fbm(vUv * 3.8);
+                    
+                    // Fade clouds at the zenith (vUv 0.5,0.5) to reveal blue sky
+                    float distFromZenith = distance(vUv, vec2(0.5));
+                    float zenithFade = smoothstep(0.0, 0.25, distFromZenith);
+                    
+                    float alpha = smoothstep(0.38, 0.62, n) * cloudOpacity * zenithFade;
+                    gl_FragColor = vec4(0.98, 0.99, 1.0, alpha);
+                }
+            `,
+            transparent: true,
+            depthWrite:  false,
             side: THREE.DoubleSide
         });
 
-        for (let i = 0; i < CLOUD_SETTINGS.count; i++) {
-            const mesh = new THREE.Mesh(cloudGeo, cloudMat);
-            const w = THREE.MathUtils.randFloat(CLOUD_SETTINGS.widthMin, CLOUD_SETTINGS.widthMax);
-            const h = THREE.MathUtils.randFloat(2, 5);
-            const d = THREE.MathUtils.randFloat(CLOUD_SETTINGS.depthMin, CLOUD_SETTINGS.depthMax);
-            mesh.scale.set(w, h, d);
-            mesh.position.set(
-                THREE.MathUtils.randFloatSpread(CLOUD_SETTINGS.spread),
-                THREE.MathUtils.randFloat(CLOUD_SETTINGS.yMin, CLOUD_SETTINGS.yMax),
-                THREE.MathUtils.randFloatSpread(CLOUD_SETTINGS.spread)
-            );
-            mesh.userData.speed = THREE.MathUtils.randFloat(CLOUD_SETTINGS.speedMin, CLOUD_SETTINGS.speedMax);
-            this.clouds.add(mesh);
-            this.cloudMeshes.push(mesh);
-        }
-        this.scene.add(this.clouds);
+        this.cloudPlane = new THREE.Mesh(cloudGeo, this.cloudMat);
+        this.cloudPlane.position.y = CLOUD_SETTINGS.yMin;
+        this.scene.add(this.cloudPlane);
     }
 
     updateEnvironmentLighting(daylight, playerPos = null, forcedDepthBlend = null) {
@@ -167,11 +275,11 @@ export class Renderer {
         if (forcedDepthBlend === null && playerPos) {
             const surfaceY = 64; 
             const depth = surfaceY - playerPos.y;
-            depthBlend = Math.max(0, Math.min(0.85, depth / 128));
+            depthBlend = Math.max(0, Math.min(0.55, depth / 180));
         }
 
         if (depthBlend > 0) {
-            const caveTint = new THREE.Color(0x0a1018); // Slightly lighter than pure black
+            const caveTint = new THREE.Color(0x1f2c38);
             bottom.lerp(caveTint, depthBlend);
             top.lerp(caveTint, depthBlend);
         }
@@ -179,6 +287,13 @@ export class Renderer {
         if (this.skyDome) {
             this.skyDome.material.uniforms.top.value.copy(top);
             this.skyDome.material.uniforms.bottom.value.copy(bottom);
+            // Horizon glow: strong at dawn/dusk, none at day/night
+            const horizonGlowColor = state === 'DUSK' ? new THREE.Color(0xff4400)
+                                   : state === 'DAWN' ? new THREE.Color(0xff8833)
+                                   : new THREE.Color(0xffd0a0);
+            const horizonStr = state === 'DAWN' || state === 'DUSK' ? 0.85 : (state === 'DAY' ? 0.12 : 0.0);
+            this.skyDome.material.uniforms.horizon.value.copy(horizonGlowColor);
+            this.skyDome.material.uniforms.horizonStrength.value = horizonStr;
         }
         this.scene.background.copy(bottom);
         
@@ -186,11 +301,24 @@ export class Renderer {
         this.scene.fog.color.copy(fogCol);
         this.scene.fog.density = computeFogDensity(daylight, this.submerged) * (this.fogDensityScale || 1.0);
 
-        this.sun.intensity = 0.2 + (clamped * 1.0);
+        this.sun.intensity = 0.45 + (clamped * 1.05);
         this.sun.color.copy(sunCol);
-        this.hemiLight.intensity = 0.55 + (clamped * 0.45);
+        this.hemiLight.intensity = 0.95 + (clamped * 0.5);
         this.hemiLight.color.set(top);
-        this.hemiLight.groundColor.set(0x3e362d);
+        this.hemiLight.groundColor.set(0x6d6253);
+        if (this.ambientFill) {
+            this.ambientFill.intensity = 0.34 + (clamped * 0.16);
+            this.ambientFill.color.copy(sunCol).lerp(new THREE.Color(0xffffff), 0.35);
+        }
+
+        // Center sun shadow camera on player for infinite coverage
+        if (playerPos) {
+            const sx = Math.floor(playerPos.x / 4) * 4;
+            const sz = Math.floor(playerPos.z / 4) * 4;
+            this.sun.position.set(sx + 20, 100, sz + 20);
+            this.sun.target.position.set(sx, 0, sz);
+            this.sun.target.updateMatrixWorld();
+        }
 
         // Stars & Moon
         if (this.stars) {
@@ -208,8 +336,11 @@ export class Renderer {
 
     setDaylightLevel(daylight) {
         this.daylight = Math.max(0, Math.min(1, daylight));
-        this.hemiLight.intensity = 0.4 + this.daylight * 0.6;
-        this.sun.intensity = this.daylight * 1.25;
+        this.hemiLight.intensity = 0.85 + this.daylight * 0.55;
+        this.sun.intensity = 0.4 + this.daylight * 1.05;
+        if (this.ambientFill) {
+            this.ambientFill.intensity = 0.32 + this.daylight * 0.18;
+        }
         
         // Sky colors mix - use THREE.Color to wrap the hex constants from RenderConfig
         const dayTop = new THREE.Color(ATMOSPHERIC_COLORS.DAY.top);
@@ -253,10 +384,19 @@ export class Renderer {
 
     setUnderwaterState(submerged) {
         this.submerged = Boolean(submerged);
+        if (submerged) {
+            // Deep teal-blue underwater fog
+            this.scene.fog.color.setHex(0x0a3d5a);
+            this.scene.background.setHex(0x061e2e);
+            if (this.skyDome) this.skyDome.visible = false;
+        } else {
+            if (this.skyDome) this.skyDome.visible = true;
+        }
         this.scene.fog.density = computeFogDensity(this.daylight, this.submerged) * (this.fogDensityScale || 1.0);
     }
 
     render(camera) {
+        this._lastCamera = camera; // exposed for DayNightSystem sun/moon positioning
         if (this.skyDome) this.skyDome.position.copy(camera.position);
         if (this.stars) this.stars.position.copy(camera.position);
         
@@ -276,10 +416,15 @@ export class Renderer {
         const delta = Math.max(0, Math.min(0.05, (now - this.lastCloudUpdateMs) / 1000));
         this.lastCloudUpdateMs = now;
 
-        for (let i = 0; i < this.cloudMeshes.length; i++) {
-            const cloud = this.cloudMeshes[i];
-            cloud.position.x += cloud.userData.speed * delta;
-            if (cloud.position.x > CLOUD_SETTINGS.spread / 2) cloud.position.x = -CLOUD_SETTINGS.spread / 2;
+        // Scroll cloud noise plane
+        if (this.cloudMat) {
+            this.cloudMat.uniforms.offset.value.x += delta * 0.003;
+        }
+
+        // Follow camera so the cloud plane never falls out of view
+        if (this.cloudPlane) {
+            this.cloudPlane.position.x = camera.position.x;
+            this.cloudPlane.position.z = camera.position.z;
         }
 
         this.instance.render(this.scene, camera);
@@ -294,10 +439,11 @@ export class Renderer {
     }
 
     setAreaInfluence(influence) {
-        this.areaInfluence = influence || { virus: 0, arlo: 0 };
+        this.areaInfluence = influence || { virus: 0, anton: 0 };
         // Could apply color grading or post-processing here based on virus level
-        if (this.areaInfluence.virus > 0.5) {
-            // Apply subtle glitch/red tint to sky or fog
-        }
+    }
+
+    async waitForInit() {
+        await this._initPromise;
     }
 }

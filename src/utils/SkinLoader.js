@@ -7,10 +7,15 @@ import * as THREE from 'three';
 export class SkinLoader {
     constructor() {
         this.loader = new THREE.TextureLoader();
+        this.defaultSteve = '/assets/steve.png';
+        this.defaultAlex = '/assets/alex.png';
     }
 
     async loadSkin(username) {
-        const url = `https://minotar.net/skin/${username}`;
+        // Minotar accepts usernames directly (no UUID lookup needed) and has CORS enabled
+        const url = username === 'Steve' || username === 'Alex' || !username
+            ? (username === 'Alex' ? this.defaultAlex : this.defaultSteve)
+            : `https://minotar.net/skin/${username}`;
         
         return new Promise((resolve, reject) => {
             this.loader.load(url, (texture) => {
@@ -22,8 +27,13 @@ export class SkinLoader {
                 
                 resolve({ texture, materials });
             }, undefined, (err) => {
-                // Fallback to Steve on error
-                this.loadSkin('Steve').then(resolve).catch(reject);
+                // Absolute fallback to Igneous Steve on any error
+                if (url !== this.defaultSteve) {
+                    console.warn(`[AntonCraft] Failed to load skin for ${username}, falling back to Igneous Steve.`);
+                    this.loadSkin('Steve').then(resolve).catch(reject);
+                } else {
+                    reject(err);
+                }
             });
         });
     }

@@ -1,6 +1,6 @@
-# ArloCraft Content Packs
+# AntonCraft Content Packs
 
-ArloCraft now supports simple folder-based content packs for blocks and tools.
+AntonCraft now supports simple folder-based content packs for blocks and tools.
 
 ## Where to Add New Content
 

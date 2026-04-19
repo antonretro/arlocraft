@@ -1,13 +1,15 @@
 import * as THREE from 'three';
-import LZString from 'lz-string';
 import StatsPanel from 'stats.js';
+import { migrateInventoryItem } from '../data/blockMigrations.js';
 import { ActionSystem } from './ActionSystem.js';
 import { Camera } from './Camera.js';
+import { DayNightSystem } from './DayNightSystem.js';
 import { GameState } from './GameState.js';
 import { Input } from './Input.js';
 import { Physics } from './Physics.js';
 import { Renderer } from './Renderer.js';
 import { Stats } from './Stats.js';
+import { SurvivalSystem } from './SurvivalSystem.js';
 import { EntityManager } from '../entities/EntityManager.js';
 import { HUD } from '../ui/HUD.js';
 import { World } from '../world/World.js';
@@ -17,59 +19,66 @@ import { TouchControls } from '../ui/TouchControls.js';
 import { FEATURES } from '../data/features.js';
 import { PlayerHand } from '../entities/PlayerHand.js';
 import { AudioSystem } from './AudioSystem.js';
-import appPackage from '../../package.json';
+import { SkinLoader } from '../utils/SkinLoader.js';
+import { NotificationSystem } from './NotificationSystem.js';
+import { VERSIONS } from '../data/versions.js';
+import { SettingsManager } from './SettingsManager.js';
+import { SaveSystem } from './SaveSystem.js';
+import { WorldSlotManager } from './WorldSlotManager.js';
+import { UpdateChecker } from './UpdateChecker.js';
+import { GameUI } from './GameUI.js';
 
-const FOOD_VALUES = {
-    apple: 4, tomato: 4, carrot: 3, potato: 3, corn: 3,
-    blueberry: 2, strawberry: 2, melon_slice: 2, honey_bottle: 3,
-    bread: 5, pumpkin_pie: 6, cookie: 2,
-    mushroom_brown: 2,
-    steak: 8, cooked_fish: 6,
-};
-
-const LOCAL_APP_VERSION = `v${appPackage?.version ?? '0.0.0'}`;
+const LOCAL_APP_VERSION = 'v1.0';
 const GITHUB_REPO_OWNER = 'antonretro';
-const GITHUB_REPO_NAME = 'arlocraft';
+const GITHUB_REPO_NAME = 'antoncraft';
 
 export class Game {
     constructor() {
-        this.settings = this.loadSettings();
+        console.log('[AntonCraft] Game constructor starting...');
+
+        this.settingsManager = new SettingsManager();
+        this.settings = this.settingsManager.getAll();
+
+        this.saveSystem = new SaveSystem(this);
+        this.worldSlots = new WorldSlotManager(this.saveSystem);
+        this.ui = new GameUI(this);
+        this.updateChecker = new UpdateChecker('antonretro', 'antoncraft');
+
         this.selectedStartMode = this.settings.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
         this.selectedWorldSlot = this.settings.selectedWorldSlot ?? 'slot-1';
-        this.systemTimers = { hunger: 0, regen: 0, starve: 0 };
-        this.timeOfDay = 0.3;
-        this.dayDurationSeconds = 420;
+
         this.performanceSampler = { frames: 0, time: 0, lastAdjust: 0 };
         this.qualityTier = 'balanced';
         this.qualityInitialized = false;
         this.qualityOrder = ['low', 'balanced', 'high'];
+
         this.viewYaw = 0;
         this.viewPitch = 0;
-        this.pitchLimit = Math.PI / 2 - 0.02;
-        this.cameraModes = ['FIRST_PERSON', 'THIRD_PERSON_BACK'];
+        this.pitchLimit = Math.PI / 2 - 0.0001;
+        this.cameraModes = ['FIRST_PERSON', 'THIRD_PERSON_BACK', 'THIRD_PERSON_FRONT'];
         this.cameraModeIndex = 0;
+
         this.debugVisible = false;
         this.debugAccumulator = 0;
         this.debugFps = 0;
         this.screenShake = 0;
+        this.shakeFrequency = 12;
+        this.shakeDecay = 4.2;
         this.framePanel = null;
-        this.features = { ...FEATURES };
-        this.features.dynamicQualityAuto = this.settings.autoQuality;
-        this.profiler = { physicsMs: 0, worldMs: 0, renderMs: 0, uiMs: 0 };
-        this.idleWorldTick = 0;
-        this.latestReleaseInfo = null;
-        this.releaseFetchPromise = null;
 
         this.hasStarted = false;
         this.isPaused = false;
+
+        this._camHead = new THREE.Vector3();
+        this._camLook = new THREE.Vector3();
+        this._camDesired = new THREE.Vector3();
         this.lastKnownPosition = new THREE.Vector3(0, 70, 0);
-        this.resumeGraceFrames = 0;
 
         this.gameState = new GameState();
         this.stats = new Stats();
         this.gameState.stats = this.stats;
 
-        this.renderer = new Renderer();
+        this.renderer = new Renderer(this.settings.graphicsAPI);
         this.camera = new Camera(this.renderer.scene);
         this.setupPlayerVisual();
 
@@ -83,21 +92,50 @@ export class Game {
         this.camera.viewmodelGroup.add(this.hand.group);
         this.actionSystem = new ActionSystem(this.gameState);
         this.input = new Input(this);
+        
         this.hud = new HUD(this.gameState, this);
+        this.survival = new SurvivalSystem(this.gameState, this.hud);
+        this.dayNight = new DayNightSystem(this.renderer, this.world, this.features ?? {});
         this.helpPanel = new HelpPanel();
         this.minimap = new MiniMap(this);
         this.audio = new AudioSystem();
         this.audio.applyFromSettings(this.settings);
         this.audio.installAutoUnlock(document);
+        this.skinLoader = new SkinLoader();
 
-        this.clock = new THREE.Clock();
+        this.currentVersionId = 'v1.1';
+        this.features = { ...FEATURES };
+        this.notifications = new NotificationSystem();
+
+        this.profiler = { physicsMs: 0, worldMs: 0, uiMs: 0, renderMs: 0 };
+        this.clock = new THREE.Timer();
         this.bindEvents();
         this.setupUI();
         this.setupSkinListeners();
+
         this.init().catch(e => {
-            console.error("[ArloCraft] Init Failure:", e);
-            if (this.showOnScreenError) this.showOnScreenError(e.message);
+            console.error('[AntonCraft] Init Failure:', e);
         });
+    }
+
+    setupUI() {
+        const seedInput = document.getElementById('seed-input');
+        if (seedInput) seedInput.value = this.world.seedString;
+
+        this.ui.bindAll();
+
+        this.setMenuMode(this.selectedStartMode, false);
+        this.world.setRenderDistance(
+            this.getEffectiveRenderDistanceForTier(this.settings.qualityTierPref ?? this.qualityTier)
+        );
+
+        this.ui.renderWorldList();
+        this.ui.setMenuScreen('title');
+        
+        // Final polish for startup presentation
+        if (this.hud && this.hud.core) {
+            this.hud.core.loadFaceData(); 
+        }
     }
 
     setupPlayerVisual() {
@@ -126,11 +164,14 @@ export class Game {
         armR.position.set(0.52, 1.0, 0);
         group.add(armR);
 
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 1.72, 0);
+        
         const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.62), bodyMaterial);
-        head.position.set(0, 1.72, 0);
-        group.add(head);
+        head.position.set(0, 0, 0); // Local to headGroup
+        headGroup.add(head);
 
-        const facePath = 'arlo_real.png';
+        const facePath = 'anton_real.png';
         const faceTexture = new THREE.TextureLoader().load(facePath);
         faceTexture.magFilter = THREE.NearestFilter;
         faceTexture.minFilter = THREE.NearestFilter;
@@ -138,11 +179,14 @@ export class Game {
             new THREE.PlaneGeometry(0.56, 0.56),
             new THREE.MeshBasicMaterial({ map: faceTexture, transparent: true })
         );
-        facePlane.position.set(0, 1.72, 0.322);
-        group.add(facePlane);
+        facePlane.position.set(0, 0, 0.322); // Local to headGroup
+        headGroup.add(facePlane);
+        
+        group.add(headGroup);
 
         group.visible = false;
         this.playerVisual = group;
+        this.playerParts = { torso, head, headGroup, armL, armR, legL, legR, face: facePlane };
         this.renderer.scene.add(this.playerVisual);
     }
 
@@ -207,413 +251,116 @@ export class Game {
         });
     }
 
-    loadSettings() {
-        const defaults = {
-            sensitivity: 0.00145,
-            invertY: false,
-            fov: 75,
-            qualityTierPref: 'low',
-            preferredMode: 'SURVIVAL',
-            autoJump: true,
-            autoQuality: false,
-            renderDistance: 2,
-            selectedWorldSlot: 'slot-1',
-            shadowsEnabled: true,
-            fogDensityScale: 1.0,
-            perfPanelVisible: false,
-            resolutionScale: 1.0,
-            audioMuted: false,
-            audioMaster: 0.82,
-            audioSfx: 0.9,
-            audioUi: 0.78,
-            audioWorld: 0.85
-        };
-
-        try {
-            const raw = localStorage.getItem('arlocraft-settings');
-            if (!raw) return defaults;
-            const parsed = JSON.parse(raw);
-            const fov = Number(parsed.fov);
-            return {
-                sensitivity: Number.isFinite(parsed.sensitivity) ? parsed.sensitivity : defaults.sensitivity,
-                invertY: Boolean(parsed.invertY),
-                fov: Number.isFinite(fov) && fov >= 60 && fov <= 110 ? fov : defaults.fov,
-                qualityTierPref: ['low', 'balanced', 'high'].includes(parsed.qualityTierPref) ? parsed.qualityTierPref : defaults.qualityTierPref,
-                preferredMode: parsed.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL',
-                autoJump: parsed.autoJump !== undefined ? Boolean(parsed.autoJump) : defaults.autoJump,
-                autoQuality: parsed.autoQuality !== undefined ? Boolean(parsed.autoQuality) : defaults.autoQuality,
-                renderDistance: Number.isFinite(parsed.renderDistance)
-                    ? Math.max(2, Math.min(6, Math.round(parsed.renderDistance)))
-                    : defaults.renderDistance,
-                selectedWorldSlot: typeof parsed.selectedWorldSlot === 'string' ? parsed.selectedWorldSlot : defaults.selectedWorldSlot,
-                shadowsEnabled: parsed.shadowsEnabled !== undefined ? Boolean(parsed.shadowsEnabled) : defaults.shadowsEnabled,
-                fogDensityScale: Number.isFinite(parsed.fogDensityScale) ? parsed.fogDensityScale : defaults.fogDensityScale,
-                perfPanelVisible: parsed.perfPanelVisible !== undefined ? Boolean(parsed.perfPanelVisible) : defaults.perfPanelVisible,
-                resolutionScale: Number.isFinite(parsed.resolutionScale) ? parsed.resolutionScale : defaults.resolutionScale,
-                audioMuted: parsed.audioMuted !== undefined ? Boolean(parsed.audioMuted) : defaults.audioMuted,
-                audioMaster: Number.isFinite(parsed.audioMaster) ? Math.max(0, Math.min(1, parsed.audioMaster)) : defaults.audioMaster,
-                audioSfx: Number.isFinite(parsed.audioSfx) ? Math.max(0, Math.min(1, parsed.audioSfx)) : defaults.audioSfx,
-                audioUi: Number.isFinite(parsed.audioUi) ? Math.max(0, Math.min(1, parsed.audioUi)) : defaults.audioUi,
-                audioWorld: Number.isFinite(parsed.audioWorld) ? Math.max(0, Math.min(1, parsed.audioWorld)) : defaults.audioWorld
-            };
-        } catch {
-            return defaults;
-        }
-    }
-
     saveSettings() {
-        localStorage.setItem('arlocraft-settings', JSON.stringify(this.settings));
-    }
-
-    getWorldSlotIds() {
-        return ['slot-1', 'slot-2', 'slot-3', 'slot-4', 'slot-5'];
-    }
-
-    getWorldSlotStorageKey(slotId = this.selectedWorldSlot) {
-        return `arlocraft-world-save-${slotId}`;
-    }
-
-    readWorldSlotSummary(slotId) {
-        try {
-            const raw = localStorage.getItem(this.getWorldSlotStorageKey(slotId));
-            if (!raw) return null;
-            const data = this.decodeSavePayload(raw);
-            return {
-                exists: true,
-                seed: String(data?.world?.seed ?? 'unknown'),
-                savedAt: String(data?.savedAt ?? ''),
-                mode: String(data?.player?.mode ?? 'SURVIVAL')
-            };
-        } catch {
-            return null;
-        }
+        this.settingsManager.save();
     }
 
     selectWorldSlot(slotId) {
-        if (!this.getWorldSlotIds().includes(slotId)) return;
+        if (!this.worldSlots.getAll().includes(slotId)) return;
+
         this.selectedWorldSlot = slotId;
         this.settings.selectedWorldSlot = slotId;
-        this.saveSettings();
-        this.renderWorldList();
-    }
-
-    renderWorldList() {
-        const list = document.getElementById('world-list-container');
-        if (!list) return;
-        list.innerHTML = '';
-
-        const slotLabel = document.getElementById('create-slot-label');
-        if (slotLabel) slotLabel.textContent = this.selectedWorldSlot.toUpperCase();
-
-        const icons = ['???', '??', '???', '???', '??'];
-        for (const [idx, slotId] of this.getWorldSlotIds().entries()) {
-            const card = document.createElement('div');
-            card.className = 'ni-world-card';
-            if (slotId === this.selectedWorldSlot) card.classList.add('active');
-            const summary = this.readWorldSlotSummary(slotId);
-            const icon = icons[idx % icons.length];
-            if (summary?.exists) {
-                const when = summary.savedAt ? new Date(summary.savedAt).toLocaleDateString() : 'N/A';
-                card.innerHTML = `
-                    <div class="ni-world-card-icon">${icon}</div>
-                    <div class="ni-world-name">${slotId.toUpperCase()}</div>
-                    <div class="ni-world-meta">${summary.mode} · Seed: ${summary.seed}</div>
-                    <div class="ni-world-meta">${when}</div>
-                `;
-            } else {
-                card.innerHTML = `
-                    <div class="ni-world-card-icon" style="opacity: 0.3;">🌑</div>
-                    <div class="ni-world-name" style="opacity: 0.5;">${slotId.toUpperCase()}</div>
-                    <div class="ni-world-meta">Empty Space</div>
-                    <div class="ni-world-meta">Unexplored</div>
-                `;
-            }
-
-            card.addEventListener('click', () => this.selectWorldSlot(slotId));
-            list.appendChild(card);
-        }
-        this.refreshTitleMenuState();
-    }
-
-    refreshTitleMenuState() {
-        const summary = this.readWorldSlotSummary(this.selectedWorldSlot);
-        const hasSave = Boolean(summary?.exists);
-        const playBtn = document.getElementById('btn-play-world');
-        const deleteBtn = document.getElementById('btn-delete-world');
-        const createBtn = document.getElementById('btn-start');
-        if (playBtn) {
-            playBtn.disabled = !hasSave;
-            playBtn.style.opacity = hasSave ? '1' : '0.55';
-            playBtn.title = hasSave ? 'Play the selected saved world' : 'Select a slot with a saved world';
-        }
-        if (deleteBtn) {
-            deleteBtn.disabled = !hasSave;
-            deleteBtn.style.opacity = hasSave ? '1' : '0.55';
-        }
-        if (createBtn) {
-            createBtn.textContent = hasSave ? 'Overwrite & Create' : 'Create World!';
-        }
+        this.settingsManager.save();
+        this.ui.renderWorldList();
     }
 
     deleteWorldSlot(slotId = this.selectedWorldSlot) {
-        const summary = this.readWorldSlotSummary(slotId);
+        const summary = this.worldSlots.getSummary(slotId);
+
         if (!summary?.exists) {
-            this.setStatus(`No save in ${slotId.toUpperCase()} to delete.`, true);
+            this.ui.setStatus(`No save in ${slotId.toUpperCase()} to delete.`, true);
             return false;
         }
 
         const ok = window.confirm(`Delete ${slotId.toUpperCase()}? This cannot be undone.`);
         if (!ok) return false;
 
-        localStorage.removeItem(this.getWorldSlotStorageKey(slotId));
-        if (slotId === this.selectedWorldSlot) {
-            this.selectedWorldSlot = slotId;
-            this.settings.selectedWorldSlot = slotId;
-            this.saveSettings();
-        }
-        this.renderWorldList();
-        this.setStatus(`Deleted ${slotId.toUpperCase()}.`);
+        this.worldSlots.delete(slotId);
+        this.ui.renderWorldList();
+        this.ui.setStatus(`Deleted ${slotId.toUpperCase()}.`);
         return true;
     }
 
-    setStatus(message, isError = false) {
-        const status = document.getElementById('settings-status');
-        if (!status) return;
-        status.textContent = message;
-        status.style.color = isError ? '#ff7979' : '#d2ffd6';
+    saveWorldLocal(slotId = this.selectedWorldSlot) {
+        this.saveSystem.saveToSlot(slotId);
+        this.ui.renderWorldList();
+        this.ui.setStatus(`World saved to ${slotId.toUpperCase()}.`);
     }
 
-    getRepositoryUrl() {
-        return `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`;
-    }
-
-    getLatestReleaseApiUrl() {
-        return `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`;
-    }
-
-    openRepositoryPage() {
-        const url = this.getRepositoryUrl();
-        window.open(url, '_blank', 'noopener');
-    }
-
-    extractReleaseNotes(body) {
-        const lines = String(body ?? '')
-            .split(/\r?\n/g)
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0)
-            .filter((line) => !line.startsWith('#'));
-
-        const cleaned = [];
-        for (const raw of lines) {
-            const text = raw.replace(/^[-*]\s+/, '').trim();
-            if (!text) continue;
-            cleaned.push(text);
-            if (cleaned.length >= 4) break;
-        }
-
-        if (cleaned.length > 0) return cleaned;
-        return ['No release notes published yet.'];
-    }
-
-    setTitleReleaseInfo(info = {}) {
-        const versionEl = document.getElementById('ni-release-version');
-        const dateEl = document.getElementById('ni-release-date');
-        const notesEl = document.getElementById('ni-release-notes');
-        if (!versionEl || !dateEl || !notesEl) return;
-
-        const version = String(info.version ?? LOCAL_APP_VERSION);
-        const dateLabel = String(info.dateLabel ?? 'Local build');
-        const notes = Array.isArray(info.notes) && info.notes.length > 0
-            ? info.notes
-            : ['No changelog entries available.'];
-        const releaseUrl = typeof info.releaseUrl === 'string' && info.releaseUrl
-            ? info.releaseUrl
-            : this.getRepositoryUrl();
-
-        versionEl.textContent = `Version: ${version}`;
-        dateEl.textContent = dateLabel;
-        notesEl.innerHTML = '';
-        for (const note of notes) {
-            const item = document.createElement('li');
-            item.textContent = note;
-            notesEl.appendChild(item);
-        }
-
-        this.latestReleaseInfo = {
-            version,
-            dateLabel,
-            notes,
-            releaseUrl
-        };
-    }
-
-    async refreshTitleReleaseInfo(force = false) {
-        if (!force && this.releaseFetchPromise) return this.releaseFetchPromise;
-        if (!force && this.latestReleaseInfo) {
-            this.setTitleReleaseInfo(this.latestReleaseInfo);
-            return Promise.resolve(this.latestReleaseInfo);
-        }
-
-        this.setTitleReleaseInfo({
-            version: LOCAL_APP_VERSION,
-            dateLabel: 'Checking latest GitHub release...',
-            notes: ['Loading changelog...'],
-            releaseUrl: this.getRepositoryUrl()
-        });
-
-        const fallback = {
-            version: LOCAL_APP_VERSION,
-            dateLabel: 'Latest release unavailable (offline or rate-limited).',
-            notes: ['Showing local build info.'],
-            releaseUrl: this.getRepositoryUrl()
-        };
-
-        const task = (async () => {
-            try {
-                const response = await fetch(this.getLatestReleaseApiUrl(), {
-                    headers: { Accept: 'application/vnd.github+json' }
-                });
-                if (!response.ok) throw new Error(`GitHub API error ${response.status}`);
-
-                const data = await response.json();
-                const tag = String(data?.tag_name || '').trim() || LOCAL_APP_VERSION;
-                const publishedAt = data?.published_at ? new Date(data.published_at) : null;
-                const publishedLabel = publishedAt && !Number.isNaN(publishedAt.getTime())
-                    ? publishedAt.toLocaleDateString()
-                    : 'Unknown date';
-                const notes = this.extractReleaseNotes(data?.body);
-                const releaseUrl = typeof data?.html_url === 'string' && data.html_url
-                    ? data.html_url
-                    : this.getRepositoryUrl();
-
-                this.setTitleReleaseInfo({
-                    version: tag,
-                    dateLabel: `Latest GitHub release · ${publishedLabel}`,
-                    notes,
-                    releaseUrl
-                });
-            } catch (error) {
-                console.warn('[ArloCraft] Failed to load GitHub release info:', error);
-                this.setTitleReleaseInfo(fallback);
-            } finally {
-                this.releaseFetchPromise = null;
+    loadWorldLocal(slotId = this.selectedWorldSlot, options = {}) {
+        try {
+            const loaded = this.saveSystem.loadFromSlot(slotId);
+            if (!loaded) {
+                if (!options.silent) {
+                    this.ui.setStatus(`No save in ${slotId.toUpperCase()}.`, true);
+                }
+                return false;
             }
-        })();
 
-        this.releaseFetchPromise = task;
-        return task;
+            this.ui.renderWorldList();
+
+            if (!options.silent) {
+                this.ui.setStatus(`Loaded ${slotId.toUpperCase()}.`);
+            }
+
+            return true;
+        } catch {
+            if (!options.silent) {
+                this.ui.setStatus(`Failed to load ${slotId.toUpperCase()}.`, true);
+            }
+            return false;
+        }
     }
 
-    handleTitleQuit() {
-        const isElectron = /\belectron\//i.test(navigator.userAgent);
-        if (isElectron) {
-            window.close();
-            return;
+    startGame({ skipSeedApply = false, preserveCurrentMode = false } = {}) {
+        this.renderer.setVisible(true); // Show 3D world as we start generating/loading
+        if (!skipSeedApply) {
+            const seedInput = document.getElementById('seed-input');
+            if (seedInput?.value.trim()) this.world.setSeed(seedInput.value.trim());
         }
 
-        if (window.history.length > 1) {
-            window.history.back();
-            return;
+        if (!preserveCurrentMode) {
+            this.physics.setMode(this.selectedStartMode);
+            this.gameState.setMode(this.selectedStartMode);
         }
 
-        this.openRepositoryPage();
-    }
+        this.world.clearWorld();
+        this.resetEntities();
+        this.gameState.hp = 20;
+        this.gameState.hunger = 20;
+        this.gameState.inventory = Array(36).fill(null);
+        this.gameState.offhand = null;
+        this.gameState.craftingGrid = Array(9).fill(null);
 
-    grantStarterChestLoot() {
-        const loot = [
-            { id: 'wood', count: 64, kind: 'block' },
-            { id: 'stone', count: 64, kind: 'block' },
-            { id: 'dirt', count: 48, kind: 'block' },
-            { id: 'sand', count: 32, kind: 'block' },
-            { id: 'crafting_table', count: 1, kind: 'block' },
-            { id: 'pick_wood', count: 1, kind: 'tool' },
-            { id: 'sledge_iron', count: 1, kind: 'tool' },
-            { id: 'byte_axe', count: 1, kind: 'tool' },
-            { id: 'pulse_pistol', count: 1, kind: 'tool' }
-        ];
-
-        const granted = [];
-        const overflow = [];
-        for (const entry of loot) {
-            const ok = this.gameState.addItemToInventory(entry.id, entry.count, entry.kind);
-            if (ok) granted.push(entry);
-            else overflow.push(entry);
+        const spawn = this.world.getSafeSpawnPoint(0, 0, 40);
+        if (this.physics.isReady) {
+            this.physics.playerBody.setTranslation({ x: spawn.x, y: spawn.y, z: spawn.z }, true);
+            this.physics.playerBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
         }
 
-        const summary = granted
-            .map((item) => `${item.id} x${item.count}`)
-            .join(', ');
-
-        if (summary) this.setStatus(`Starter chest claimed: ${summary}`);
-        if (overflow.length > 0) this.setStatus('Starter chest: inventory full for some items.', true);
+        this.hasStarted = true;
+        this.isPaused = false;
+        this.showTitle(false);
+        this.showPause(false);
+        this.ui.showHUD(true);
+        this.touchControls ? this.touchControls.show(true) : this.input.setPointerLock();
+        this.helpPanel.setState('playing');
 
         window.dispatchEvent(new CustomEvent('inventory-changed'));
-        return { granted, overflow };
-    }
-
-    setMenuMode(mode, persist = true) {
-        const nextMode = mode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
-        this.selectedStartMode = nextMode;
-
-        const indicator = document.getElementById('gamemode-indicator');
-        if (indicator) indicator.textContent = `${nextMode} MODE`;
-
-        const btnSurvival = document.getElementById('btn-mode-survival');
-        const btnCreative = document.getElementById('btn-mode-creative');
-        if (btnSurvival) btnSurvival.classList.toggle('ni-mode-tab-active', nextMode === 'SURVIVAL');
-        if (btnCreative) btnCreative.classList.toggle('ni-mode-tab-active', nextMode === 'CREATIVE');
-
-        if (!persist) return;
-        this.settings.preferredMode = nextMode;
-        this.saveSettings();
-    }
-
-    encodeSavePayload(data) {
-        const json = JSON.stringify(data);
-        return {
-            format: 'arlocraft-lz-v1',
-            data: LZString.compressToBase64(json)
-        };
-    }
-
-    decodeSavePayload(rawText) {
-        const text = String(rawText ?? '').trim();
-        if (!text) throw new Error('Empty save payload');
-
-        const parsed = JSON.parse(text);
-        if (parsed?.format === 'arlocraft-lz-v1' && typeof parsed.data === 'string') {
-            const decompressed = LZString.decompressFromBase64(parsed.data);
-            if (!decompressed) throw new Error('Compressed save could not be decompressed');
-            return JSON.parse(decompressed);
-        }
-        return parsed;
-    }
-
-    initPerfPanel() {
-        if (!this.features.perfPanel || this.framePanel) return;
-        try {
-            this.framePanel = new StatsPanel();
-            this.framePanel.showPanel(0);
-            this.framePanel.dom.style.position = 'absolute';
-            this.framePanel.dom.style.top = '12px';
-            this.framePanel.dom.style.right = '12px';
-            this.framePanel.dom.style.left = 'auto';
-            this.framePanel.dom.style.zIndex = '145';
-            this.framePanel.dom.style.display = this.debugVisible ? 'block' : 'none';
-            document.body.appendChild(this.framePanel.dom);
-        } catch {
-            this.framePanel = null;
-        }
+        window.dispatchEvent(new CustomEvent('offhand-changed', { detail: null }));
+        window.dispatchEvent(new CustomEvent('hp-changed', { detail: this.gameState.hp }));
+        window.dispatchEvent(new CustomEvent('hunger-changed', { detail: this.gameState.hunger }));
+        this.audio.play('ui-click');
     }
 
     getSaveData() {
-        const playerPos = this.getPlayerPosition();
+        const pos = this.getPlayerPosition();
         return {
             version: 1,
             savedAt: new Date().toISOString(),
             world: this.world.serialize(),
             player: {
-                position: { x: playerPos.x, y: playerPos.y, z: playerPos.z },
+                position: { x: pos.x, y: pos.y, z: pos.z },
                 look: { yaw: this.viewYaw, pitch: this.viewPitch },
                 cameraMode: this.cameraModes[this.cameraModeIndex],
                 mode: this.gameState.mode,
@@ -633,8 +380,7 @@ export class Game {
     }
 
     applySaveData(data) {
-        if (!data || !data.world) throw new Error('Invalid save file');
-
+        if (!data?.world) throw new Error('Invalid save');
         this.world.loadFromData(data.world);
         this.resetEntities();
 
@@ -642,14 +388,12 @@ export class Game {
         if (seedInput) seedInput.value = this.world.seedString;
 
         if (Array.isArray(data.inventory)) {
-            this.gameState.inventory = data.inventory.slice(0, 36);
+            this.gameState.inventory = data.inventory.slice(0, 36).map(migrateInventoryItem);
             while (this.gameState.inventory.length < 36) this.gameState.inventory.push(null);
         }
-
-        this.gameState.offhand = data?.offhand ?? null;
-
+        this.gameState.offhand = migrateInventoryItem(data?.offhand ?? null);
         if (Array.isArray(data.craftingGrid)) {
-            this.gameState.craftingGrid = data.craftingGrid.slice(0, 9);
+            this.gameState.craftingGrid = data.craftingGrid.slice(0, 9).map(migrateInventoryItem);
             while (this.gameState.craftingGrid.length < 9) this.gameState.craftingGrid.push(null);
         }
 
@@ -657,12 +401,10 @@ export class Game {
             if (data.player.mode) this.gameState.setMode(data.player.mode);
             if (Number.isFinite(data.player.hp)) this.gameState.hp = data.player.hp;
             if (Number.isFinite(data.player.hunger)) this.gameState.hunger = data.player.hunger;
-
             if (data.player.look) {
                 this.viewYaw = Number(data.player.look.yaw) || 0;
                 this.viewPitch = Number(data.player.look.pitch) || 0;
             }
-
             if (typeof data.player.cameraMode === 'string') {
                 const idx = this.cameraModes.indexOf(data.player.cameraMode);
                 if (idx >= 0) this.cameraModeIndex = idx;
@@ -670,42 +412,29 @@ export class Game {
         }
 
         if (data.stats) {
-            this.stats.level = Number.isFinite(data.stats.level) ? data.stats.level : this.stats.level;
-            this.stats.xp = Number.isFinite(data.stats.xp) ? data.stats.xp : this.stats.xp;
-            this.stats.xpToNextLevel = Number.isFinite(data.stats.xpToNextLevel) ? data.stats.xpToNextLevel : this.stats.xpToNextLevel;
-            if (data.stats.attributes && typeof data.stats.attributes === 'object') {
-                this.stats.attributes = {
-                    strength: data.stats.attributes.strength ?? this.stats.attributes.strength,
-                    agility: data.stats.attributes.agility ?? this.stats.attributes.agility,
-                    spirit: data.stats.attributes.spirit ?? this.stats.attributes.spirit
-                };
-            }
+            if (Number.isFinite(data.stats.level)) this.stats.level = data.stats.level;
+            if (Number.isFinite(data.stats.xp)) this.stats.xp = data.stats.xp;
+            if (Number.isFinite(data.stats.xpToNextLevel)) this.stats.xpToNextLevel = data.stats.xpToNextLevel;
+            if (data.stats.attributes) this.stats.attributes = { ...this.stats.attributes, ...data.stats.attributes };
         }
 
         const px = data.player?.position?.x ?? 0;
-        const py = data.player?.position?.y ?? 2.5;
+        const py = data.player?.position?.y ?? 70;
         const pz = data.player?.position?.z ?? 0;
         if (this.physics.isReady) {
-            const savedChunkX = this.world.getChunkCoord(px);
-            const savedChunkZ = this.world.getChunkCoord(pz);
-            this.world.ensureChunksAround(savedChunkX, savedChunkZ);
-            this.world.processChunkLoadQueue(savedChunkX, savedChunkZ, 20);
-
-            let spawnX = px;
-            let spawnY = py;
-            let spawnZ = pz;
-            if (this.world.isPositionInWater(spawnX, spawnY, spawnZ)) {
-                const safe = this.world.getSafeSpawnPoint(px, pz, 40);
-                spawnX = safe.x;
-                spawnY = safe.y;
-                spawnZ = safe.z;
-            }
-
-            this.physics.playerBody.setTranslation({ x: spawnX, y: spawnY, z: spawnZ }, true);
+            this.physics.playerBody.setTranslation({ x: px, y: py, z: pz }, true);
             this.physics.playerBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
             this.physics.setMode(this.gameState.mode);
             this.updateCameraFromPlayer();
         }
+
+        this.hasStarted = true;
+        this.isPaused = false;
+        this.showTitle(false);
+        this.showPause(false);
+        this.ui.showHUD(true);
+        this.touchControls ? this.touchControls.show(true) : this.input.setPointerLock();
+        this.helpPanel.setState('playing');
 
         window.dispatchEvent(new CustomEvent('inventory-changed'));
         window.dispatchEvent(new CustomEvent('offhand-changed', { detail: this.gameState.offhand }));
@@ -714,206 +443,58 @@ export class Game {
         window.dispatchEvent(new CustomEvent('xp-changed', { detail: { xp: this.stats.xp, max: this.stats.xpToNextLevel } }));
     }
 
-    toggleOffhandFromSelected() {
-        if (!this.hasStarted || this.isPaused) return;
-        this.gameState.equipOffhandFromSlot(this.gameState.selectedSlot);
-        const offhand = this.gameState.getOffhandItem();
-        const label = offhand ? `${offhand.id} x${offhand.count ?? 1}` : 'empty';
-        this.setStatus(`Offhand: ${label}`);
-    }
-
-    saveWorldLocal(slotId = this.selectedWorldSlot) {
-        const data = this.getSaveData();
-        const packed = this.encodeSavePayload(data);
-        localStorage.setItem(this.getWorldSlotStorageKey(slotId), JSON.stringify(packed));
-        this.renderWorldList();
-        this.setStatus(`World saved to ${slotId.toUpperCase()}.`);
-    }
-
-    loadWorldLocal(slotId = this.selectedWorldSlot, options = {}) {
+    initPerfPanel() {
+        if (this.framePanel) return;
         try {
-            const raw = localStorage.getItem(this.getWorldSlotStorageKey(slotId));
-            if (!raw) {
-                if (!options.silent) this.setStatus(`No save in ${slotId.toUpperCase()}.`, true);
-                return false;
-            }
-            const data = this.decodeSavePayload(raw);
-            this.applySaveData(data);
-            this.renderWorldList();
-            if (!options.silent) this.setStatus(`Loaded ${slotId.toUpperCase()}.`);
-            return true;
+            const panel = new StatsPanel();
+            panel.showPanel(0);
+            panel.dom.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;';
+            document.body.appendChild(panel.dom);
+            this.framePanel = panel;
+            if (!this.settings.perfPanelVisible) panel.dom.style.display = 'none';
         } catch {
-            if (!options.silent) this.setStatus(`Failed to load ${slotId.toUpperCase()}.`, true);
-            return false;
+            this.framePanel = null;
         }
-    }
-
-    exportWorldFile() {
-        const data = this.getSaveData();
-        const payload = JSON.stringify(this.encodeSavePayload(data));
-        const blob = new Blob([payload], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const seedName = (this.world.seedString || 'world').replace(/[^a-zA-Z0-9-_]/g, '_');
-        a.href = url;
-        a.download = `arlocraft_${seedName}.json`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        this.setStatus('World exported.');
-    }
-
-    importWorldFile(file) {
-        const reader = new FileReader();
-        reader.onload = () => {
-            try {
-                const data = this.decodeSavePayload(String(reader.result ?? '{}'));
-                this.applySaveData(data);
-                this.setStatus('World imported successfully.');
-            } catch {
-                this.setStatus('Invalid world file.', true);
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    randomizeSeed() {
-        const input = document.getElementById('seed-input');
-        if (!input) return;
-        const random = `${Math.floor(Math.random() * 999999999)}`;
-        input.value = random;
-        this.setStatus(`Generated seed: ${random}`);
-    }
-
-    applySeedFromInput() {
-        const seedInput = document.getElementById('seed-input');
-        if (!seedInput) return;
-        const seedValue = String(seedInput.value ?? '').trim();
-        if (!seedValue) return;
-
-        if (seedValue !== this.world.seedString) {
-            this.world.loadFromData({ seed: seedValue, changedBlocks: [] });
-            this.resetEntities();
-            this.physics.resetPlayer();
-            this.gameState.craftingGrid = new Array(9).fill(null);
-            this.gameState.craftingResult = null;
-            this.setStatus(`Loaded seed: ${seedValue}`);
-        }
-    }
-
-    startGame(options = {}) {
-        if (!options.skipSeedApply) this.applySeedFromInput();
-
-        const mode = options.preserveCurrentMode
-            ? this.gameState.mode
-            : (options.mode ?? this.selectedStartMode ?? 'SURVIVAL');
-        this.gameState.setMode(mode);
-        this.physics.setMode(mode);
-
-        this.hasStarted = true;
-        this.isPaused = false;
-        this.gameState.setPaused(false);
-        this.idleWorldTick = 0;
-
-        this.showTitle(false);
-        this.showPause(false);
-        this.showSettings(false);
-        this.helpPanel.setState('playing');
-
-        if (this.touchControls) {
-            this.touchControls.show(true);
-        } else {
-            this.input.setPointerLock();
-        }
-
-        document.getElementById('crosshair')?.classList.add('active');
-    }
-
-    returnToTitle() {
-        this.cancelMining();
-        this.isPaused = false;
-        this.hasStarted = false;
-        this.gameState.setPaused(false);
-        this.idleWorldTick = 0;
-
-        if (this.gameState.isInventoryOpen) this.gameState.toggleInventory();
-        if (document.pointerLockElement) document.exitPointerLock();
-
-        this.touchControls?.show(false);
-        document.getElementById('crosshair')?.classList.remove('active');
-        this.showPause(false);
-        this.showSettings(false);
-        this.showTitle(true);
-        this.renderWorldList();
-        this.helpPanel.setState('title');
     }
 
     showTitle(visible) {
-        const overlay = document.getElementById('overlay');
-        if (!overlay) return;
-        overlay.style.display = visible ? 'flex' : 'none';
-        if (visible) {
-            this.renderWorldList();
-            this.setMenuScreen('title');
-            this.refreshTitleReleaseInfo(false);
-
-            if (!this._niClockTick) {
-                this._niClockTick = setInterval(() => {
-                    const el = document.querySelector('.ni-time');
-                    if (el) el.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                }, 1000);
-            }
-        }
+        this.ui.showTitle(visible);
     }
 
     showPause(visible) {
-        const pause = document.getElementById('pause-overlay');
-        if (!pause) return;
-        pause.style.display = visible ? 'flex' : 'none';
-    }
-
-    setMenuScreen(screen) {
-        // Updated
-        const screenIds = ['screen-title', 'screen-world-select', 'screen-world-create'];
-        const nextId = screen === 'world-select'
-            ? 'screen-world-select'
-            : (screen === 'world-create' ? 'screen-world-create' : 'screen-title');
-        for (const id of screenIds) {
-            const node = document.getElementById(id);
-            if (!node) continue;
-            node.classList.toggle('ni-screen-active', id === nextId);
-        }
-    }
-
-    isSettingsOpen() {
-        const panel = document.getElementById('settings-panel');
-        return Boolean(panel && panel.style.display !== 'none');
+        this.ui.showPause(visible);
     }
 
     showSettings(visible) {
-        const panel = document.getElementById('settings-panel');
-        if (!panel) return;
-        panel.style.display = visible ? 'flex' : 'none';
-        if (visible && this.isPaused) this.showPause(false);
+        this.ui.showSettings(visible);
     }
 
-    togglePause() {
-        if (!this.hasStarted) return;
+    isSettingsOpen() {
+        return this.ui.isSettingsOpen();
+    }
 
-        if (this.isSettingsOpen()) {
-            this.showSettings(false);
-            if (this.isPaused) this.showPause(true);
-            return;
-        }
+    setStatus(message, isError = false) {
+        this.ui.setStatus(message, isError);
+    }
 
-        if (this.gameState.isInventoryOpen) {
-            this.gameState.toggleInventory();
-            return;
-        }
+    setMenuScreen(screen) {
+        this.ui.setMenuScreen(screen);
+    }
 
-        if (this.isPaused) this.resumeGame();
-        else this.pauseGame();
+    renderWorldList() {
+        this.ui.renderWorldList();
+    }
+
+    refreshTitleMenuState() {
+        this.ui.refreshTitleMenuState();
+    }
+
+    showLoadingScreen(statusText, subText) {
+        this.ui.showLoadingScreen(statusText, subText);
+    }
+
+    hideLoadingScreen() {
+        this.ui.hideLoadingScreen();
     }
 
     pauseGame() {
@@ -921,33 +502,41 @@ export class Game {
         this.isPaused = true;
         this.gameState.setPaused(true);
         this.cancelMining();
-        this.showSettings(false);
         this.showPause(true);
         this.helpPanel.setState('paused');
         this.touchControls?.show(false);
-
         if (document.pointerLockElement) document.exitPointerLock();
     }
 
     resumeGame() {
-        if (!this.hasStarted) return;
+        if (!this.hasStarted || !this.isPaused) return;
         this.isPaused = false;
         this.gameState.setPaused(false);
         this.showPause(false);
         this.showSettings(false);
-
         if (this.touchControls) {
             this.touchControls.show(true);
-            this.helpPanel.setState('playing');
         } else if (!this.gameState.isInventoryOpen) {
-            this.helpPanel.setState('playing');
             this.input.setPointerLock();
         }
+        this.helpPanel.setState(this.gameState.isInventoryOpen ? 'inventory' : 'playing');
+    }
+
+    togglePause() {
+        if (!this.hasStarted) return;
+        if (this.ui.isSettingsOpen()) {
+            this.ui.showSettings(false);
+            this.showPause(true);
+            return;
+        }
+        if (this.isPaused) this.resumeGame();
+        else this.pauseGame();
     }
 
     toggleInventory() {
         if (!this.hasStarted || this.isPaused) return;
         this.gameState.toggleInventory();
+        this.updateCrosshairVisibility();
     }
 
     onPointerLockChange(locked) {
@@ -975,448 +564,84 @@ export class Game {
             this.helpPanel.setState('paused');
             return;
         }
-        // Do not auto-pause when pointer lock is lost/blocked on startup.
-        // Player can click canvas again to re-lock mouse.
+        
         this.showPause(false);
         this.helpPanel.setState('playing');
     }
 
-    setupUI() {
-        const seedInput = document.getElementById('seed-input');
-        const btnStart = document.getElementById('btn-start');
-        const btnModeSurvival = document.getElementById('btn-mode-survival');
-        const btnModeCreative = document.getElementById('btn-mode-creative');
-        const btnRandomSeed = document.getElementById('btn-title-random-seed');
-        const btnToWorlds = document.getElementById('btn-to-worlds');
-        const btnToSettings = document.getElementById('btn-to-settings');
-        const btnTitleQuit = document.getElementById('btn-title-quit');
-        const btnReleaseRefresh = document.getElementById('btn-release-refresh');
-        const btnOpenRelease = document.getElementById('btn-open-release');
-        const btnOpenRepo = document.getElementById('btn-open-repo');
-        const btnPlayWorld = document.getElementById('btn-play-world');
-        const btnNewWorld = document.getElementById('btn-new-world');
-        const btnDeleteWorld = document.getElementById('btn-delete-world');
-        const btnWorldsBack = document.getElementById('btn-worlds-back');
-        const btnCreateBack = document.getElementById('btn-create-back');
-
-        // Backward-compatible IDs kept for legacy templates.
-        const btnOptions = document.getElementById('btn-options');
-        const btnTitleLoad = document.getElementById('btn-title-load');
-
-        const btnClose = document.getElementById('btn-settings-close');
-        const sensitivityInput = document.getElementById('setting-sensitivity');
-        const sensitivityLabel = document.getElementById('setting-sensitivity-value');
-        const invertYInput = document.getElementById('setting-invert-y');
-        const autoJumpInput = document.getElementById('setting-auto-jump');
-        const fovInput = document.getElementById('setting-fov');
-        const fovLabel = document.getElementById('setting-fov-value');
-        const renderDistanceInput = document.getElementById('setting-render-distance');
-        const renderDistanceLabel = document.getElementById('setting-render-distance-value');
-        const autoQualityInput = document.getElementById('setting-auto-quality');
-        const qualityBtns = document.querySelectorAll('.btn-quality');
-        const btnSave = document.getElementById('btn-save-world');
-        const btnLoad = document.getElementById('btn-load-world');
-        const btnExport = document.getElementById('btn-export-world');
-        const btnImport = document.getElementById('btn-import-world');
-        const fileInput = document.getElementById('import-world-input');
-
-        const btnResume = document.getElementById('btn-resume');
-        const btnPauseSettings = document.getElementById('btn-pause-settings');
-        const btnPauseSave = document.getElementById('btn-pause-save');
-        const btnPauseLoad = document.getElementById('btn-pause-load');
-        const btnBackTitle = document.getElementById('btn-back-title');
-
-        const shadowsInput = document.getElementById('setting-shadows');
-        const fogInput = document.getElementById('setting-fog');
-        const fogLabel = document.getElementById('setting-fog-value');
-        const perfPanelInput = document.getElementById('setting-perf-panel');
-        const btnExportSave = document.getElementById('btn-export-save');
-        const btnResetSettings = document.getElementById('btn-reset-settings');
-        const resolutionInput = document.getElementById('setting-resolution');
-        const resolutionLabel = document.getElementById('setting-resolution-value');
-        const audioMuteInput = document.getElementById('setting-audio-muted');
-        const audioMasterInput = document.getElementById('setting-audio-master');
-        const audioMasterLabel = document.getElementById('setting-audio-master-value');
-        const audioSfxInput = document.getElementById('setting-audio-sfx');
-        const audioSfxLabel = document.getElementById('setting-audio-sfx-value');
-        const audioUiInput = document.getElementById('setting-audio-ui');
-        const audioUiLabel = document.getElementById('setting-audio-ui-value');
-        const audioWorldInput = document.getElementById('setting-audio-world');
-        const audioWorldLabel = document.getElementById('setting-audio-world-value');
-
-        if (seedInput) seedInput.value = this.world.seedString;
-
-        const openWorldSelect = () => {
-            this.renderWorldList();
-            this.setMenuScreen('world-select');
-        };
-        const openWorldCreate = () => {
-            this.renderWorldList();
-            this.setMenuScreen('world-create');
-        };
-        const playSelectedWorld = () => {
-            const loaded = this.loadWorldLocal(this.selectedWorldSlot);
-            if (loaded) {
-                this.startGame({ skipSeedApply: true, preserveCurrentMode: true });
-                return;
-            }
-            this.setStatus(`No save in ${this.selectedWorldSlot.toUpperCase()}.`, true);
-            this.setMenuScreen('world-create');
-        };
-
-        if (btnStart) {
-            btnStart.addEventListener('click', () => {
-                const summary = this.readWorldSlotSummary(this.selectedWorldSlot);
-                if (summary?.exists) {
-                    const confirmed = window.confirm(
-                        `${this.selectedWorldSlot.toUpperCase()} already has a world. Create a new one with this seed and overwrite it on next save?`
-                    );
-                    if (!confirmed) return;
-                }
-                this.startGame({ skipSeedApply: false, preserveCurrentMode: false });
-            });
-        }
-
-        if (btnModeSurvival) {
-            btnModeSurvival.addEventListener('click', () => this.setMenuMode('SURVIVAL'));
-        }
-        if (btnModeCreative) {
-            btnModeCreative.addEventListener('click', () => this.setMenuMode('CREATIVE'));
-        }
-
-        if (btnRandomSeed) {
-            btnRandomSeed.addEventListener('click', () => this.randomizeSeed());
-        }
-
-        if (btnToWorlds) btnToWorlds.addEventListener('click', openWorldSelect);
-        if (btnWorldsBack) btnWorldsBack.addEventListener('click', () => this.setMenuScreen('title'));
-        if (btnNewWorld) btnNewWorld.addEventListener('click', openWorldCreate);
-        if (btnCreateBack) btnCreateBack.addEventListener('click', openWorldSelect);
-        if (btnPlayWorld) btnPlayWorld.addEventListener('click', playSelectedWorld);
-        if (btnDeleteWorld) btnDeleteWorld.addEventListener('click', () => this.deleteWorldSlot(this.selectedWorldSlot));
-
-        if (btnToSettings) {
-            btnToSettings.addEventListener('click', () => {
-                this.showSettings(true);
-                this.setStatus('Settings opened.');
-            });
-        }
-        if (btnTitleQuit) btnTitleQuit.addEventListener('click', () => this.handleTitleQuit());
-        if (btnReleaseRefresh) btnReleaseRefresh.addEventListener('click', () => this.refreshTitleReleaseInfo(true));
-        if (btnOpenRepo) btnOpenRepo.addEventListener('click', () => this.openRepositoryPage());
-        if (btnOpenRelease) {
-            btnOpenRelease.addEventListener('click', () => {
-                const target = this.latestReleaseInfo?.releaseUrl || this.getRepositoryUrl();
-                window.open(target, '_blank', 'noopener');
-            });
-        }
-
-        if (btnTitleLoad) {
-            btnTitleLoad.addEventListener('click', playSelectedWorld);
-        }
-
-        if (sensitivityInput) {
-            sensitivityInput.value = String(this.settings.sensitivity);
-            if (sensitivityLabel) sensitivityLabel.textContent = Number(this.settings.sensitivity).toFixed(4);
-            sensitivityInput.addEventListener('input', () => {
-                const value = Number(sensitivityInput.value);
-                this.settings.sensitivity = value;
-                this.saveSettings();
-                if (sensitivityLabel) sensitivityLabel.textContent = value.toFixed(4);
-                this.setStatus(`Sensitivity: ${value.toFixed(4)}`);
-            });
-        }
-
-        if (invertYInput) {
-            invertYInput.checked = this.settings.invertY;
-            invertYInput.addEventListener('change', () => {
-                this.settings.invertY = invertYInput.checked;
-                this.saveSettings();
-                this.setStatus(`Invert Y: ${invertYInput.checked ? 'ON' : 'OFF'}`);
-            });
-        }
-
-        if (autoJumpInput) {
-            autoJumpInput.checked = this.settings.autoJump;
-            autoJumpInput.addEventListener('change', () => {
-                this.settings.autoJump = autoJumpInput.checked;
-                this.physics.autoJumpEnabled = autoJumpInput.checked;
-                this.saveSettings();
-                this.setStatus(`Auto Jump: ${autoJumpInput.checked ? 'ON' : 'OFF'}`);
-            });
-        }
-
-        if (fovInput) {
-            fovInput.value = String(this.settings.fov);
-            if (fovLabel) fovLabel.textContent = `${this.settings.fov} deg`;
-            fovInput.addEventListener('input', () => {
-                const value = Number(fovInput.value);
-                this.settings.fov = value;
-                this.saveSettings();
-                if (fovLabel) fovLabel.textContent = `${value} deg`;
-                this.camera.instance.fov = value;
-                this.camera.instance.updateProjectionMatrix();
-                this.setStatus(`FOV: ${value} deg`);
-            });
-        }
-
-        if (renderDistanceInput) {
-            renderDistanceInput.value = String(this.settings.renderDistance);
-            if (renderDistanceLabel) renderDistanceLabel.textContent = String(this.settings.renderDistance);
-            renderDistanceInput.addEventListener('input', () => {
-                const value = Math.max(2, Math.min(6, Math.round(Number(renderDistanceInput.value))));
-                this.settings.renderDistance = value;
-                const effective = this.getEffectiveRenderDistanceForTier(this.qualityTier);
-                this.world.setRenderDistance(effective);
-                this.saveSettings();
-                if (renderDistanceLabel) renderDistanceLabel.textContent = String(value);
-                this.setStatus(`Render Distance: ${value} (effective ${effective})`);
-            });
-        }
-
-        const syncQualityBtns = () => {
-            qualityBtns.forEach((btn) => {
-                btn.classList.toggle('active', btn.dataset.tier === this.qualityTier);
-            });
-        };
-        qualityBtns.forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const tier = btn.dataset.tier;
-                this.settings.qualityTierPref = tier;
-                this.saveSettings();
-                this.applyQualityTier(tier);
-                syncQualityBtns();
-                const effective = this.getEffectiveRenderDistanceForTier(tier);
-                this.setStatus(`Quality: ${tier.charAt(0).toUpperCase() + tier.slice(1)} (render ${effective})`);
-            });
-        });
-        syncQualityBtns();
-
-        if (autoQualityInput) {
-            autoQualityInput.checked = this.settings.autoQuality;
-            autoQualityInput.addEventListener('change', () => {
-                this.settings.autoQuality = autoQualityInput.checked;
-                this.features.dynamicQualityAuto = autoQualityInput.checked;
-                this.saveSettings();
-                this.setStatus(`Auto Quality: ${autoQualityInput.checked ? 'ON' : 'OFF'}`);
-            });
-        }
-
-        if (btnOptions) {
-            btnOptions.addEventListener('click', () => {
-                this.showSettings(true);
-                this.setStatus('Settings opened.');
-            });
-        }
-
-        if (btnClose) {
-            btnClose.addEventListener('click', () => {
-                this.showSettings(false);
-                if (this.isPaused) this.showPause(true);
-            });
-        }
-
-        if (btnResume) btnResume.addEventListener('click', () => this.resumeGame());
-        if (btnPauseSettings) btnPauseSettings.addEventListener('click', () => {
-            this.showPause(false);
-            this.showSettings(true);
-        });
-        if (btnPauseSave) btnPauseSave.addEventListener('click', () => this.saveWorldLocal(this.selectedWorldSlot));
-        if (btnPauseLoad) btnPauseLoad.addEventListener('click', () => this.loadWorldLocal(this.selectedWorldSlot));
-        if (btnBackTitle) btnBackTitle.addEventListener('click', () => this.returnToTitle());
-
-        if (btnSave) btnSave.addEventListener('click', () => this.saveWorldLocal(this.selectedWorldSlot));
-        if (btnLoad) btnLoad.addEventListener('click', () => this.loadWorldLocal(this.selectedWorldSlot));
-        if (btnExport) btnExport.addEventListener('click', () => this.exportWorldFile());
-        if (btnImport && fileInput) {
-            btnImport.addEventListener('click', () => fileInput.click());
-            fileInput.addEventListener('change', () => {
-                const file = fileInput.files?.[0];
-                if (!file) return;
-                this.importWorldFile(file);
-                fileInput.value = '';
-            });
-        }
-
-        // NI Settings Tab Switching
-        const tabLinks = document.querySelectorAll('.ni-tab-link');
-        tabLinks.forEach(link => {
-            link.addEventListener('click', () => {
-                const target = link.dataset.tab;
-                tabLinks.forEach(l => l.classList.remove('active'));
-                link.classList.add('active');
-                
-                document.querySelectorAll('.ni-tab-pane').forEach(pane => {
-                    pane.classList.toggle('active', pane.id === target);
-                });
-            });
-        });
-
-        // --- Shadows ---
-        if (shadowsInput) {
-            shadowsInput.checked = this.settings.shadowsEnabled;
-            shadowsInput.addEventListener('change', () => {
-                this.settings.shadowsEnabled = shadowsInput.checked;
-                this.renderer.toggleShadows(shadowsInput.checked);
-                this.saveSettings();
-                this.setStatus(`Shadows: ${shadowsInput.checked ? 'ON' : 'OFF'}`);
-            });
-        }
-
-        // --- Fog ---
-        if (fogInput) {
-            fogInput.value = String(this.settings.fogDensityScale);
-            if (fogLabel) fogLabel.textContent = Number(this.settings.fogDensityScale).toFixed(1);
-            fogInput.addEventListener('input', () => {
-                const val = Number(fogInput.value);
-                this.settings.fogDensityScale = val;
-                this.renderer.setFogDensityScale(val);
-                this.saveSettings();
-                if (fogLabel) fogLabel.textContent = val.toFixed(1);
-            });
-        }
-
-        // --- Perf Panel ---
-        if (perfPanelInput) {
-            perfPanelInput.checked = this.settings.perfPanelVisible;
-            perfPanelInput.addEventListener('change', () => {
-                this.settings.perfPanelVisible = perfPanelInput.checked;
-                this.debugVisible = perfPanelInput.checked;
-                if (this.framePanel) this.framePanel.dom.style.display = this.debugVisible ? 'block' : 'none';
-                this.saveSettings();
-            });
-        }
-
-        // --- System Buttons ---
-        if (btnExportSave) {
-            btnExportSave.addEventListener('click', () => this.exportWorldFile());
-        }
-        if (btnResetSettings) {
-            btnResetSettings.addEventListener('click', () => {
-                if (window.confirm('Reset all settings to default?')) {
-                    localStorage.removeItem('arlocraft-settings');
-                    window.location.reload();
-                }
-            });
-        }
-
-        // --- Resolution ---
-        if (resolutionInput) {
-            resolutionInput.value = String(this.settings.resolutionScale);
-            if (resolutionLabel) resolutionLabel.textContent = `${Number(this.settings.resolutionScale).toFixed(1)}x`;
-            resolutionInput.addEventListener('input', () => {
-                const val = Number(resolutionInput.value);
-                this.settings.resolutionScale = val;
-                this.renderer.setResolutionScale(val);
-                this.saveSettings();
-                if (resolutionLabel) resolutionLabel.textContent = `${val.toFixed(1)}x`;
-                this.setStatus(`Resolution Scale: ${val.toFixed(1)}x`);
-            });
-        }
-
-        const syncAudioLabel = (el, value) => {
-            if (!el) return;
-            el.textContent = `${Math.round(value * 100)}%`;
-        };
-        const applyAudioSettings = (statusText = null) => {
-            this.audio.applyFromSettings(this.settings);
-            this.saveSettings();
-            if (statusText) this.setStatus(statusText);
-        };
-
-        if (audioMuteInput) {
-            audioMuteInput.checked = this.settings.audioMuted;
-            audioMuteInput.addEventListener('change', () => {
-                this.settings.audioMuted = audioMuteInput.checked;
-                applyAudioSettings(`Audio: ${audioMuteInput.checked ? 'MUTED' : 'ON'}`);
-            });
-        }
-        if (audioMasterInput) {
-            audioMasterInput.value = String(this.settings.audioMaster);
-            syncAudioLabel(audioMasterLabel, this.settings.audioMaster);
-            audioMasterInput.addEventListener('input', () => {
-                const val = Math.max(0, Math.min(1, Number(audioMasterInput.value)));
-                this.settings.audioMaster = val;
-                syncAudioLabel(audioMasterLabel, val);
-                applyAudioSettings(`Master Volume: ${Math.round(val * 100)}%`);
-            });
-        }
-        if (audioSfxInput) {
-            audioSfxInput.value = String(this.settings.audioSfx);
-            syncAudioLabel(audioSfxLabel, this.settings.audioSfx);
-            audioSfxInput.addEventListener('input', () => {
-                const val = Math.max(0, Math.min(1, Number(audioSfxInput.value)));
-                this.settings.audioSfx = val;
-                syncAudioLabel(audioSfxLabel, val);
-                applyAudioSettings(`SFX Volume: ${Math.round(val * 100)}%`);
-            });
-        }
-        if (audioUiInput) {
-            audioUiInput.value = String(this.settings.audioUi);
-            syncAudioLabel(audioUiLabel, this.settings.audioUi);
-            audioUiInput.addEventListener('input', () => {
-                const val = Math.max(0, Math.min(1, Number(audioUiInput.value)));
-                this.settings.audioUi = val;
-                syncAudioLabel(audioUiLabel, val);
-                applyAudioSettings(`UI Volume: ${Math.round(val * 100)}%`);
-            });
-        }
-        if (audioWorldInput) {
-            audioWorldInput.value = String(this.settings.audioWorld);
-            syncAudioLabel(audioWorldLabel, this.settings.audioWorld);
-            audioWorldInput.addEventListener('input', () => {
-                const val = Math.max(0, Math.min(1, Number(audioWorldInput.value)));
-                this.settings.audioWorld = val;
-                syncAudioLabel(audioWorldLabel, val);
-                applyAudioSettings(`World Volume: ${Math.round(val * 100)}%`);
-            });
-        }
-
-        const canvas = this.renderer.instance.domElement;
-        canvas.addEventListener('click', () => {
-            if (!this.hasStarted || this.isPaused || this.gameState.isInventoryOpen || this.input.isLocked) return;
-            this.input.setPointerLock();
-        });
-
-        this.setMenuMode(this.selectedStartMode, false);
-        this.world.setRenderDistance(this.getEffectiveRenderDistanceForTier(this.settings.qualityTierPref ?? this.qualityTier));
-        this.setTitleReleaseInfo({
-            version: LOCAL_APP_VERSION,
-            dateLabel: 'Checking latest GitHub release...',
-            notes: ['Loading changelog...'],
-            releaseUrl: this.getRepositoryUrl()
-        });
-        this.renderWorldList();
-        this.setMenuScreen('title');
+    setMenuMode(mode, playSound = true) {
+        if (this._settingMode) return;
+        this._settingMode = true;
+        this.gameState.setMode(mode);
+        this._settingMode = false;
+        this.selectedStartMode = mode;
+        this.settings.preferredMode = mode;
+        this.saveSettings();
+        if (playSound) this.audio.play('ui-click');
     }
+
+    returnToTitle() {
+        this.renderer.setVisible(false); // Hide 3D world again
+        this.hasStarted = false;
+        this.isPaused = false;
+        this.gameState.setPaused(false);
+        this.showPause(false);
+        this.showSettings(false);
+        this.showTitle(true);
+        this.ui.showHUD(false);
+        this.helpPanel.setState('title');
+        this.audio.play('ui-back');
+    }
+
+    handleTitleQuit() {
+        if (window.confirm('Quit to your browser? Unsaved progress in active sessions may be lost.')) {
+            window.close();
+            window.location.href = 'about:blank';
+        }
+    }
+
+    randomizeSeed() {
+        const seed = Math.random().toString(36).substring(2, 10);
+        this.world.seedString = seed;
+        const input = document.getElementById('seed-input');
+        if (input) input.value = seed;
+        this.audio.play('ui-click');
+    }
+
     async init() {
+        console.log("[AntonCraft] Starting engine init...");
         await this.physics.init();
+        
         this.applyQualityTier(this.settings.qualityTierPref ?? 'low');
         this.camera.instance.fov = this.settings.fov ?? 75;
         this.camera.instance.updateProjectionMatrix();
+        
         this.renderer.toggleShadows(this.settings.shadowsEnabled);
         this.renderer.setFogDensityScale(this.settings.fogDensityScale);
         this.renderer.setResolutionScale(this.settings.resolutionScale);
         this.audio.applyFromSettings(this.settings);
+        
         if (this.settings.perfPanelVisible) {
             this.debugVisible = true;
             if (this.framePanel) this.framePanel.dom.style.display = 'block';
         }
+        
         this.hud.init();
+        this.updatePlayerSkin();
         this.initPerfPanel();
 
         if (TouchControls.isTouchDevice()) {
             this.touchControls = new TouchControls(this);
         }
 
+        this.onResize();
+        this.animate();
+        window.addEventListener('resize', () => this.onResize());
+
         this.showTitle(true);
         this.showPause(false);
         this.showSettings(false);
         this.helpPanel.setState('title');
-
-        this.onResize();
-        this.animate();
-        window.addEventListener('resize', () => this.onResize());
     }
 
     resetEntities() {
@@ -1455,6 +680,23 @@ export class Game {
 
     cycleCameraMode() {
         this.cameraModeIndex = (this.cameraModeIndex + 1) % this.cameraModes.length;
+        this.updateCrosshairVisibility();
+        this.audio.play('camera-toggle');
+    }
+
+    updateCrosshairVisibility() {
+        const crosshair = document.getElementById('crosshair');
+        if (!crosshair) return;
+        
+        // Hide crosshair in THIRD_PERSON_FRONT (facing player)
+        const isFacingPlayer = this.cameraModeIndex === 2;
+        const shouldBeVisible = this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen && !isFacingPlayer;
+        
+        if (shouldBeVisible) {
+            crosshair.classList.add('active');
+        } else {
+            crosshair.classList.remove('active');
+        }
     }
 
     toggleDebugOverlay() {
@@ -1465,6 +707,11 @@ export class Game {
         if (this.framePanel?.dom) {
             this.framePanel.dom.style.display = this.debugVisible ? 'block' : 'none';
         }
+        this.audio?.play('ui-click');
+    }
+
+    toggleHelpPanel() {
+        this.helpPanel?.toggleCollapsed?.();
     }
 
     toggleMinimap() {
@@ -1477,39 +724,59 @@ export class Game {
         const pos = positionOverride ?? this.physics.playerBody.translation();
         const eyeHeight = this.physics?.eyeHeight ?? this.camera?.eyeHeight ?? 1.32;
         const feetOffset = this.physics?.feetOffset ?? 0.3;
-        const head = new THREE.Vector3(pos.x, pos.y + eyeHeight, pos.z);
 
-        const lookDir = new THREE.Vector3(
-            -Math.sin(this.viewYaw) * Math.cos(this.viewPitch),
+        const cy = Math.cos(this.viewPitch);
+        this._camHead.set(pos.x, pos.y + eyeHeight, pos.z);
+        this._camLook.set(
+            -Math.sin(this.viewYaw) * cy,
             Math.sin(this.viewPitch),
-            -Math.cos(this.viewYaw) * Math.cos(this.viewPitch)
-        ).normalize();
+            -Math.cos(this.viewYaw) * cy
+        );
+
         const shakeAmount = this.screenShake;
-        const shakeX = (Math.random() - 0.5) * shakeAmount;
-        const shakeY = (Math.random() - 0.5) * shakeAmount;
-        const shakeZ = (Math.random() - 0.5) * shakeAmount;
+        const shakeX = shakeAmount > 0 ? (Math.random() - 0.5) * shakeAmount : 0;
+        const shakeY = shakeAmount > 0 ? (Math.random() - 0.5) * shakeAmount : 0;
+        const shakeZ = shakeAmount > 0 ? (Math.random() - 0.5) * shakeAmount : 0;
 
-        this.playerVisual.visible = true;
-        this.playerVisual.position.set(pos.x, pos.y - feetOffset, pos.z);
-        this.playerVisual.rotation.set(0, this.viewYaw, 0);
+        const cameraMode = this.cameraModes[this.cameraModeIndex];
 
-        const distance = -4.1;
-        const desired = head.clone().addScaledVector(lookDir, distance).add(new THREE.Vector3(0, 1.1, 0));
-        desired.add(new THREE.Vector3(shakeX, shakeY, shakeZ));
-        this.camera.instance.position.lerp(desired, 0.4);
-        this.camera.instance.lookAt(head);
+        if (cameraMode === 'FIRST_PERSON') {
+            this.playerVisual.visible = false;
+            this.camera.instance.position.set(
+                this._camHead.x + shakeX,
+                this._camHead.y + shakeY,
+                this._camHead.z + shakeZ
+            );
+            this._camDesired.copy(this._camHead).add(this._camLook);
+            this.camera.instance.lookAt(this._camDesired);
+        } else {
+            this.playerVisual.visible = true;
+            this.playerVisual.position.set(pos.x, pos.y - feetOffset, pos.z);
+            const isFront = cameraMode === 'THIRD_PERSON_FRONT';
+            this.playerVisual.rotation.y = this.viewYaw + Math.PI;
+
+            const distance = isFront ? 3.8 : -4.2;
+            const yOff = isFront ? 0.3 : 1.1;
+            this._camDesired.copy(this._camHead)
+                .addScaledVector(this._camLook, distance);
+            this._camDesired.x += shakeX;
+            this._camDesired.y += yOff + shakeY;
+            this._camDesired.z += shakeZ;
+            this.camera.instance.position.lerp(this._camDesired, 0.4);
+            this.camera.instance.lookAt(this._camHead);
+        }
     }
 
     updateZoneMeter(influence) {
         const v = influence?.virus ?? 0;
-        const a = influence?.arlo ?? 0;
+        const a = influence?.anton ?? 0;
 
         // Cache DOM refs once
         if (!this._zoneDom) {
             this._zoneDom = {
                 meter: document.getElementById('zone-meter'),
                 fillV: document.getElementById('zone-fill-virus'),
-                fillA: document.getElementById('zone-fill-arlo'),
+                fillA: document.getElementById('zone-fill-anton'),
                 status: document.getElementById('zone-status')
             };
             this._zoneLastV = -1;
@@ -1559,7 +826,7 @@ export class Game {
         const cameraMode = this.cameraModes[this.cameraModeIndex];
         const renderInfo = this.renderer.instance.info.render;
         el.textContent = [
-            `ArloCraft ${this.debugFps} fps`,
+            `AntonCraft ${this.debugFps} fps`,
             `XYZ: ${playerPos.x.toFixed(2)} / ${playerPos.y.toFixed(2)} / ${playerPos.z.toFixed(2)}`,
             `Chunk: ${chunkX}, ${chunkZ} | Loaded chunks: ${this.world.chunks.size}`,
             `Biome: ${biomeId}`,
@@ -1619,23 +886,54 @@ export class Game {
         const now = performance.now();
         if ((now - this.performanceSampler.lastAdjust) < 2600) return;
 
+        const cap = this.settings.fpsCap === 999 ? 144 : (this.settings.fpsCap || 60);
+        const lowThreshold = cap * 0.62;   // e.g. <37 for 60fps cap
+        const highThreshold = cap * 0.92;  // e.g. >55 for 60fps cap
+
+        // Quality tiers also drive resolution scale and render distance
+        const AUTO_PROFILE = {
+            low:      { resolution: 0.6, renderDist: 2 },
+            balanced: { resolution: 0.85, renderDist: 3 },
+            high:     { resolution: 1.0, renderDist: 4 }
+        };
+
         let target = this.qualityTier;
         const idx = this.qualityOrder.indexOf(this.qualityTier);
-        if (fps < 40 && idx > 0) {
+        if (fps < lowThreshold && idx > 0) {
             target = this.qualityOrder[idx - 1];
-        } else if (fps > 58 && idx >= 0 && idx < (this.qualityOrder.length - 1)) {
+        } else if (fps > highThreshold && idx < (this.qualityOrder.length - 1)) {
             target = this.qualityOrder[idx + 1];
         }
 
         if (target === this.qualityTier) return;
         this.applyQualityTier(target);
+
+        const profile = AUTO_PROFILE[target];
+        if (profile) {
+            this.renderer.setResolutionScale(profile.resolution);
+            this.settings.resolutionScale = profile.resolution;
+            const resInput = document.getElementById('setting-resolution');
+            const resLabel = document.getElementById('setting-resolution-value');
+            if (resInput) resInput.value = profile.resolution;
+            if (resLabel) resLabel.textContent = profile.resolution.toFixed(1) + 'x';
+        }
+
         this.performanceSampler.lastAdjust = now;
-        this.setStatus(`Auto quality: ${target.toUpperCase()} (${Math.round(fps)} FPS, render ${this.getEffectiveRenderDistanceForTier(target)})`);
+        this.setStatus(`Auto: ${target.toUpperCase()} | ${Math.round(fps)} FPS | res ${((profile?.resolution || 1) * 100).toFixed(0)}% | rd ${this.getEffectiveRenderDistanceForTier(target)}`);
     }
 
     handlePrimaryAction(delta) {
         if (this.hand) this.hand.swing();
         const selectedItem = this.gameState.getSelectedItem();
+
+        // Bucket Pickup Logic
+        if (selectedItem?.id === 'bucket') {
+            if (this.input.consumeLeftClick()) {
+                this.world.handleBucketAction(this.camera.instance, 'pickup');
+            }
+            return;
+        }
+
         const attackProfile = this.entities.getAttackProfile(selectedItem);
         const hasEnemyTarget = this.entities.hasHostileTarget(this.camera.instance, attackProfile.range);
         if (hasEnemyTarget) {
@@ -1650,37 +948,17 @@ export class Game {
         }
     }
 
-    cancelMining() {
-        this.world.resetMiningProgress();
-    }
-
-    handleDigDown() {
-        if (!this.hasStarted || this.isPaused) return;
-        const pos = this.physics.playerBody.translation();
-        this.world.digDownFrom(pos, this.gameState.mode);
-    }
-
-    tryEatFood() {
-        const selectedSlot = this.gameState.selectedSlot;
-        const selected = this.gameState.getSelectedItem();
-        if (!selected) return false;
-        const foodValue = FOOD_VALUES[selected.id];
-        if (!foodValue) return false;
-        if (this.gameState.hunger >= 20) return false; // already full
-
-        this.gameState.modifyHunger(foodValue);
-        selected.count = Math.max(0, (selected.count ?? 1) - 1);
-        if (selected.count === 0) this.gameState.inventory[selectedSlot] = null;
-        window.dispatchEvent(new CustomEvent('inventory-changed'));
-        this.hud?.setFace('happy', 800);
-        this.hud?.flashPrompt?.(`+${foodValue} FOOD`, '#aaff88');
-        return true;
-    }
-
     handleSecondaryAction() {
-        // Try eating food first
         const selected = this.gameState.getSelectedItem();
-        if (selected && FOOD_VALUES[selected.id]) {
+        if (!selected) return;
+
+        // Bucket Place Logic
+        if (selected.id === 'bucket' || selected.id === 'water_bucket' || selected.id === 'lava_bucket') {
+            this.world.handleBucketAction(this.camera.instance, 'place', this.gameState.selectedSlot);
+            return;
+        }
+
+        if (this.survival.isFoodItem(selected.id)) {
             this.tryEatFood();
             return;
         }
@@ -1691,11 +969,71 @@ export class Game {
         const placed = this.world.placeBlock(this.camera.instance, selectedSlot);
         if (!placed) return;
         if (this.gameState.mode === 'CREATIVE') return;
-        if (!selected || selected.kind !== 'block') return;
 
-        selected.count = Math.max(0, selected.count - 1);
-        if (selected.count === 0) this.gameState.inventory[selectedSlot] = null;
+        selected.count--;
+        if (selected.count <= 0) {
+            this.gameState.inventory[selectedSlot] = null;
+        }
         window.dispatchEvent(new CustomEvent('inventory-changed'));
+    }
+
+    cancelMining() {
+        this.world.resetMiningProgress();
+    }
+
+    handleDigDown() {
+        if (!this.hasStarted || this.isPaused) return;
+        const pos = this.physics.playerBody.translation();
+        this.world.digDownFrom(pos, this.gameState.mode);
+    }
+
+    pickBlock() {
+        if (!this.hasStarted || this.isPaused) return;
+        const hit = this.world.raycastBlocks?.(this.camera.instance, 6, false);
+        if (!hit?.id) return;
+        const id = this.world.getBlockPickId(hit.id);
+        const blockName = this.world.getBlockData(id)?.name ?? id;
+        const inv = this.gameState.inventory;
+        // First check hotbar slots 0-8
+        for (let i = 0; i < 9; i++) {
+            if (inv[i]?.id === id) {
+                this.gameState.setSlot(i);
+                this.hud?.flashPrompt?.(`Selected: ${blockName}`, '#aaddff');
+                return;
+            }
+        }
+        // Creative: add block to selected slot
+        if (this.gameState.mode === 'CREATIVE') {
+            const slot = this.gameState.selectedSlot;
+            inv[slot] = { id, count: 64, kind: 'block' };
+            window.dispatchEvent(new CustomEvent('inventory-changed'));
+            this.hud?.flashPrompt?.(`Picked: ${blockName}`, '#aaddff');
+        }
+    }
+
+    updateSelection() {
+        const hit = this.world.raycastBlocks?.(this.camera.instance, 6, false);
+        if (hit) {
+            this.world.visuals.updateHover(hit.x, hit.y, hit.z, true);
+            
+            // Placement Ghost Logic
+            const item = this.gameState.inventory[this.gameState.selectedSlot];
+            if (item && item.kind === 'block') {
+                const px = hit.x + hit.normal.x;
+                const py = hit.y + hit.normal.y;
+                const pz = hit.z + hit.normal.z;
+                this.world.visuals.updatePlacement(px, py, pz, true);
+            } else {
+                this.world.visuals.updatePlacement(0, 0, 0, false);
+            }
+        } else {
+            this.world.visuals.updateHover(0, 0, 0, false);
+            this.world.visuals.updatePlacement(0, 0, 0, false);
+        }
+    }
+
+    tryEatFood() {
+        return this.survival.tryEatFood(this.gameState.selectedSlot);
     }
 
     toggleGameMode() {
@@ -1705,65 +1043,24 @@ export class Game {
     }
 
     updateDayNight(delta) {
-        this.timeOfDay = (this.timeOfDay + (delta / this.dayDurationSeconds)) % 1;
-        const angle = (this.timeOfDay * Math.PI * 2) - (Math.PI / 2);
-        const sunHeight = Math.sin(angle);
-        const sunDistance = 110;
-
-        this.renderer.sun.position.set(
-            Math.cos(angle) * sunDistance,
-            sunHeight * sunDistance,
-            70
-        );
-
-        const daylight = Math.max(0.08, Math.min(1, (sunHeight + 0.3)));
-        this.renderer.setDaylightLevel(daylight);
-        if (this.features.dynamicLighting) {
-            const pos = this.getPlayerPosition();
-            let depthBlend = 0;
-            if (pos) {
-                const surfaceY = this.world.getColumnHeight(pos.x, pos.z);
-                const relativeDepth = surfaceY - pos.y;
-                depthBlend = Math.max(0, Math.min(1, relativeDepth / 16));
-            }
-            this.renderer.updateEnvironmentLighting(daylight, pos, depthBlend);
-        }
+        this.dayNight.update(delta, () => this.getPlayerPosition());
     }
 
     updateSurvivalSystems(delta) {
-        if (this.gameState.mode !== 'SURVIVAL') return;
-
-        this.systemTimers.hunger += delta;
-        if (this.systemTimers.hunger >= 10) {
-            this.systemTimers.hunger = 0;
-            this.gameState.modifyHunger(-1);
-        }
-
-        if (this.gameState.hunger >= 16 && this.gameState.hp < this.gameState.maxHp) {
-            this.systemTimers.regen += delta;
-            if (this.systemTimers.regen >= 4) {
-                this.systemTimers.regen = 0;
-                this.gameState.heal(1);
-                this.gameState.modifyHunger(-1);
-            }
-        } else {
-            this.systemTimers.regen = 0;
-        }
-
-        if (this.gameState.hunger === 0) {
-            this.systemTimers.starve += delta;
-            if (this.systemTimers.starve >= 3) {
-                this.systemTimers.starve = 0;
-                this.gameState.takeDamage(1);
-            }
-        } else {
-            this.systemTimers.starve = 0;
-        }
+        this.survival.update(delta);
     }
 
-    animate() {
-        requestAnimationFrame(() => this.animate());
+    animate(timestamp = 0) {
+        requestAnimationFrame((ts) => this.animate(ts));
+
+        // FPS cap
+        const targetMs = 1000 / (this.settings.fpsCap || 60);
+        const elapsed = timestamp - (this._lastFrameTs || 0);
+        if (elapsed < targetMs - 1) return;
+        this._lastFrameTs = timestamp - (elapsed % targetMs);
+
         if (this.framePanel) this.framePanel.begin();
+        this.clock.update(timestamp);
         const delta = Math.min(this.clock.getDelta(), 0.1);
         const frameStart = performance.now();
 
@@ -1772,16 +1069,20 @@ export class Game {
         if (delta > 0.08) this.resumeGraceFrames = 3;
         if (this.resumeGraceFrames > 0) {
             this.resumeGraceFrames--;
+            this.world.blockRegistry.updateShaderMaterials(this.clock.getElapsed());
             this.renderer.render(this.camera.instance);
             if (this.framePanel) this.framePanel.end();
             return;
         }
+
+        this.world.blockRegistry.updateShaderMaterials(this.clock.getElapsed());
 
         let playerPos = this.getPlayerPosition();
         const canSimulate = this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen;
         const shouldRunPassiveWorld = !canSimulate;
         let worldDelta = delta;
         let runWorldThisFrame = canSimulate;
+        this.input.update();
 
         if (canSimulate) {
             this.touchControls?.tick();
@@ -1793,6 +1094,7 @@ export class Game {
             const worldStart = performance.now();
             this.world.update(playerPos, delta);
             this.profiler.worldMs = performance.now() - worldStart;
+            runWorldThisFrame = false;
             this.updateSurvivalSystems(delta);
             this.animatePlayer(delta);
             this.updateDebugHUD(delta);
@@ -1806,6 +1108,7 @@ export class Game {
             if (this.input.consumeRightClick()) {
                 this.handleSecondaryAction();
             }
+            this.updateSelection();
         } else {
             this.profiler.physicsMs = 0;
             this.idleWorldTick = (this.idleWorldTick + 1) % 120;
@@ -1837,7 +1140,7 @@ export class Game {
         const isGrounded = this.physics.isGrounded() && !inWater;
         
         if (isGrounded && speed > 0.1) {
-            this.bobCycle = (this.bobCycle || 0) + delta * 12;
+            this.bobCycle = (this.bobCycle || 0) + delta * 8.5;
         } else if (inWater) {
             this.bobCycle = (this.bobCycle || 0) + delta * 4;
         } else {
@@ -1880,7 +1183,7 @@ export class Game {
             try {
                 this.hand.setHeldItem(selectedId, this.world.blockRegistry, selected);
             } catch (error) {
-                console.warn('[ArloCraft] Failed to update held item viewmodel:', error);
+                console.warn('[AntonCraft] Failed to update held item viewmodel:', error);
             }
             this.hand.lastHeldId = selectedId;
         }
@@ -1962,9 +1265,9 @@ export class Game {
     }
 
     interactWithNPC() {
-        if (!this.player || !this.entityManager) return;
-        const pos = this.player.position;
-        const talked = this.entityManager.interactNearbyEntity(pos, 4);
+        if (!this.entities) return;
+        const pos = this.physics?.position ?? this.getPlayerPosition();
+        const talked = this.entities.interactNearbyEntity?.(pos, 4);
         if (talked) {
             this.screenShake = Math.max(this.screenShake, 0.02);
         }
@@ -1988,18 +1291,38 @@ export class Game {
 
     async updatePlayerSkin(username) {
         try {
+            if (!this.skinLoader) throw new Error('skinLoader not initialized');
             const { materials } = await this.skinLoader.loadSkin(username);
             if (this.playerParts) {
-                Object.assign(this.playerParts.head.material, materials.head);
-                Object.assign(this.playerParts.torso.material, materials.torso);
+                this.playerParts.head.material = materials.head;
+                materials.head.forEach(m => { m.needsUpdate = true; });
+                this.playerParts.torso.material = materials.torso;
+                materials.torso.forEach(m => { m.needsUpdate = true; });
+                this.playerParts.armL.material = materials.armL;
+                materials.armL.forEach(m => { m.needsUpdate = true; });
+                this.playerParts.armR.material = materials.armR;
+                materials.armR.forEach(m => { m.needsUpdate = true; });
+                this.playerParts.legL.material = materials.legL;
+                materials.legL.forEach(m => { m.needsUpdate = true; });
+                this.playerParts.legR.material = materials.legR;
+                materials.legR.forEach(m => { m.needsUpdate = true; });
                 if (this.playerParts.face) this.playerParts.face.visible = false;
             }
-            if (this.hand) this.hand.arm.material = materials.armR;
-            const h = document.getElementById('arlo-face-image');
-            if (h) h.src = `https://minotar.net/avatar/${username}/64`;
+            if (this.hand) this.hand.updateArmSkin(materials.armR);
+            const h = document.getElementById('anton-face-image');
+            if (h) {
+                // If we have local materials (offline or custom), use the head front face
+                if (materials.head && materials.head[4]?.map?.image) {
+                    h.src = materials.head[4].map.image.toDataURL();
+                } else if (username) {
+                    h.src = `https://crafatar.com/avatars/${username}?size=64&overlay`;
+                } else {
+                    h.src = 'faces/anton_happy.png';
+                }
+            }
             this.settings.skinUsername = username;
             this.saveSettings();
-        } catch (e) { console.error('[ArloCraft] Skin Error:', e); }
+        } catch (e) { console.error('[AntonCraft] Skin Error:', e); }
     }
 
     animatePlayer(delta) {
@@ -2015,13 +1338,11 @@ export class Game {
         } else {
             this.bobCycle = THREE.MathUtils.lerp(this.bobCycle || 0, 0, delta * 3);
         }
-    }
 
-    toggleDebugOverlay() {
-        this.debugVisible = !this.debugVisible;
-        const o = document.getElementById('debug-overlay');
-        if (o) o.style.display = this.debugVisible ? 'block' : 'none';
-        this.audio.play('ui-click');
+        // Sync head tilt to view pitch
+        if (this.playerParts.headGroup) {
+            this.playerParts.headGroup.rotation.x = -this.viewPitch;
+        }
     }
 
     initDebugOverlay() {
@@ -2041,7 +1362,14 @@ export class Game {
         if (overlay) {
             const fps = Math.round(1 / Math.max(0.001, delta));
             const pos = this.physics.position;
-            overlay.textContent = `FPS: ${fps} | POS: ${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`;
+            const meshMs = (this._lastMeshMs || 0).toFixed(2);
+            overlay.textContent = `FPS: ${fps} | POS: ${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)} | MESH: ${meshMs}ms`;
         }
+    }
+
+    shakeCamera(intensity, duration = 0.5, frequency = 12) {
+        this.screenShake = Math.max(this.screenShake, intensity);
+        this.shakeDecay = intensity / duration;
+        this.shakeFrequency = frequency;
     }
 }

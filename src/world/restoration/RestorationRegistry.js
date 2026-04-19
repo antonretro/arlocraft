@@ -32,7 +32,7 @@ const SITE_DEFS = [
         patch: 'park',
         interactRadius: 7,
         xpReward: 40,
-        requirements: [{ id: 'grass', count: 10 }, { id: 'dirt', count: 8 }],
+        requirements: [{ id: 'grass_block', count: 10 }, { id: 'dirt', count: 8 }],
         landmarks: ['Lost Orchard', 'Abandoned Camp']
     },
     {
@@ -57,4 +57,3 @@ export function getRestorationSiteByLandmarkName(name) {
     if (!name) return null;
     return SITE_BY_LANDMARK.get(name) ?? null;
 }
-

@@ -1,0 +1,8 @@
+{
+  
+  "block.minecraft.sweet_berry_bush": "Arbusto de fresas",
+  "death.attack.sweetBerryBush": "%1$s ha muerto entre espinas en un arbusto de fresas",
+  "death.attack.sweetBerryBush.player": "%1$s ha muerto entre espinas en un arbusto de fresas mientras intentaba huir de %2$s",
+  "item.minecraft.sweet_berries": "Fresa",
+  "subtitles.block.sweet_berry_bush.pick_berries": "Fresas caen"
+}

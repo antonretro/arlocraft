@@ -1,0 +1,8 @@
+{
+    "id": "rail_rifle",
+    "name": "Rail Rifle",
+    "type": "gun",
+    "description": "A long-range railgun. High damage, slow fire rate.",
+    "sprite": "rail_rifle.png",
+    "spriteStatus": "NEEDED"
+}

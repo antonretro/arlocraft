@@ -1,5 +1,6 @@
-﻿{
+{
     "hardness":  1,
     "name":  "Dead Brain Coral Block",
-    "xp":  2
+    "xp":  2,
+    "deco":  true
 }

@@ -26,7 +26,10 @@ export class Physics {
         this.swimSpeed = 4.8;
         this.swimRiseSpeed = 5.4;
         this.swimSinkSpeed = -4.8;
-        this.buoyancy = -0.75;
+        this.buoyancy = 1.2;
+        this.waterExitBoost = 7.6;
+        this.waterSurfaceExitWindow = 0.95;
+        this.waterExitStepHeight = 1.15;
         this.feetOffset = 0.3;
         this.maxStepHeight = 0.62;
         this.playerRadius = 0.32;
@@ -174,7 +177,9 @@ export class Physics {
     }
 
     isGrounded() {
-        return this.position.y <= (this.getGroundYAt(this.position.x, this.position.z, this.position.y) + 0.03);
+        const groundY = this.getGroundYAt(this.position.x, this.position.z, this.position.y);
+        // Loosen epsilon from 0.06 to 0.14 for much more reliable jumping on steps/slabs
+        return this.position.y <= groundY + 0.14;
     }
 
     resolveHorizontalCollisions() {
@@ -328,17 +333,17 @@ export class Physics {
         return headClear1 && headClear2;
     }
 
-    update(delta, keys, input, lookYaw) {
+    update(delta, input, lookYaw) {
         if (!this.isReady) return;
-        
-        // Safety: If keys or input are missing, try to recover from game instance
-        const activeKeys = keys || (this.camera?.game?.input?.keys) || {};
-        const activeInput = input || (this.camera?.game?.input);
-        
+
+        const keys = input?.keys ?? Object.create(null);
+
         const inWater = this.world.isPositionInWater(this.position.x, this.position.y, this.position.z);
+        const waterSurfaceY = inWater ? this.world.getWaterSurfaceYAt(this.position.x, this.position.z) : null;
+        const nearWaterSurface = waterSurfaceY !== null && (waterSurfaceY - this.position.y) <= this.waterSurfaceExitWindow;
         const grounded = !inWater && this.mode === 'SURVIVAL' && this.isGrounded();
 
-        let wantsToCrouch = this.mode === 'SURVIVAL' && (activeKeys['ShiftLeft'] || activeKeys['ShiftRight']);
+        let wantsToCrouch = this.mode === 'SURVIVAL' && (keys['ShiftLeft'] || keys['ShiftRight']);
         
         // Ceiling Check (if releasing crouch under a low ceiling, force crouch)
         if (!wantsToCrouch && this.isCrouching) {
@@ -358,52 +363,50 @@ export class Physics {
             this.tryResolveEmbeddedPosition(8);
         }
 
-        // Minecraft-style sprinting logic
         const wPressed = keys['KeyW'] || keys['ArrowUp'];
         const ctrlPressed = keys['ControlLeft'] || keys['ControlRight'];
-        
-        // Double-tap W detection
-        if (input?.consumeKeyPress?.('KeyW') || input?.consumeKeyPress?.('ArrowUp')) {
-            if (this.wPressTimer > 0 && this.wPressTimer < 0.3) {
+
+        // Double-tap W sprints (Minecraft Java edition style)
+        if (input?.isJustPressed?.('KeyW') || input?.isJustPressed?.('ArrowUp')) {
+            if (this.wPressTimer > 0 && this.wPressTimer < 0.28) {
                 this.isSprinting = true;
             }
-            this.wPressTimer = 0.001; // Small bias to distinguish from 0
+            this.wPressTimer = 0.001;
         }
         if (this.wPressTimer > 0) {
             this.wPressTimer += delta;
-            if (this.wPressTimer > 0.35) this.wPressTimer = 0;
+            if (this.wPressTimer > 0.32) this.wPressTimer = 0;
         }
 
-        // Start sprinting if Ctrl is held while moving forward
-        if (ctrlPressed && wPressed && !this.isCrouching) {
-            this.isSprinting = true;
-        }
+        // Ctrl+W also starts sprint
+        // (Removing Ctrl speedup as requested)
 
-        // Stop sprinting if we stop moving forward or hit a wall (speed drops)
-        if (!wPressed || this.isCrouching || inWater) {
-            this.isSprinting = false;
-        }
+        // Sprint cancels on: stop forward movement, crouch, enter water, hit a wall
+        if (!wPressed || this.isCrouching || inWater) this.isSprinting = false;
 
         const sprinting = this.mode === 'SURVIVAL' && this.isSprinting;
-        const speed = this.mode === 'CREATIVE' ? this.creativeSpeed : (this.isCrouching ? this.crouchSpeed : (sprinting ? this.sprintSpeed : this.walkSpeed));
+        const speed = this.mode === 'CREATIVE'
+            ? this.creativeSpeed
+            : (this.isCrouching ? this.crouchSpeed : (sprinting ? this.sprintSpeed : this.walkSpeed));
 
-        let inputX = 0;
-        let inputZ = 0;
-        if (keys['KeyW'] || keys['ArrowUp']) inputZ += 1;
-        if (keys['KeyS'] || keys['ArrowDown']) inputZ -= 1;
-        if (keys['KeyA'] || keys['ArrowLeft']) inputX -= 1;
-        if (keys['KeyD'] || keys['ArrowRight']) inputX += 1;
+        let inputX = input?.gamepadState?.lx || 0;
+        let inputZ = -(input?.gamepadState?.ly || 0);
+        if (keys['KeyW'] || keys['ArrowUp'])    inputZ += 1;
+        if (keys['KeyS'] || keys['ArrowDown'])   inputZ -= 1;
+        if (keys['KeyA'] || keys['ArrowLeft'])   inputX -= 1;
+        if (keys['KeyD'] || keys['ArrowRight'])  inputX += 1;
+        
+        // Clamp for keyboard+gamepad combined
+        inputX = Math.max(-1, Math.min(1, inputX));
+        inputZ = Math.max(-1, Math.min(1, inputZ));
 
         const yaw = Number.isFinite(lookYaw) ? lookYaw : 0;
-        // Keep movement basis aligned with Three.js camera yaw convention.
         this.forward.set(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
         this.right.crossVectors(this.forward, this.up).normalize();
         this.moveDir.set(0, 0, 0);
         this.moveDir.addScaledVector(this.forward, inputZ);
         this.moveDir.addScaledVector(this.right, inputX);
         if (this.moveDir.lengthSq() > 0) this.moveDir.normalize();
-
-        // Safety check to prevent NaN movement from corrupted inputs or look yaw
         if (!Number.isFinite(this.moveDir.x) || !Number.isFinite(this.moveDir.z)) {
             this.moveDir.set(0, 0, 0);
         }
@@ -414,25 +417,13 @@ export class Physics {
 
         const spaceTapped = input?.consumeKeyPress?.('Space');
         if (spaceTapped) {
-            // Optional sprint trigger: double-tap Space while moving forward.
-            const canSpaceSprint = this.mode === 'SURVIVAL' && wPressed && !this.isCrouching && !inWater;
-            if (canSpaceSprint && this.spacePressTimer > 0 && this.spacePressTimer < 0.32) {
-                this.isSprinting = true;
-                this.spacePressTimer = 0;
-            } else {
-                this.jumpBufferTimer = this.jumpBufferWindow;
-                this.spacePressTimer = 0.001;
-            }
+            this.jumpBufferTimer = this.jumpBufferWindow;
         } else {
             this.jumpBufferTimer = Math.max(0, this.jumpBufferTimer - delta);
-            if (this.spacePressTimer > 0) {
-                this.spacePressTimer += delta;
-                if (this.spacePressTimer > 0.36) this.spacePressTimer = 0;
-            }
         }
         this.coyoteTimer = grounded ? this.coyoteWindow : Math.max(0, this.coyoteTimer - delta);
         this.autoJumpCooldown = Math.max(0, this.autoJumpCooldown - delta);
-        
+
         const friction = inWater ? this.waterFriction : (grounded ? this.groundFriction : this.airFriction);
         const lerpT = Math.min(1, friction * delta);
         this.velocity.x = THREE.MathUtils.lerp(this.velocity.x, targetX, lerpT);
@@ -441,17 +432,21 @@ export class Physics {
         if (this.mode === 'CREATIVE') {
             let vertical = 0;
             if (keys['Space']) vertical += 1;
-            if (keys['ControlLeft'] || keys['ControlRight']) vertical -= 1;
+            if (keys['ShiftLeft'] || keys['ShiftRight']) vertical -= 1;
             this.velocity.y = vertical * speed;
         } else {
             if (inWater) {
+                // Minecraft: Space=rise fast, Shift=sink, otherwise slow natural float
                 let targetY = this.buoyancy;
                 if (keys['Space']) {
                     targetY = this.swimRiseSpeed;
-                } else if (keys['ShiftLeft'] || keys['ShiftRight'] || keys['ControlLeft'] || keys['ControlRight']) {
+                } else if (keys['ShiftLeft'] || keys['ShiftRight']) {
                     targetY = this.swimSinkSpeed;
                 }
-                this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, targetY, delta * 5.8);
+                this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, targetY, delta * 9.5);
+                if (keys['Space'] && nearWaterSurface) {
+                    this.velocity.y = Math.max(this.velocity.y, this.waterExitBoost);
+                }
             } else if (grounded) {
                 if (this.velocity.y < 0) this.velocity.y = 0;
                 const bufferedJump = this.jumpBufferTimer > 0 && this.coyoteTimer > 0;
@@ -459,9 +454,9 @@ export class Physics {
                     this.velocity.y = this.jumpSpeed;
                     this.jumpBufferTimer = 0;
                     this.coyoteTimer = 0;
-                } else if (!this.isCrouching && this.autoJumpEnabled && this.autoJumpCooldown <= 0 && this.shouldAutoJump()) {
+                } else if (!this.isCrouching && this.autoJumpEnabled && this.autoJumpCooldown <= 0 && wPressed && this.shouldAutoJump()) {
                     this.velocity.y = this.jumpSpeed;
-                    this.autoJumpCooldown = 0.2;
+                    this.autoJumpCooldown = 0.4;
                 }
             } else {
                 this.velocity.y += this.gravity * delta;
@@ -491,6 +486,8 @@ export class Physics {
 
         for (let i = 0; i < steps; i++) {
             const inWater = this.world.isPositionInWater(this.position.x, this.position.y, this.position.z);
+            const waterSurfaceY = inWater ? this.world.getWaterSurfaceYAt(this.position.x, this.position.z) : null;
+            const nearWaterSurface = waterSurfaceY !== null && (waterSurfaceY - this.position.y) <= this.waterSurfaceExitWindow;
             const grounded = !inWater && this.mode === 'SURVIVAL' && this.isGrounded();
             const oldX = this.position.x;
             const oldY = this.position.y;
@@ -517,9 +514,10 @@ export class Physics {
                     const groundNext = this.getGroundYAt(this.position.x, oldZ, this.position.y);
                     const stepUp = groundNext - groundCurrent;
                     const stepCandidateY = Math.max(this.position.y, groundNext);
+                    const maxStepHeight = (inWater && nearWaterSurface) ? this.waterExitStepHeight : this.maxStepHeight;
 
-                    const canStep = grounded && this.velocity.y <= 0.2;
-                    if (canStep && stepUp > 0 && stepUp <= this.maxStepHeight && this.canOccupyAt(this.position.x, stepCandidateY, oldZ)) {
+                    const canStep = this.velocity.y <= 0.2 && (grounded || (inWater && nearWaterSurface));
+                    if (canStep && stepUp > 0 && stepUp <= maxStepHeight && this.canOccupyAt(this.position.x, stepCandidateY, oldZ)) {
                         this.position.y = stepCandidateY;
                     } else {
                         // Can't step, so block X
@@ -544,9 +542,10 @@ export class Physics {
                     const groundNext = this.getGroundYAt(this.position.x, this.position.z, this.position.y);
                     const stepUp = groundNext - groundCurrent;
                     const stepCandidateY = Math.max(this.position.y, groundNext);
+                    const maxStepHeight = (inWater && nearWaterSurface) ? this.waterExitStepHeight : this.maxStepHeight;
 
-                    const canStep = grounded && this.velocity.y <= 0.2;
-                    if (canStep && stepUp > 0 && stepUp <= this.maxStepHeight && this.canOccupyAt(this.position.x, stepCandidateY, this.position.z)) {
+                    const canStep = this.velocity.y <= 0.2 && (grounded || (inWater && nearWaterSurface));
+                    if (canStep && stepUp > 0 && stepUp <= maxStepHeight && this.canOccupyAt(this.position.x, stepCandidateY, this.position.z)) {
                         this.position.y = stepCandidateY;
                     } else {
                         // Can't step, so block Z
@@ -575,7 +574,7 @@ export class Physics {
             // --- FINAL SAFETY GUARD ---
             // If position becomes invalid (NaN/Infinity), rescue immediately to last safe spot.
             if (!Number.isFinite(this.position.x) || !Number.isFinite(this.position.y) || !Number.isFinite(this.position.z)) {
-                console.warn('[ArloCraft] Physics NaN detected! Rescuing player...');
+                console.warn('[AntonCraft] Physics NaN detected! Rescuing player...');
                 this.position.copy(this.lastSafePosition);
                 this.velocity.set(0, 0, 0);
             }

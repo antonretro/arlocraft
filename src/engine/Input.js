@@ -8,6 +8,14 @@ export class Input {
             right: false,
             rightJustPressed: false
         };
+        this.gamepadState = {
+            active: false,
+            lx: 0, ly: 0,
+            rx: 0, ry: 0,
+            jump: false,
+            mining: false,
+            placing: false
+        };
         this.isLocked = false;
         this.init();
     }
@@ -21,6 +29,10 @@ export class Input {
         return Boolean(this.keys[code]);
     }
 
+    isJustPressed(code) {
+        return Boolean(this.justPressed[code]);
+    }
+
     consumeKeyPress(code) {
         if (!this.justPressed[code]) return false;
         delete this.justPressed[code];
@@ -31,6 +43,71 @@ export class Input {
         if (!this.mouseButtons.rightJustPressed) return false;
         this.mouseButtons.rightJustPressed = false;
         return true;
+    }
+
+    update() {
+        this.pollGamepad();
+    }
+
+    pollGamepad() {
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        const gp = gamepads[0]; // Track first controller
+        
+        if (!gp) {
+            this.gamepadState.active = false;
+            return;
+        }
+
+        this.gamepadState.active = true;
+        const deadzone = 0.15;
+
+        // Stick Axes
+        const lx = Math.abs(gp.axes[0]) > deadzone ? gp.axes[0] : 0;
+        const ly = Math.abs(gp.axes[1]) > deadzone ? gp.axes[1] : 0;
+        const rx = Math.abs(gp.axes[2]) > deadzone ? gp.axes[2] : 0;
+        const ry = Math.abs(gp.axes[3]) > deadzone ? gp.axes[3] : 0;
+
+        this.gamepadState.lx = lx;
+        this.gamepadState.ly = ly;
+        this.gamepadState.rx = rx;
+        this.gamepadState.ry = ry;
+
+        // Apply Look
+        if (Math.abs(rx) > 0 || Math.abs(ry) > 0) {
+            const sens = (this.game.settings?.sensitivity ?? 0.00145) * 50;
+            this.game.adjustLook(-rx * sens, -ry * sens);
+        }
+
+        // Buttons
+        const buttonA = gp.buttons[0].pressed; // Jump
+        const buttonB = gp.buttons[1].pressed; // Menu/Back
+        const buttonX = gp.buttons[2].pressed; // Special/Pick
+        const buttonY = gp.buttons[3].pressed; // Cam Mode
+        const triggerR = gp.buttons[7].pressed || gp.buttons[7].value > 0.5; // Mine
+        const triggerL = gp.buttons[6].pressed || gp.buttons[6].value > 0.5; // Place
+
+        // Map Gamepad to Keyboard state for simplicity
+        this.keys['Space'] = buttonA;
+        if (buttonB && !this.lastB) this.game.togglePause();
+        if (buttonX && !this.lastX) this.game.pickBlock?.();
+        if (buttonY && !this.lastY) this.game.cycleCameraMode?.();
+        
+        const lb = gp.buttons[4].pressed;
+        const rb = gp.buttons[5].pressed;
+        if (lb && !this.lastLB) this.game.gameState.setSlot((this.game.gameState.selectedSlot + 8) % 9);
+        if (rb && !this.lastRB) this.game.gameState.setSlot((this.game.gameState.selectedSlot + 1) % 9);
+
+        this.mouseButtons.left = triggerR;
+        if (triggerL && !this.gamepadState.placing) {
+            this.mouseButtons.rightJustPressed = true;
+        }
+        this.gamepadState.placing = triggerL;
+
+        this.lastB = buttonB;
+        this.lastX = buttonX;
+        this.lastY = buttonY;
+        this.lastLB = lb;
+        this.lastRB = rb;
     }
 
     setPointerLock() {
@@ -102,13 +179,20 @@ export class Input {
                 this.game.toggleGameMode();
             }
 
-            if (event.code === 'KeyI') {
-                this.game.toggleHelpPanel();
+            if (event.code === 'KeyE' || event.code === 'KeyI') {
+                event.preventDefault(); // Force browser to yield key to the game
+                this.game.toggleInventory();
                 return;
             }
 
-            if (event.code === 'KeyE') {
-                this.game.toggleInventory();
+            if (event.code === 'KeyF') {
+                this.game.toggleOffhandFromSelected?.();
+                return;
+            }
+
+            if (event.code === 'KeyQ') {
+                this.game.pickBlock?.();
+                return;
             }
 
             if (event.code.startsWith('Digit')) {
@@ -121,13 +205,14 @@ export class Input {
 
         window.addEventListener('keyup', (event) => {
             delete this.keys[event.code];
-            delete this.justPressed[event.code];
         });
 
         document.addEventListener('mousemove', (event) => {
             if (!this.isLocked || this.game.isPaused || this.game.gameState.isInventoryOpen) return;
-            const sensitivity = this.game.settings?.sensitivity ?? 0.00145;
+            const sensitivity = (this.game.settings?.sensitivity ?? 0.00145) * 0.85; // Slight reduction for smoothing
             const invertFactor = this.game.settings?.invertY ? -1 : 1;
+            
+            // Raw movement with slight dampening for 30fps stability
             this.game.adjustLook(-event.movementX * sensitivity, -event.movementY * sensitivity * invertFactor);
         });
 

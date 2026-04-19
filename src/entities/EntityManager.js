@@ -1,8 +1,54 @@
 import * as THREE from 'three';
 import { MOBS } from '../data/mobs.js';
 import { TOOLS } from '../data/tools.js';
-import { VirusEnemy } from './VirusEnemy.js';
 import { MobEntity } from './MobEntity.js';
+
+const entityTextureModules = import.meta.glob('../Igneous 1.19.4/assets/minecraft/textures/entity/**/*.png', {
+    eager: true,
+    query: '?url',
+    import: 'default'
+});
+
+const entityTextureUrls = new Map(
+    Object.entries(entityTextureModules).map(([path, url]) => {
+        const normalized = path
+            .replace('../Igneous 1.19.4/assets/minecraft/textures/entity/', '')
+            .replace(/\.png$/i, '');
+        return [normalized, url];
+    })
+);
+
+function createTextureFromCanvas(canvas) {
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+}
+
+function createHumanoidBillboardCanvas(image) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const draw = (sx, sy, sw, sh, dx, dy) => {
+        ctx.drawImage(image, sx, sy, sw, sh, dx, dy, sw, sh);
+    };
+
+    draw(8, 8, 8, 8, 4, 0);     // head front
+    draw(20, 20, 8, 12, 4, 8);  // body front
+    draw(44, 20, 4, 12, 0, 8);  // right arm front
+    draw(44, 20, 4, 12, 12, 8); // left arm mirrored from right arm
+    draw(4, 20, 4, 12, 4, 20);  // right leg front
+    draw(4, 20, 4, 12, 8, 20);  // left leg mirrored from right leg
+
+    return canvas;
+}
 
 export class EntityManager {
     constructor(game) {
@@ -19,6 +65,9 @@ export class EntityManager {
         this.tmpHitMax = new THREE.Vector3();
         this.tmpHitPoint = new THREE.Vector3();
         this.tmpHitBox = new THREE.Box3();
+        this.textureLoader = new THREE.TextureLoader();
+        this.loadedTextureCache = new Map();
+        this.billboardTextureCache = new Map();
     }
 
     spawn(typeId, x, y, z) {
@@ -26,23 +75,15 @@ export class EntityManager {
         const config = MOBS.find(m => m.id === typeId);
         if (!config) return null;
 
-        let entity;
-        if (typeId === 'virus_grunt') {
-            entity = new VirusEnemy(this.game, config, x, y, z);
-        } else {
-            entity = new MobEntity(this.game, config, x, y, z); 
-        }
+        const entity = new MobEntity(this.game, config, x, y, z);
 
-        // Apply custom character texture if defined in mobs.js
-        if (config.texture && entity.mesh) {
-            const loader = new THREE.TextureLoader();
-            loader.load(config.texture, (tex) => {
-                tex.magFilter = THREE.NearestFilter;
-                tex.minFilter = THREE.NearestFilter;
-                if (entity.mesh.material && entity.mesh.material.map !== undefined) {
-                    entity.mesh.material.map = tex;
-                    entity.mesh.material.needsUpdate = true;
-                }
+        const textureUrl = this.resolveTextureUrl(config);
+        if (textureUrl && entity.mesh) {
+            this.loadEntityTexture(textureUrl, config.textureMode).then((texture) => {
+                if (!texture || entity.dead) return;
+                entity.applyTexture?.(texture);
+            }).catch((error) => {
+                console.warn(`[AntonCraft] Failed to load entity texture for ${config.id}:`, error);
             });
         }
 
@@ -52,6 +93,44 @@ export class EntityManager {
         }
         this.game.renderer.scene.add(entity.mesh);
         return entity;
+    }
+
+    resolveTextureUrl(config) {
+        if (typeof config.texture === 'string' && config.texture) return config.texture;
+        if (typeof config.textureKey === 'string' && config.textureKey) {
+            return entityTextureUrls.get(config.textureKey) ?? null;
+        }
+        return null;
+    }
+
+    loadEntityTexture(url, textureMode = 'billboard') {
+        const cacheKey = `${textureMode}:${url}`;
+        if (this.billboardTextureCache.has(cacheKey)) {
+            return Promise.resolve(this.billboardTextureCache.get(cacheKey));
+        }
+
+        const loadBaseTexture = () => {
+            if (this.loadedTextureCache.has(url)) return Promise.resolve(this.loadedTextureCache.get(url));
+
+            return new Promise((resolve, reject) => {
+                this.textureLoader.load(url, (texture) => {
+                    texture.magFilter = THREE.NearestFilter;
+                    texture.minFilter = THREE.NearestFilter;
+                    texture.colorSpace = THREE.SRGBColorSpace;
+                    this.loadedTextureCache.set(url, texture);
+                    resolve(texture);
+                }, undefined, reject);
+            });
+        };
+
+        return loadBaseTexture().then((texture) => {
+            let finalTexture = texture;
+            if (textureMode === 'humanoid_billboard') {
+                finalTexture = createTextureFromCanvas(createHumanoidBillboardCanvas(texture.image));
+            }
+            this.billboardTextureCache.set(cacheKey, finalTexture);
+            return finalTexture;
+        });
     }
 
     getAttackDamage(selectedItem) {

@@ -1,0 +1,8 @@
+{
+    "name": "Powered Rail",
+    "hardness": 0.7,
+    "xp": 1,
+    "transparent": true,
+    "emissive": true,
+    "flat": true
+}

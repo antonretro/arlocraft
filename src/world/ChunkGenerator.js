@@ -22,26 +22,28 @@ export class ChunkGenerator {
         }
     }
 
-    getChangedEntriesForChunk(cx, cz) {
+    getChangedEntriesForChunk(cx, cy, cz) {
         const out = [];
-        for (const [key, id] of this.world.changedBlocks.entries()) {
-            const [x, , z] = this.world.keyToCoords(key);
+        for (const [key, id] of this.world.state.changedBlocks.entries()) {
+            const [x, y, z] = this.world.keyToCoords(key);
             const ccx = this.world.getChunkCoord(x);
+            const ccy = this.world.getChunkCoord(y);
             const ccz = this.world.getChunkCoord(z);
-            if (ccx !== cx || ccz !== cz) continue;
+            if (ccx !== cx || ccy !== cy || ccz !== cz) continue;
             out.push([key, id]);
         }
         return out;
     }
 
-    async generateChunk(cx, cz) {
+    async generateChunk(cx, cy, cz) {
         if (!this.available || !this.api) return null;
         return this.api.generateChunk({
             cx,
+            cy,
             cz,
             chunkSize: this.world.chunkSize,
             seedString: this.world.seedString,
-            changedEntries: this.getChangedEntriesForChunk(cx, cz),
+            changedEntries: this.getChangedEntriesForChunk(cx, cy, cz),
             corruptionEnabled: Boolean(this.world.corruptionEnabled),
             cavesEnabled: Boolean(this.world.game?.features?.caves)
         });

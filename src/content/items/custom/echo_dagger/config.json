@@ -1,0 +1,8 @@
+{
+    "id": "echo_dagger",
+    "name": "Echo Dagger",
+    "type": "dagger",
+    "description": "A short blade that leaves an echo trail on fast attacks.",
+    "sprite": "echo_dagger.png",
+    "spriteStatus": "NEEDED"
+}

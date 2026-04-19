@@ -1,15 +1,5 @@
 import * as THREE from 'three';
 
-let villagerArloTexture = null;
-function getVillagerArloTexture() {
-    if (villagerArloTexture) return villagerArloTexture;
-    villagerArloTexture = new THREE.TextureLoader().load('faces/arlo_happy.png');
-    villagerArloTexture.colorSpace = THREE.SRGBColorSpace;
-    villagerArloTexture.magFilter = THREE.NearestFilter;
-    villagerArloTexture.minFilter = THREE.NearestMipmapNearestFilter;
-    return villagerArloTexture;
-}
-
 /**
  * Generic Mob Entity using high-performance 2D Billboards (Flat PNGs).
  * Handles movement, simple AI, and combat.
@@ -33,11 +23,7 @@ export class MobEntity {
             transparent: true,
             alphaTest: 0.5
         });
-        if (config.id === 'villager_arlo') {
-            this.material.map = getVillagerArloTexture();
-            this.material.color.setHex(0xffffff);
-            this.material.needsUpdate = true;
-        }
+        this.baseColor = new THREE.Color(color);
 
         this.mesh = new THREE.Mesh(this.geometry, this.material);
         this.mesh.position.set(x, y + (size / 2), z);
@@ -60,6 +46,14 @@ export class MobEntity {
         this.maxMoveSpeed = this.getBalancedSpeed();
         this.contactCooldown = 0;
         this.chatCooldown = 2 + (Math.random() * 3);
+    }
+
+    applyTexture(texture) {
+        if (!texture || !this.material) return;
+        this.material.map = texture;
+        this.baseColor.setHex(0xffffff);
+        this.material.color.copy(this.baseColor);
+        this.material.needsUpdate = true;
     }
 
     canOccupyAt(x, y, z) {
@@ -139,8 +133,8 @@ export class MobEntity {
         const colors = {
             virus_grunt: 0x9c27b0,
             bit_spitter: 0x673ab7,
-            arlo_evil: 0xff0000,
-            arlo_ai: 0x00ffff,
+            anton_evil: 0xff0000,
+            anton_ai: 0x00ffff,
             prof_apple: 0xffffff,
             super_ball: 0x3f51b5,
             friendly_nugget: 0x795548
@@ -188,7 +182,7 @@ export class MobEntity {
         // Flash effect
         this.material.color.setHex(0xff0000);
         setTimeout(() => {
-            if (!this.dead) this.material.color.setHex(this.getMobColor(this.config.id));
+            if (!this.dead) this.material.color.copy(this.baseColor);
         }, 120);
 
         if (this.hp <= 0) {

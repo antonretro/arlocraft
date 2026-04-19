@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ArloCraft</title>
+    <title>AntonCraft</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="src/style.css" />
@@ -55,7 +55,7 @@
     <div id="minimap" style="display: none;">
         <canvas id="minimap-canvas" width="180" height="180"></canvas>
         <div id="minimap-caption">Minimap [M]</div>
-        <div id="minimap-context">Seed arlocraft</div>
+        <div id="minimap-context">Seed antoncraft</div>
     </div>
 
     <div id="crosshair"></div>
@@ -67,36 +67,172 @@
         <div id="zone-label">ZONE</div>
         <div id="zone-bars">
             <div id="zone-bar-virus"><div id="zone-fill-virus"></div></div>
-            <div id="zone-bar-arlo"><div id="zone-fill-arlo"></div></div>
+            <div id="zone-bar-anton"><div id="zone-fill-anton"></div></div>
         </div>
         <div id="zone-status">NEUTRAL</div>
     </div>
 
-    <div id="arlo-face-widget" aria-hidden="true">
-        <img id="arlo-face-image" src="faces/arlo_happy.png" alt="Arlo Face" />
+    <div id="anton-face-widget" aria-hidden="true">
+        <img id="anton-face-image" src="/assets/steve.png" alt="Player Face" />
     </div>
 
     <pre id="coords-display"></pre>
 
-    <div id="inventory-overlay" style="display: none;">
-        <div id="inventory-container">
-            <div id="inventory-header">
-                <h2>Inventory & Crafting</h2>
-                <button id="btn-inventory-close" class="btn">Close [E]</button>
+    <!-- Notification Toasts -->
+    <div id="notification-container"></div>
+
+    <div id="inventory-overlay" class="ni-screen" style="display: none;">
+        <div id="inventory-card">
+            <div id="ni-inventory-tabs">
+                <button class="ni-inv-tab active" data-tab="pack">BAG</button>
+                <button class="ni-inv-tab" data-tab="blocklog">LOG</button>
+                <button class="ni-inv-tab" data-tab="recipes">CRAFT</button>
+                <button class="ni-inv-tab" data-tab="medals">MEDALS</button>
             </div>
-            <div id="inventory-main">
-                <section id="crafting-section">
-                    <h3>Crafting Grid</h3>
-                    <div id="crafting-grid-3x3" class="grid-3x3"></div>
-                    <div id="crafting-arrow">Craft -></div>
-                    <div id="crafting-result-slot" class="slot large"></div>
-                    <div id="crafting-hint">Click output to craft and send to inventory.</div>
+
+            <div id="ni-inventory-content">
+                <!-- BAG TAB (Standard Inventory) -->
+                <div id="tab-pack" class="ni-inv-pane active">
+                    <div id="inventory-layout">
+                        <div id="inventory-section">
+                            <div class="ni-label"><span class="label-icon">🎒</span> INVENTORY</div>
+                            <div id="inventory-grid" class="ni-grid"></div>
+                            
+                            <div class="ni-label" style="margin-top: 24px;"><span class="label-icon">⚔️</span> HOTBAR</div>
+                            <div id="hotbar-grid" class="ni-grid"></div>
+                        </div>
+
+                        <div id="anton-preview-section">
+                             <div class="ni-label">PLAYER</div>
+                             <div id="anton-preview-card">
+                                 <div id="anton-preview-viewport">
+                                     <img id="anton-preview-img" src="https://minotar.net/helm/MHF_Steve/128.png" alt="Steve">
+                                 </div>
+                             </div>
+                             <div id="ni-stats-mini">
+                                 <div class="mini-stat">HP 20/20</div>
+                                 <div class="mini-stat">XP Lvl. 0</div>
+                             </div>
+                        </div>
+
+                        <div id="crafting-separator"></div>
+
+                        <div id="crafting-section">
+                            <div class="ni-label"><span class="label-icon">🔨</span> CRAFTING</div>
+                            <div id="crafting-container">
+                                <div id="crafting-grid" class="ni-grid-2x2"></div>
+                                <div id="crafting-arrow">➜</div>
+                                <div id="crafting-result-slot">
+                                    <div id="crafting-result" class="slot large"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- (Others kept as is for now) -->
+                <div id="tab-blocklog" class="ni-inv-pane">
+                    <div id="blocklog-grid"></div>
+                </div>
+                <div id="tab-recipes" class="ni-inv-pane">
+                    <div id="recipe-list"></div>
+                </div>
+                <div id="tab-medals" class="ni-inv-pane">
+                    <div id="medals-grid"></div>
+                </div>
+            </div>
+
+            <div class="ni-inventory-footer">
+                <div id="inventory-hint">CLICK TO MOVE ITEMS • [E] TO CLOSE</div>
+                <button id="btn-inventory-close">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════ CRAFTING TABLE OVERLAY ═══════════════════ -->
+    <div id="crafting-table-overlay" style="display: none;">
+        <div class="bh-container">
+            <div class="bh-header">
+                <h2>Crafting Table</h2>
+                <button class="btn" onclick="document.getElementById('crafting-table-overlay').style.display='none'">Close [E]</button>
+            </div>
+            <div class="bh-body ct-body">
+                <section class="bh-section ct-craft-section">
+                    <h3>Crafting (3x3)</h3>
+                    <div id="ct-crafting-grid" class="grid-3x3"></div>
+                    <div class="bh-arrow">Craft -></div>
+                    <div id="ct-result-slot" class="slot large"></div>
                 </section>
-                <section id="storage-section">
-                    <h3>Backpack</h3>
-                    <div id="main-inventory-grid" class="grid-9x3"></div>
+                <section class="bh-section ct-inv-section">
+                    <h3>Inventory</h3>
+                    <div id="ct-player-main" class="grid-9x3"></div>
                     <h3>Hotbar</h3>
-                    <div id="hotbar-inventory-grid" class="grid-9x1"></div>
+                    <div id="ct-player-hotbar" class="grid-9x1"></div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════ CHEST OVERLAY ═══════════════════ -->
+    <div id="chest-overlay" style="display: none;">
+        <div class="bh-container">
+            <div class="bh-header">
+                <h2>Chest</h2>
+                <button class="btn" onclick="document.getElementById('chest-overlay').style.display='none'">Close [E]</button>
+            </div>
+            <div class="bh-body">
+                <section class="bh-section">
+                    <h3>Chest (9x3)</h3>
+                    <div id="chest-grid" class="grid-9x3"></div>
+                </section>
+                <section class="bh-section">
+                    <h3>Inventory</h3>
+                    <div id="chest-player-main" class="grid-9x3"></div>
+                    <h3>Hotbar</h3>
+                    <div id="chest-player-hotbar" class="grid-9x1"></div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════ FURNACE OVERLAY ═══════════════════ -->
+    <div id="furnace-overlay" style="display: none;">
+        <div class="bh-container bh-container-sm">
+            <div class="bh-header">
+                <h2>Furnace</h2>
+                <button class="btn" onclick="document.getElementById('furnace-overlay').style.display='none'">Close [E]</button>
+            </div>
+            <div class="bh-body">
+                <section class="bh-section furnace-section">
+                    <div class="furnace-ui">
+                        <div class="furnace-slots">
+                            <div class="furnace-slot-group">
+                                <div class="furnace-slot-label">Input</div>
+                                <div id="furnace-input-slot" class="slot furnace-slot" title="Place smeltable item here (click with selected item)"></div>
+                            </div>
+                            <div class="furnace-middle">
+                                <div id="furnace-flame" class="furnace-flame" title="Burning"></div>
+                                <div class="furnace-progress-track" title="Smelting progress">
+                                    <div id="furnace-progress-bar" class="furnace-progress-bar"></div>
+                                </div>
+                            </div>
+                            <div class="furnace-slot-group">
+                                <div class="furnace-slot-label">Output</div>
+                                <div id="furnace-output-slot" class="slot furnace-slot" title="Click to collect output"></div>
+                            </div>
+                        </div>
+                        <div class="furnace-fuel-row">
+                            <div class="furnace-slot-label">Fuel</div>
+                            <div id="furnace-fuel-slot" class="slot furnace-slot" title="Place fuel here (coal, charcoal, wood)"></div>
+                        </div>
+                        <div class="furnace-hint">Click a furnace slot with a selected hotbar item to load it. Click output to collect.</div>
+                    </div>
+                </section>
+                <section class="bh-section">
+                    <h3>Inventory</h3>
+                    <div id="furnace-player-main" class="grid-9x3"></div>
+                    <h3>Hotbar</h3>
+                    <div id="furnace-player-hotbar" class="grid-9x1"></div>
                 </section>
             </div>
         </div>
@@ -105,15 +241,28 @@
     <!-- ═══════════════════ MENU OVERLAY ═══════════════════ -->
     <div id="overlay" style="display:block; position:fixed; inset:0; z-index:100;">
 
+        <!-- ── SCREEN: Booting ───────────────────────────────── -->
+        <div id="screen-booting" class="ni-screen ni-screen-active">
+            <div class="ni-boot-container">
+                <div class="ni-boot-logo-wrapper">
+                    <h1 class="ni-title mc-logo" data-text="ANTONCRAFT"><span>ANTONCRAFT</span></h1>
+                </div>
+                <div class="ni-boot-spinner-row">
+                    <div class="ni-boot-spinner"></div>
+                    <div id="boot-status" class="ni-boot-status">Initializing Engine...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- ── SCREEN: Title ─────────────────────────────────── -->
-        <div id="screen-title" class="ni-screen ni-screen-active">
+        <div id="screen-title" class="ni-screen">
             <div class="mc-bg-orb mc-orb-a"></div>
             <div class="mc-bg-orb mc-orb-b"></div>
             <div class="mc-bg-orb mc-orb-c"></div>
 
             <div class="ni-hero">
-                <h1 class="ni-title mc-logo" data-text="ARLOCRAFT"><span>ARLOCRAFT</span></h1>
-                <p class="ni-subtitle">Ported Beta 1.7.3 Terrain & Modern UI</p>
+                <h1 class="ni-title"><span>ArloCraft</span></h1>
+                <p class="ni-subtitle">The Grandmaster's Vanguard</p>
             </div>
 
             <nav class="ni-main-nav">
@@ -121,6 +270,10 @@
                     <button class="ni-tile ni-tile-blue" id="btn-to-worlds">
                         <div class="ni-tile-icon">&#128100;</div>
                         <span>Singleplayer</span>
+                    </button>
+                    <button class="ni-tile ni-tile-green" id="btn-to-skins">
+                        <div class="ni-tile-icon">&#128364;</div>
+                        <span>Skins</span>
                     </button>
                     <button class="ni-tile ni-tile-red" id="btn-to-settings">
                         <div class="ni-tile-icon">&#9881;</div>
@@ -147,7 +300,9 @@
                     <button class="ni-btn ni-btn-sm" id="btn-open-repo">GitHub Repo</button>
                 </div>
             </section>
-            <div class="ni-footer-hint">ArloCraft Alpha · antonretro</div>
+            <footer class="ni-title-footer">
+                <div class="ni-footer-hint">AntonCraft Alpha · antonretro</div>
+            </footer>
         </div>
 
         <!-- ── SCREEN: World Select ──────────────────────────── -->
@@ -179,7 +334,7 @@
                 <div class="ni-form-group">
                     <label class="ni-label" for="seed-input">World Seed</label>
                     <div class="ni-input-row">
-                        <input id="seed-input" type="text" value="arlocraft" class="ni-input-modern" />
+                        <input id="seed-input" type="text" value="antoncraft" class="ni-input-modern" />
                         <button class="ni-btn ni-btn-sm" id="btn-title-random-seed">Auto</button>
                     </div>
                 </div>
@@ -203,11 +358,56 @@
             </div>
         </div>
 
+        <!-- ── SCREEN: Skin Library ──────────────────────────── -->
+        <div id="screen-skins" class="ni-screen ni-glass" style="display: none;">
+            <div class="ni-container">
+                <div class="ni-header">
+                    <h2 class="ni-heading">Skin Library</h2>
+                    <button class="ni-btn ni-btn-sm" id="btn-skins-back-top">Back</button>
+                </div>
+
+                <div class="ni-skin-layout">
+                    <div class="ni-skin-selector">
+                        <div class="ni-label">CUSTOM UPLOAD</div>
+                        <div class="ni-upload-box" id="skin-upload-area">
+                            <input type="file" id="skin-file-input" accept="image/png" style="display: none;" />
+                            <div class="ni-upload-hint">Drop .PNG skin here or click to browse</div>
+                        </div>
+
+                        <div class="ni-label" style="margin-top: 20px;">CLASSIC</div>
+                        <div id="classic-skins-grid" class="ni-skin-grid">
+                            <!-- Steve and Alex injected here -->
+                        </div>
+
+                        <div class="ni-label" style="margin-top: 20px;">RANDOM COLLECTION</div>
+                        <div id="random-skins-grid" class="ni-skin-grid">
+                            <!-- 10 Random skins injected here -->
+                        </div>
+                    </div>
+
+                    <div class="ni-skin-preview">
+                        <div class="ni-label">PREVIEW</div>
+                        <div id="skin-preview-viewport">
+                            <!-- 3D Preview Canvas injected here -->
+                        </div>
+                        <div id="selected-skin-name" class="ni-skin-info">Classic Steve</div>
+                    </div>
+                </div>
+
+                <div class="ni-footer-actions">
+                    <button class="ni-btn ni-btn-blue" id="btn-apply-skin">Save & Apply</button>
+                    <button class="ni-btn" id="btn-skins-back">Back</button>
+                </div>
+            </div>
+        </div>
+
         <!-- ── SCREEN: Loading ────────────────────────────────── -->
         <div id="screen-loading" class="ni-screen ni-glass" style="display: none;">
             <div class="ni-loading-content">
                 <div class="ni-loading-logo">
-                    <img src="faces/arlo_happy.png" class="ni-loading-avatar" />
+                    <div id="loading-avatar-3d-container">
+                        <canvas id="loading-avatar-canvas"></canvas>
+                    </div>
                     <div class="ni-loading-spinner"></div>
                 </div>
                 <h2 id="loading-status" class="ni-loading-text">Generating Terrain...</h2>
@@ -215,6 +415,7 @@
                     <div id="loading-progress" class="ni-progress-fill" style="width: 0%"></div>
                 </div>
                 <div id="loading-subtext" class="ni-loading-subtext">Calculating voxel structures...</div>
+                <div id="loading-eta" class="ni-loading-eta">Estimated: <span id="eta-value">--s</span></div>
             </div>
         </div>
 
@@ -225,9 +426,9 @@
         <div id="ni-pause-container">
             <div id="ni-pause-sidebar">
                 <div class="ni-pause-user">
-                    <img src="faces/arlo_happy.png" class="ni-avatar" />
+                    <img src="faces/anton_happy.png" class="ni-avatar" />
                     <div class="ni-pause-info">
-                        <span class="ni-username">Arlo</span>
+                        <span class="ni-username">Anton</span>
                         <span class="ni-pause-status">Exploring...</span>
                     </div>
                 </div>
@@ -287,7 +488,17 @@
                         <div class="ni-setting-box full-width">
                             <label class="ni-label">Minecraft Skin (Username)</label>
                             <div class="ni-input-row" style="margin-top: 8px;">
-                                <input id="setting-player-skin" type="text" placeholder="e.g. Steve" class="ni-input-modern" />
+                                <input id="world-name-input" type="text" placeholder="My World..." class="ni-input-modern" />
+                </div>
+                
+                <div class="ni-version-selector-container" style="margin-top: 20px;">
+                    <label class="ni-label">SYSTEM VERSION (ERA)</label>
+                    <select id="ni-version-dropdown" class="ni-select-modern">
+                        <!-- Loaded via versions.js -->
+                    </select>
+                </div>
+
+                <div class="ni-title-actions">
                                 <button class="ni-btn ni-btn-sm" id="btn-update-skin">Apply</button>
                             </div>
                         </div>
@@ -324,9 +535,16 @@
                 <div class="ni-tab-pane" id="tab-video">
                     <h3 class="ni-tab-heading">Graphics</h3>
                     <div class="ni-settings-grid">
+                        <div class="ni-setting-box full-width">
+                            <label class="ni-label">Graphics API (Requires Reload)</label>
+                            <select id="setting-graphics-api" class="ni-input-modern" style="width:100%;margin-top:6px;">
+                                <option value="webgl2">WebGL2 (Stability Mode)</option>
+                                <option value="webgpu">WebGPU (Experimental)</option>
+                            </select>
+                        </div>
                         <div class="ni-setting-box">
                             <label class="ni-label">Render Distance</label>
-                            <input id="setting-render-distance" type="range" min="2" max="6" step="1" />
+                            <input id="setting-render-distance" type="range" min="1" max="6" step="1" />
                             <span id="setting-render-distance-value" class="ni-val">2</span>
                         </div>
                         <div class="ni-setting-box">
@@ -346,6 +564,17 @@
                         <div class="ni-setting-box">
                             <label class="ni-label">Auto Quality</label>
                             <input id="setting-auto-quality" type="checkbox" class="ni-check" />
+                        </div>
+                        <div class="ni-setting-box">
+                            <label class="ni-label">FPS Cap</label>
+                            <select id="setting-fps-cap" class="ni-input-modern" style="width:100%;margin-top:6px;">
+                                <option value="30" selected>30 FPS</option>
+                                <option value="60">60 FPS (Moderate)</option>
+                                <option value="90">90 FPS</option>
+                                <option value="120">120 FPS</option>
+                                <option value="144">144 FPS</option>
+                                <option value="999">Uncapped</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -373,6 +602,8 @@
 
     <pre id="debug-overlay"></pre>
 
+    <div id="nuke-flash-overlay"></div>
+    <div id="break-overlay" style="display:none; position:fixed; pointer-events:none; z-index:200;"></div>
     <script type="module" src="src/main.js"></script>
 </body>
 </html>

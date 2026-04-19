@@ -17,8 +17,8 @@ export const restoration_shrine = {
             }
             blocks.push({ x: x + px, y: y + 4, z: z + pz, id: 'lantern' });
         }
-        // Central arlo block
-        blocks.push({ x, y: y + 1, z, id: 'arlo' });
+        // Central anton block
+        blocks.push({ x, y: y + 1, z, id: 'anton' });
         blocks.push({ x, y: y + 2, z, id: 'diamond' });
         return blocks;
     }

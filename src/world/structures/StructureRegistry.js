@@ -34,6 +34,12 @@ import { broken_statue } from './defs/broken_statue.js';
 import { corrupted_lab } from './defs/corrupted_lab.js';
 import { village_manor } from './defs/village_manor.js';
 import { castle } from './defs/castle.js';
+import { ocean_ruins } from './defs/ocean_ruins.js';
+import { sunken_ship } from './defs/sunken_ship.js';
+import { village_farm } from './defs/village_farm.js';
+import { desert_hut } from './defs/desert_hut.js';
+import { desert_well } from './defs/desert_well.js';
+import { castle_wall } from './defs/castle_wall.js';
 
 export const STRUCTURES = {
     ruined_tower,
@@ -67,5 +73,11 @@ export const STRUCTURES = {
     broken_statue,
     corrupted_lab,
     village_manor,
-    castle
+    castle,
+    ocean_ruins,
+    sunken_ship,
+    village_farm,
+    desert_hut,
+    desert_well,
+    castle_wall
 };

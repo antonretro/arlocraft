@@ -1,4 +1,4 @@
-// Central recipe registry for ArloCraft.
+// Central recipe registry for AntonCraft.
 // Supported recipe types:
 // - shaped: 3x3 symbolic pattern (spaces are empty)
 // - shapeless: ingredient list order does not matter
@@ -11,7 +11,7 @@ export const RECIPE_BOOK = [
             'WW',
             'WW'
         ],
-        key: { W: 'oak_log' },
+        key: { W: 'oak_planks' },
         result: { id: 'crafting_table', count: 1, kind: 'block' }
     },
     {
@@ -156,7 +156,7 @@ export const RECIPE_BOOK = [
             'W'
         ],
         key: { W: 'oak_planks' },
-        result: { id: 'oak_log', count: 4, kind: 'block' }
+        result: { id: 'stick', count: 4, kind: 'item' }
     },
     {
         id: 'iron_pickaxe',
@@ -304,4 +304,25 @@ export const RECIPE_BOOK = [
         key: { W: 'spruce_planks' },
         result: { id: 'spruce_slab', count: 6, kind: 'block' }
     },
+    {
+        id: 'potato_harvest',
+        name: 'Potato Harvest',
+        type: 'shapeless',
+        ingredients: ['potato_stage3'],
+        result: { id: 'potato', count: 3, kind: 'item' }
+    },
+    {
+        id: 'carrot_harvest',
+        name: 'Carrot Harvest',
+        type: 'shapeless',
+        ingredients: ['carrot_stage3'],
+        result: { id: 'carrot', count: 3, kind: 'item' }
+    },
+    {
+        id: 'beetroot_harvest',
+        name: 'Beetroot Harvest',
+        type: 'shapeless',
+        ingredients: ['beetroot_stage3'],
+        result: { id: 'beetroot', count: 3, kind: 'item' }
+    }
 ];

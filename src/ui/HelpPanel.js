@@ -21,7 +21,7 @@ export class HelpPanel {
             },
             playing: {
                 title: 'Controls',
-                body: '[WASD] Move\n[Mouse] Look\n[LMB Hold] Mine/Attack\n[RMB] Place/Interact\n[Ctrl] or [WW] or [Double Space] Sprint\n[Shift] Crouch/Sneak\n[E] Inventory\n[F] Equip Offhand\n[Q] Dig Down\n[I] Toggle Help Panel\n[M] Toggle Minimap\n[F3] Debug  [F5] Camera  [ESC] Pause'
+                body: '[WASD] Move\n[Mouse] Look\n[LMB Hold] Mine/Attack\n[RMB] Place/Interact\n[Ctrl+W] or [WW] Sprint\n[Shift] Crouch/Sneak\n[Space] Jump\n[E] Inventory\n[F] Equip Offhand\n[Q] Pick Block\n[I] Toggle Help Panel\n[M] Toggle Minimap\n[F3] Debug  [F5] Camera  [ESC] Pause'
             },
             inventory: {
                 title: 'Inventory',
@@ -47,7 +47,7 @@ export class HelpPanel {
         }
         if (persist) {
             try {
-                window.localStorage.setItem('arlocraft_help_collapsed', this.collapsed ? '1' : '0');
+                window.localStorage.setItem('antoncraft_help_collapsed', this.collapsed ? '1' : '0');
             } catch {}
         }
     }
@@ -58,7 +58,7 @@ export class HelpPanel {
 
     restoreCollapsedPreference() {
         try {
-            const value = window.localStorage.getItem('arlocraft_help_collapsed');
+            const value = window.localStorage.getItem('antoncraft_help_collapsed');
             if (value === '1') this.setCollapsed(true, false);
             else if (value === '0') this.setCollapsed(false, false);
         } catch {}

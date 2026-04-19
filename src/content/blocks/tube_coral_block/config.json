@@ -1,6 +1,7 @@
-﻿{
+{
     "hardness":  1,
     "transparent":  true,
     "name":  "Tube Coral Block",
-    "xp":  2
+    "xp":  2,
+    "deco":  true
 }
