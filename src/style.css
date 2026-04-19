@@ -98,10 +98,12 @@ canvas { display: block; }
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background-color: #1a1a1a;
-    background-image: url('/assets/dirt.png');
+    background-color: #352b1f;
+    background-image:
+        linear-gradient(180deg, rgba(14, 20, 32, 0.4) 0%, rgba(5, 10, 18, 0.88) 100%),
+        url('./content/blocks/dirt/all.png');
     background-repeat: repeat;
-    background-size: 64px 64px;
+    background-size: 100% 100%, 64px 64px;
     image-rendering: pixelated;
     overflow: hidden;
 }
@@ -110,7 +112,7 @@ canvas { display: block; }
     content: '';
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: radial-gradient(circle at center, transparent, rgba(0,0,0,0.5));
     pointer-events: none;
     z-index: 0;
 }
@@ -137,11 +139,6 @@ canvas { display: block; }
     border: none;
 }
 
-#screen-loading, #screen-booting,
-#screen-world-select, #screen-world-create,
-#screen-skins, #settings-panel, #pause-overlay {
-    background-image: url('/assets/dirt.png');
-}
 
 /* ── SKIN LIBRARY ─────────────────────────────────────────────────── */
 .ni-skin-layout {
