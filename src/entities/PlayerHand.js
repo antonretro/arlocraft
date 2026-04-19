@@ -363,9 +363,10 @@ export class PlayerHand {
         const material = Array.isArray(sourceMaterial)
             ? sourceMaterial.map((mat) => (mat?.clone ? mat.clone() : mat))
             : (sourceMaterial?.clone ? sourceMaterial.clone() : sourceMaterial);
-        if (Array.isArray(material) && normalizedId === 'grass_block' && material[2]?.color) {
-            material[2].color.setHex(GRASS_PREVIEW_TINT);
-        }
+        const tintColor = new THREE.Color(GRASS_PREVIEW_TINT);
+        const applyTint = (m) => { if (m?.userData?.tintable) m.color.copy(tintColor); };
+        if (Array.isArray(material)) material.forEach(applyTint);
+        else applyTint(material);
         const geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
         const mesh = new THREE.Mesh(geometry, material);
         mesh.userData.ownedGeometry = true;

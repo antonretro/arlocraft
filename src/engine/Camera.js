@@ -18,8 +18,9 @@ export class Camera {
     update(position, rotation, bobCycle, moveSpeed, eyeHeight = this.eyeHeight) {
         // Apply smooth camera bobbing
         const speedFactor = Math.min(1, moveSpeed / 6);
-        this.bobOffset.x = Math.sin(bobCycle * 0.5) * 0.05 * speedFactor;
-        this.bobOffset.y = Math.abs(Math.cos(bobCycle)) * 0.08 * speedFactor;
+        this.bobOffset.x = Math.sin(bobCycle * 0.5) * 0.024 * speedFactor;
+        this.bobOffset.y = Math.abs(Math.cos(bobCycle)) * 0.045 * speedFactor;
+        
         
         this.instance.position.set(
             position.x + this.bobOffset.x,

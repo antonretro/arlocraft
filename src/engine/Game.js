@@ -62,6 +62,8 @@ export class Game {
         this.debugAccumulator = 0;
         this.debugFps = 0;
         this.screenShake = 0;
+        this.shakeFrequency = 12;
+        this.shakeDecay = 4.2;
         this.framePanel = null;
 
         this.hasStarted = false;
@@ -334,6 +336,7 @@ export class Game {
         this.isPaused = false;
         this.showTitle(false);
         this.showPause(false);
+        this.ui.showHUD(true);
         this.touchControls ? this.touchControls.show(true) : this.input.setPointerLock();
         this.helpPanel.setState('playing');
 
@@ -423,6 +426,7 @@ export class Game {
         this.isPaused = false;
         this.showTitle(false);
         this.showPause(false);
+        this.ui.showHUD(true);
         this.touchControls ? this.touchControls.show(true) : this.input.setPointerLock();
         this.helpPanel.setState('playing');
 
@@ -577,6 +581,7 @@ export class Game {
         this.showPause(false);
         this.showSettings(false);
         this.showTitle(true);
+        this.ui.showHUD(false);
         this.helpPanel.setState('title');
         this.audio.play('ui-back');
     }
@@ -1339,5 +1344,11 @@ export class Game {
             const meshMs = (this._lastMeshMs || 0).toFixed(2);
             overlay.textContent = `FPS: ${fps} | POS: ${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)} | MESH: ${meshMs}ms`;
         }
+    }
+
+    shakeCamera(intensity, duration = 0.5, frequency = 12) {
+        this.screenShake = Math.max(this.screenShake, intensity);
+        this.shakeDecay = intensity / duration;
+        this.shakeFrequency = frequency;
     }
 }

@@ -64,7 +64,7 @@ export class BlockRulesService {
     }
 
     isReplaceableForPlacement(id) {
-        if (!id || id === 'water' || id === 'air' || id === 'virus') return true;
+        if (!id || id === 'water' || id === 'air' || id === 'virus' || id === 'fire') return true;
         const data = this.getBlockData(normalizeBlockVariantId(id));
         return Boolean(data?.deco);
     }

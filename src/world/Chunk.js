@@ -423,6 +423,23 @@ export class Chunk {
         for (const b of blocks) {
             this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
         }
+
+        // --- CLEARANCE PASS ---
+        // Clear any terrain blocks above the structure's floor level within its footprint
+        // to prevent burial in hills or slopes.
+        for (const [xzStr, minY] of lowestYAtXZ.entries()) {
+            const [fx, fz] = xzStr.split(',').map(Number);
+            const terrainHeight = this.world.getColumnHeight(fx, fz);
+            if (terrainHeight > minY) {
+                // Clear up to a reasonable structure height (e.g. 12 blocks)
+                for (let cy = minY + 1; cy <= minY + 12; cy++) {
+                    const existing = this.world.getBlockAt(fx, cy, fz);
+                    if (existing && this.world.isBlockSolid(existing)) {
+                        this.addGeneratedBlock(fx, cy, fz, 'air');
+                    }
+                }
+            }
+        }
         if (struct.name) {
             this.world.registerLandmark(x, z, struct.name);
         }
@@ -773,6 +790,20 @@ export class Chunk {
             }
 
             for (const block of blocks) this.addGeneratedBlock(block.x, block.y, block.z, block.id);
+            
+            // --- VILLAGE CLEARANCE PASS ---
+            for (const [xzStr, minY] of lowestYAtXZ.entries()) {
+                const [fx, fz] = xzStr.split(',').map(Number);
+                const terrainHeight = this.world.getColumnHeight(fx, fz);
+                if (terrainHeight > minY) {
+                    for (let cy = minY + 1; cy <= minY + 8; cy++) {
+                        const existing = this.world.getBlockAt(fx, cy, fz);
+                        if (existing && this.world.isBlockSolid(existing)) {
+                            this.addGeneratedBlock(fx, cy, fz, 'air');
+                        }
+                    }
+                }
+            }
             this.placeLampPost(hx + 2, hy, hz + 2);
             if (this.world.game?.entities && this.world.game.entities.entities.length < this.world.game.entities.maxEntities) {
                 this.world.game.entities.spawn('villager_anton', hx + 0.5, hy + 1.2, hz + 0.5);

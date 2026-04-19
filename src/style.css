@@ -171,11 +171,12 @@ canvas { display: block; }
 }
 
 #inventory-card {
-    width: min(95vw, 1000px);
+    width: min(95vw, 1200px);
     background: var(--ni-bg-alt);
     border: 2px solid rgba(255, 255, 255, 0.1);
+    border-top: 2px solid rgba(0, 195, 227, 0.5);
     border-radius: var(--ni-radius-lg);
-    box-shadow: 0 50px 120px rgba(0, 0, 0, 0.9);
+    box-shadow: 0 50px 120px rgba(0, 0, 0, 0.9), 0 0 60px rgba(0, 195, 227, 0.06);
     position: relative;
     display: flex;
     flex-direction: column;
@@ -204,12 +205,18 @@ canvas { display: block; }
     transition: var(--ni-trans);
 }
 
+.ni-inv-tab:hover:not(.active) {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.8);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
 .ni-inv-tab.active {
     background: var(--ni-blue);
     color: #fff;
     border-color: var(--ni-blue);
     transform: translateY(-4px);
-    box-shadow: 0 -10px 20px rgba(0, 195, 227, 0.3);
+    box-shadow: 0 -10px 20px rgba(0, 195, 227, 0.35);
 }
 
 .ni-inv-pane {
@@ -234,6 +241,8 @@ canvas { display: block; }
     gap: 40px;
     justify-content: center;
     align-items: flex-start;
+    width: 100%;
+    overflow: hidden;
 }
 
 #anton-preview-section {
@@ -245,15 +254,15 @@ canvas { display: block; }
 
 #anton-preview-card {
     width: 200px;
-    height: 280px;
-    background: linear-gradient(135deg, rgba(0, 195, 227, 0.05) 0%, rgba(255, 71, 91, 0.05) 100%), rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 24px;
+    height: 220px;
+    background: linear-gradient(160deg, rgba(0, 195, 227, 0.06) 0%, rgba(0, 0, 0, 0.2) 60%, rgba(255, 71, 91, 0.04) 100%);
+    border: 1px solid rgba(0, 195, 227, 0.2);
+    border-radius: 20px;
     padding: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.3);
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.4), 0 0 30px rgba(0, 195, 227, 0.08);
     position: relative;
 }
 
@@ -289,12 +298,26 @@ canvas { display: block; }
 .mini-stat {
     font-size: 0.65rem;
     font-weight: 900;
-    color: var(--ni-text-muted);
-    background: rgba(255, 255, 255, 0.03);
-    padding: 6px 12px;
+    color: rgba(255, 255, 255, 0.65);
+    background: rgba(0, 0, 0, 0.25);
+    padding: 7px 14px;
     border-radius: 8px;
     text-align: center;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+    letter-spacing: 0.5px;
+}
+
+.mini-stat:first-child {
+    color: #ff7979;
+    border-color: rgba(255, 100, 100, 0.2);
+    background: rgba(255, 80, 80, 0.07);
+}
+
+.mini-stat:nth-child(2) {
+    color: #ffd56b;
+    border-color: rgba(255, 200, 50, 0.2);
+    background: rgba(255, 200, 50, 0.05);
 }
 
 .label-icon {
@@ -315,6 +338,13 @@ canvas { display: block; }
     color: var(--ni-text-muted);
     letter-spacing: 2px;
     text-transform: uppercase;
+}
+
+#inventory-section .ni-label,
+#crafting-section .ni-label,
+#anton-preview-section .ni-label {
+    border-left: 2px solid rgba(0, 195, 227, 0.5);
+    padding-left: 8px;
 }
 
 .ni-grid {
@@ -383,8 +413,14 @@ canvas { display: block; }
 #crafting-arrow {
     font-size: 2rem;
     color: var(--ni-blue);
-    opacity: 0.5;
+    opacity: 0.7;
     text-shadow: 0 0 15px var(--ni-accent-glow);
+    animation: craft-arrow-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes craft-arrow-pulse {
+    0%, 100% { opacity: 0.4; transform: translateX(0); }
+    50% { opacity: 0.9; transform: translateX(3px); text-shadow: 0 0 22px var(--ni-accent-glow); }
 }
 
 /* Override old inventory grid if it exists */
@@ -998,6 +1034,7 @@ canvas { display: block; }
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.04);
     border: 2px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1008,15 +1045,16 @@ canvas { display: block; }
 }
 
 .slot:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.09);
     border-color: rgba(255, 255, 255, 0.2);
-    transform: translateY(-2px);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px);
 }
 
 .slot.active {
     background: rgba(0, 195, 227, 0.15);
     border-color: var(--ni-blue);
-    box-shadow: 0 0 25px var(--ni-accent-glow);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 20px rgba(0, 195, 227, 0.3);
     transform: scale(1.08);
 }
 

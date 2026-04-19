@@ -327,14 +327,21 @@ export class World {
         this.state.miningState.progress += Math.max(0, delta);
         const ratio = Math.max(0, Math.min(1, this.state.miningState.progress / Math.max(0.01, this.state.miningState.required)));
         if (this.visuals.miningCracks) {
-            this.visuals.miningCracks.visible = true;
-            this.visuals.miningCracks.position.set(hit.cell.x, hit.cell.y, hit.cell.z);
-            // Fixed overlay scale — never shrinks the block during mining
+            const stage = Math.floor(ratio * 9);
+            const mat = this.registry.getBreakingMaterial(stage);
+            this.visuals.updateMiningCracks(hit.cell.x, hit.cell.y, hit.cell.z, true, mat);
             this.visuals.miningCracks.scale.setScalar(1.01);
         }
         window.dispatchEvent(new CustomEvent('mining-progress', { detail: { ratio, id: blockId, done: false } }));
-        if (this.state.miningState.progress < this.state.miningState.required) return false;
+        if (this.state.miningState.progress < this.state.miningState.required) {
+            // Subtle vibrance while digging
+            if (this.game?.shakeCamera) this.game.shakeCamera(0.015, 0.1);
+            return false;
+        }
         const broken = this.breakBlockAt(hit.cell.x, hit.cell.y, hit.cell.z);
+        if (broken && this.game?.shakeCamera) {
+            this.game.shakeCamera(0.06, 0.4);
+        }
         this.resetMiningProgress();
         return broken;
     }
@@ -495,6 +502,26 @@ export class World {
         }
         if (blockId === 'tnt') { this.explode(cell.x, cell.y, cell.z, 5); return true; }
         if (blockId === 'nuke') { this.explode(cell.x, cell.y, cell.z, 16); return true; }
+
+        // Flint and Steel: place fire on face adjacent to hit block
+        if (selectedItem?.id === 'flint_and_steel') {
+            const tx = hit.previous.x;
+            const ty = hit.previous.y;
+            const tz = hit.previous.z;
+            const targetKey = this.getKey(tx, ty, tz);
+            const targetExisting = this.state.blockMap.get(targetKey);
+            if (!targetExisting || this.isReplaceableForPlacement(targetExisting)) {
+                const cx = this.getChunkCoord(tx);
+                const cy = this.getChunkCoord(ty);
+                const cz = this.getChunkCoord(tz);
+                this.addBlock(tx, ty, tz, 'fire', this.getChunkKey(cx, cy, cz), !!targetExisting);
+                this.state.changedBlocks.set(targetKey, 'fire');
+                this.chunkManager.flushPriorityChunkRebuilds(20);
+                window.dispatchEvent(new CustomEvent('action-success'));
+            }
+            return true;
+        }
+
         return null;
     }
 

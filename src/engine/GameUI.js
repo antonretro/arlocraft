@@ -13,6 +13,13 @@ export class GameUI {
         overlay.style.display = visible ? 'flex' : 'none';
     }
 
+    showHUD(visible) {
+        const hud = this.get('hud');
+        const minimap = this.get('minimap');
+        if (hud) hud.style.display = visible ? 'flex' : 'none';
+        if (minimap) minimap.style.display = visible ? 'block' : 'none';
+    }
+
     showPause(visible) {
         const pause = this.get('pause-overlay');
         if (!pause) return;

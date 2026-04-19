@@ -440,7 +440,7 @@ export class Physics {
                     targetY = this.swimSinkSpeed;
                 }
                 this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, targetY, delta * 9.5);
-                if (spaceTapped && nearWaterSurface) {
+                if (keys['Space'] && nearWaterSurface) {
                     this.velocity.y = Math.max(this.velocity.y, this.waterExitBoost);
                 }
             } else if (grounded) {

@@ -141,9 +141,19 @@ export class WorldTerrainService {
     }
 
     isPositionInWater(x, y, z) {
-        const terrainHeight = this.getTerrainHeight(x, z);
         const waterSurfaceY = this.getWaterSurfaceYAt(x, z);
-        return waterSurfaceY !== null && y <= waterSurfaceY && y > terrainHeight;
+        if (waterSurfaceY === null || y > waterSurfaceY) return false;
+
+        // Check actual block at position to avoid "ghost water" in caves/holes
+        const blockId = this.world.getBlockAt(x, y, z);
+        if (!blockId) {
+            // Fallback for unloaded chunks: assume water if below terrain height (which shouldn't happen for isPositionInWater)
+            const terrainHeight = this.getTerrainHeight(x, z);
+            return y > terrainHeight;
+        }
+
+        // Only water and lava blocks trigger "isPositionInWater" logic
+        return blockId === 'water' || blockId === 'lava';
     }
 
     getSafeSpawnPoint(x, z, radius = 50) {

@@ -36,8 +36,8 @@ export class BlockRegistry {
             'tall_grass': 'tall_grass_bottom',
             'mushroom_red': 'red_mushroom',
             'berry_bush': 'sweet_berry_bush',
-            'short_grass': 'grass',
-            'nuke': 'nuke'
+            'nuke': 'nuke',
+            'fire': 'fire_0'
         };
         this.missingTexture = this.createMissingTexture();
         this.init();
@@ -650,14 +650,14 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             }
             
             const isFoliage = (
-                (isDeco && (textureId === 'grass' || textureId.includes('grass') || textureId.includes('fern') || textureId === 'vine' || textureId === 'sugar_cane' || textureId.includes('roots') || textureId.includes('sprouts')))
+                (isDeco && (textureId === 'grass' || textureId.includes('grass') || textureId.includes('fern') || textureId === 'vine' || textureId === 'sugar_cane' || textureId.includes('roots') || textureId.includes('sprouts') || textureId.includes('flower') || textureId.includes('sapling')))
                 || textureId.includes('leaves')
             );
             const isGrassTopOnly = id === 'grass_block' || id === 'grass';
             
             for (let i = 0; i < mats.length; i++) {
                 const m = mats[i];
-                if ((isGrassTopOnly && i === 2) || isFoliage) {
+                if ((isGrassTopOnly && i === 2) || (isFoliage && id !== 'sea_lantern')) {
                     m.userData.tintable = true;
                 } else {
                     m.userData.tintable = false;
@@ -699,6 +699,16 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
                     m.emissive = new THREE.Color(0x662100);
                 }
             }
+
+            // Shade path block sides darker
+            if (id === 'path_block' && Array.isArray(material)) {
+                const sideColor = new THREE.Color(0x999999); // Darken by 35%
+                material[0].color.multiply(sideColor); // px
+                material[1].color.multiply(sideColor); // nx
+                material[3].color.multiply(sideColor); // bottom
+                material[4].color.multiply(sideColor); // pz
+                material[5].color.multiply(sideColor); // nz
+            }
         }
 
         const shouldEnhanceFaceShading = !config?.deco && id !== 'water' && id !== 'path_block' && id !== 'grass_block';
@@ -706,7 +716,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             this.enhanceFaceShading(material);
         }
 
-        if (id.includes('leaves') || (config?.deco && (textureId === 'grass' || textureId.includes('grass') || textureId.includes('fern') || textureId.includes('flower') || textureId.includes('sapling')))) {
+        if (id.includes('leaves') || config?.deco) {
             this.injectWindShader(material);
         }
 
