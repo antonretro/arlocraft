@@ -15,24 +15,36 @@ export function shouldSkipStandaloneTypeRender(blockData) {
 }
 
 export function resolveChunkGeometry(world, id, blockData) {
+    const geo = world.sharedChunkGeometries;
+    if (!geo) {
+        console.warn('[ArloCraft] sharedChunkGeometries not ready — chunk build deferred');
+        return null;
+    }
     if (id === 'water' || id.startsWith('water_')) {
-        if (id === 'water_top') return world.sharedChunkGeometries.water_top;
-        if (id.startsWith('water_side')) return world.sharedChunkGeometries.water_side;
-        return world.sharedChunkGeometries.water;
+        if (id === 'water_top') return geo.water_top ?? geo.solid;
+        if (id.startsWith('water_side')) return geo.water_side ?? geo.solid;
+        return geo.water ?? geo.solid;
     }
-    if (id === 'grass_block_top') return world.sharedChunkGeometries.grass_block_top;
-    if (id === 'grass_block_sides') return world.sharedChunkGeometries.solid_no_top;
-    
-    if (id === 'path_block') return world.sharedChunkGeometries.path;
-    if (blockData?.renderType === 'flat' || blockData?.flat) return world.sharedChunkGeometries.flat;
+    if (id === 'grass_block_top') return geo.grass_block_top ?? geo.solid;
+    if (id === 'grass_block_sides') return geo.solid_no_top ?? geo.solid;
+    if (id === 'path_block') return geo.path ?? geo.solid;
+    if (blockData?.renderType === 'flat' || blockData?.flat) return geo.flat ?? geo.deco ?? geo.solid;
     if (blockData?.renderType === 'plant' || blockData?.renderType === 'paired_plant' || blockData?.deco) {
-        return world.sharedChunkGeometries.deco;
+        return geo.deco ?? geo.solid;
     }
-    if (id.includes('_stairs')) return world.sharedChunkGeometries.stair;
+    if (id.includes('_stairs')) return geo.stair ?? geo.solid;
     if (blockData?.renderType === 'slab' || id.includes('_slab') || blockData?.slab) {
-        return world.sharedChunkGeometries.slab;
+        return geo.slab ?? geo.solid;
     }
-    return world.sharedChunkGeometries.solid;
+    return geo.solid ?? null;
+}
+
+export function resolveLODGeometry(world, blockData) {
+    if (!blockData) return null;
+    const geo = world.sharedChunkGeometries;
+    if (!geo) return null;
+    if (blockData.renderType === 'paired_plant') return geo.tallDecoLOD ?? geo.decoLOD ?? null;
+    return geo.decoLOD ?? null;
 }
 
 export const DECO_LOD_DIST_SQ = 20 * 20; // 20 blocks as requested
@@ -41,11 +53,6 @@ export function isDecoType(blockData) {
     return blockData?.renderType === 'plant' || blockData?.renderType === 'paired_plant' || blockData?.deco;
 }
 
-export function resolveLODGeometry(world, blockData) {
-    if (!blockData) return null;
-    if (blockData.renderType === 'paired_plant') return world.sharedChunkGeometries.tallDecoLOD;
-    return world.sharedChunkGeometries.decoLOD;
-}
 
 export function shouldSkipChunkBlockInstance({ world, id, blockData, ax, ay, az, isNear }) {
 

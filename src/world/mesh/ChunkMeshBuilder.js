@@ -200,6 +200,15 @@ function finalizeInstancedMesh(mesh, id, blockData, material) {
 
 export function rebuildChunkInstancedMeshes(chunk) {
     if (chunk.destroyed) return;
+    try {
+        _rebuildChunkInstancedMeshesInner(chunk);
+    } catch (err) {
+        console.error(`[ArloCraft] Fatal chunk rebuild error (${chunk.cx},${chunk.cy},${chunk.cz}):`, err);
+    }
+}
+
+function _rebuildChunkInstancedMeshesInner(chunk) {
+    if (chunk.destroyed) return;
     const startTime = performance.now();
 
     chunk.resyncBlockKeysFromWorld();
@@ -293,42 +302,49 @@ export function rebuildChunkInstancedMeshes(chunk) {
     };
 
     for (const [id, keys] of byType.entries()) {
-        const baseId = id.startsWith('water') ? 'water' : id.split(':')[0];
-        const blockData = chunk.world.getBlockData(baseId);
-        if (shouldSkipStandaloneTypeRender(blockData)) continue;
+        try {
+            const baseId = id.startsWith('water') ? 'water' : id.split(':')[0];
+            const blockData = chunk.world.getBlockData(baseId);
+            if (shouldSkipStandaloneTypeRender(blockData)) continue;
 
-        const baseMaterial = chunk.world.blockRegistry.getMaterial(baseId);
-        const specialized = specializeMaterial(baseMaterial);
-        if (!specialized) continue;
-        const { material, owned } = specialized;
-        if (!material) continue;
-
-        if (isDecoType(blockData)) {
-            const nearKeys = [], farKeys = [];
-            for (const key of keys) {
-                const coords = chunk.world.keyToCoords(key);
-                const dx = coords[0] - camPos.x, dz = coords[2] - camPos.z;
-                if (dx * dx + dz * dz > DECO_LOD_DIST_SQ) farKeys.push(key);
-                else nearKeys.push(key);
+            const baseMaterial = chunk.world.blockRegistry.getMaterial(baseId);
+            const specialized = specializeMaterial(baseMaterial);
+            if (!specialized) {
+                console.warn(`[ArloCraft] No material for block "${baseId}" — skipping mesh (chunk ${chunk.cx},${chunk.cy},${chunk.cz})`);
+                continue;
             }
-            const crossGeo = resolveChunkGeometry(chunk.world, id, blockData);
-            if (crossGeo && nearKeys.length > 0) buildMesh(id, baseId, nearKeys, crossGeo, material, owned, blockData, false);
+            const { material, owned } = specialized;
+            if (!material) continue;
 
-            if (farKeys.length > 0) {
-                const lodGeo = resolveLODGeometry(chunk.world, blockData);
-                if (lodGeo) {
-                    const { material: lodMat, owned: lodOwned } = specializeMaterial(baseMaterial);
-                    if (lodMat) {
-                        const mats = Array.isArray(lodMat) ? lodMat : [lodMat];
-                        for (const m of mats) { if (m) m.side = THREE.DoubleSide; }
-                        buildMesh(id, baseId, farKeys, lodGeo, lodMat, lodOwned, blockData, true);
+            if (isDecoType(blockData)) {
+                const nearKeys = [], farKeys = [];
+                for (const key of keys) {
+                    const coords = chunk.world.keyToCoords(key);
+                    const dx = coords[0] - camPos.x, dz = coords[2] - camPos.z;
+                    if (dx * dx + dz * dz > DECO_LOD_DIST_SQ) farKeys.push(key);
+                    else nearKeys.push(key);
+                }
+                const crossGeo = resolveChunkGeometry(chunk.world, id, blockData);
+                if (crossGeo && nearKeys.length > 0) buildMesh(id, baseId, nearKeys, crossGeo, material, owned, blockData, false);
+
+                if (farKeys.length > 0) {
+                    const lodGeo = resolveLODGeometry(chunk.world, blockData);
+                    if (lodGeo) {
+                        const { material: lodMat, owned: lodOwned } = specializeMaterial(baseMaterial);
+                        if (lodMat) {
+                            const mats = Array.isArray(lodMat) ? lodMat : [lodMat];
+                            for (const m of mats) { if (m) m.side = THREE.DoubleSide; }
+                            buildMesh(id, baseId, farKeys, lodGeo, lodMat, lodOwned, blockData, true);
+                        }
                     }
                 }
+            } else {
+                const geometry = resolveChunkGeometry(chunk.world, id, blockData);
+                if (!geometry) continue;
+                buildMesh(id, baseId, keys, geometry, material, owned, blockData, false);
             }
-        } else {
-            const geometry = resolveChunkGeometry(chunk.world, id, blockData);
-            if (!geometry) continue;
-            buildMesh(id, baseId, keys, geometry, material, owned, blockData, false);
+        } catch (err) {
+            console.error(`[ArloCraft] Chunk mesh error for block "${id}" — skipping (other blocks unaffected):`, err);
         }
     }
     
