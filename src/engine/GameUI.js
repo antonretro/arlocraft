@@ -671,10 +671,9 @@ export class GameUI {
     _createSkinItem(skin, isActive) {
         const div = document.createElement('div');
         div.className = `ni-skin-item ${isActive ? 'active' : ''}`;
-        if (skin.url) {
-            // Crop head front face: pixel (8,8)-(16,16) of 64×64 skin sheet
-            // At 48px display: scale=6, size=384×384, position=-48px -48px
-            div.innerHTML = `<div style="width:48px;height:48px;background-image:url('${skin.url}');background-size:384px 384px;background-position:-48px -48px;image-rendering:pixelated;border-radius:4px;"></div>`;
+        if (skin.faceUrl || skin.url) {
+            const src = skin.faceUrl || skin.url;
+            div.innerHTML = `<img src="${src}" style="width:48px;height:48px;image-rendering:pixelated;border-radius:4px;" alt="${skin.name}">`;
         } else {
             const c = skin.config || {};
             div.innerHTML = `

@@ -2,17 +2,19 @@ import * as THREE from 'three';
 
 export class SkinLoader {
     constructor() {
-        this.defaultSteve = '/assets/steve.png';
-        this.defaultAlex = '/assets/alex.png';
+        this.defaultSteve = 'https://minotar.net/skin/steve';
+        this.defaultAlex = 'https://minotar.net/skin/alex';
     }
 
     _loadImage(url) {
         return new Promise((resolve, reject) => {
             const img = new Image();
-            // Only set crossOrigin for external URLs (needed for canvas drawImage)
             if (url.startsWith('http')) img.crossOrigin = 'anonymous';
             img.onload = () => resolve(img);
-            img.onerror = reject;
+            img.onerror = (e) => {
+                console.error(`[SkinLoader] Failed to load image: ${url}`, e);
+                reject(e);
+            };
             img.src = url;
         });
     }
