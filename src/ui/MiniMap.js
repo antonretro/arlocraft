@@ -4,7 +4,7 @@ export class MiniMap {
         this.container = document.getElementById('minimap');
         this.canvas = document.getElementById('minimap-canvas');
         this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
-        this.visible = false;
+        this.visible = true;
         this.accumulator = 0;
         this.radius = 24;
         this.cells = 34;
@@ -40,7 +40,7 @@ export class MiniMap {
             sandstone: '#cbbd8f'
         };
 
-        if (this.container) this.container.style.display = 'none';
+        if (this.container) this.container.style.display = 'block';
     }
 
     toggle() {

@@ -1168,6 +1168,31 @@ canvas { display: block; }
     -webkit-user-select: none;
 }
 
+/* ── MC PE-style circle pad hint (always-visible anchor) ── */
+#tc-dpad-hint {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.04);
+    pointer-events: none;
+}
+
+#tc-dpad-hint::after {
+    content: '';
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+}
+
 /* ── Left joystick zone ── */
 #tc-joystick-zone {
     position: absolute;
@@ -1287,87 +1312,88 @@ canvas { display: block; }
     }
 
     .hud-pill {
-        padding: 4px 9px;
-        font-size: 0.52rem;
-        letter-spacing: 0.8px;
+        padding: 3px 7px;
+        font-size: 0.44rem;
+        letter-spacing: 0.6px;
     }
 
     #selected-item-readout {
-        padding: 7px 12px;
+        padding: 4px 8px;
+        width: min(94vw, 200px);
     }
 
     #selected-item-name {
-        font-size: 0.75rem;
+        font-size: 0.52rem;
     }
 
     #selected-item-stats {
-        font-size: 0.58rem;
-        margin-top: 2px;
+        font-size: 0.42rem;
+        margin-top: 1px;
     }
 
     #stats-bars {
-        width: min(94vw, 320px);
-        gap: 7px;
+        width: min(94vw, 200px);
+        gap: 4px;
     }
 
     .bar-container {
-        height: 26px;
-        padding: 0 8px;
-        gap: 6px;
+        height: 18px;
+        padding: 0 6px;
+        gap: 4px;
     }
 
     .bar-label {
-        font-size: 0.5rem;
+        font-size: 0.38rem;
     }
 
     .hud-meter {
-        height: 7px;
+        height: 5px;
     }
 
     #hotbar {
-        gap: 4px;
-        padding: 5px;
-        border-radius: 12px;
+        gap: 3px;
+        padding: 4px;
+        border-radius: 10px;
     }
 
     .slot {
-        width: 28px;
-        height: 28px;
-        border-radius: 7px;
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
     }
 
     .item-icon {
-        width: 22px;
-        height: 22px;
-        line-height: 22px;
-        font-size: 0.5rem;
+        width: 20px;
+        height: 20px;
+        line-height: 20px;
+        font-size: 0.43rem;
     }
 
     .item-count {
-        font-size: 0.46rem;
-        min-width: 11px;
-        height: 11px;
+        font-size: 0.40rem;
+        min-width: 10px;
+        height: 10px;
     }
 
     #xp-bar-container {
-        width: min(94vw, 220px);
-        height: 6px;
+        width: min(94vw, 170px);
+        height: 5px;
     }
 
     /* ── Corner widgets ── */
     #arlo-face-widget {
-        width: 42px;
-        height: 42px;
-        top: 12px;
-        left: 12px;
+        width: 36px;
+        height: 36px;
+        top: 10px;
+        left: 10px;
         border-width: 2px;
     }
 
     #coords-display {
-        top: 64px;
-        left: 12px;
-        font-size: 0.6rem;
-        padding: 6px 10px;
+        top: 54px;
+        left: 10px;
+        font-size: 0.52rem;
+        padding: 5px 8px;
     }
 
     #minimap {
