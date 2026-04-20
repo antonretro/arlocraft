@@ -3,6 +3,6 @@
   "transparent": false,
   "name": "Tube Coral Block",
   "xp": 2,
-  "deco": false,
+  "deco": true,
   "renderType": "cube"
 }

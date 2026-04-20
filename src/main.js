@@ -34,6 +34,8 @@ console.log(
   'color: #94a3b8; font-size: 10px;'
 );
 
+const game = new Game();
+
 // Global for debugging if needed
 window.gameInstance = game;
 
