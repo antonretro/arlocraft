@@ -9,8 +9,8 @@ import { BLOCKS } from './blocks.js';
 const stableBlocks = [...BLOCKS].sort((a, b) => a.id.localeCompare(b.id));
 
 export const BLOCKDEX = stableBlocks.map((block, index) => ({
-    dexId: index + 1,
-    id: block.id,
-    name: block.name,
-    description: block.description || `A rare discovery: ${block.name}.`
+  dexId: index + 1,
+  id: block.id,
+  name: block.name,
+  description: block.description || `A rare discovery: ${block.name}.`,
 }));

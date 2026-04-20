@@ -1,9 +1,9 @@
 {
-    "name":  "Strawberry",
-    "hardness":  0.1,
-    "xp":  1,
-    "foodVal":  1,
-    "color":  "0xe91e63",
-    "deco":  true,
-    "textureId": "sweet_berry_bush_stage3"
+  "name": "Strawberry",
+  "hardness": 0.1,
+  "xp": 1,
+  "foodVal": 1,
+  "color": "0xe91e63",
+  "deco": true,
+  "textureId": "sweet_berry_bush_stage3"
 }

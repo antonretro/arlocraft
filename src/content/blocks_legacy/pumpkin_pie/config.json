@@ -1,7 +1,7 @@
 {
-    "name": "Pumpkin Pie",
-    "hardness": 0.5,
-    "xp": 5,
-    "foodVal": 8,
-    "color": "0xbf360c"
+  "name": "Pumpkin Pie",
+  "hardness": 0.5,
+  "xp": 5,
+  "foodVal": 8,
+  "color": "0xbf360c"
 }

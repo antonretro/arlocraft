@@ -1,6 +1,6 @@
 {
-    "name": "Water",
-    "hardness": 0,
-    "xp": 0,
-    "transparent": true
+  "name": "Water",
+  "hardness": 0,
+  "xp": 0,
+  "transparent": true
 }

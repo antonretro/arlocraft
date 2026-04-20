@@ -1,7 +1,7 @@
 {
-    "name": "Redwood Leaves",
-    "hardness": 0.5,
-    "xp": 1,
-    "color": "0x2d4f21",
-    "transparent": true
+  "name": "Redwood Leaves",
+  "hardness": 0.5,
+  "xp": 1,
+  "color": "0x2d4f21",
+  "transparent": true
 }

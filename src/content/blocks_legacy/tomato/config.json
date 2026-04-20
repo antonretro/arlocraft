@@ -1,7 +1,7 @@
 {
-    "name": "Tomato",
-    "hardness": 0.2,
-    "xp": 1,
-    "foodVal": 3,
-    "color": "0xff5252"
+  "name": "Tomato",
+  "hardness": 0.2,
+  "xp": 1,
+  "foodVal": 3,
+  "color": "0xff5252"
 }

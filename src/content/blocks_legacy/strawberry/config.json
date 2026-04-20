@@ -1,7 +1,7 @@
 {
-    "name": "Strawberry",
-    "hardness": 0.1,
-    "xp": 1,
-    "foodVal": 1,
-    "color": "0xe91e63"
+  "name": "Strawberry",
+  "hardness": 0.1,
+  "xp": 1,
+  "foodVal": 1,
+  "color": "0xe91e63"
 }

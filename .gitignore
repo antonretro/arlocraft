@@ -6,11 +6,16 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.vite-dev.*.log
+dev-*.log
+vite-*.log
+desktop-start.log
 
 node_modules
 dist
 dist-ssr
 release
+release_v1_0_0
 *.exe
 *.local
 

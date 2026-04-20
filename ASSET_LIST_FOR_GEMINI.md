@@ -3,16 +3,19 @@
 Put all assets under `public/assets/` unless path says otherwise.
 
 ## Critical
+
 - `public/assets/virus_eye.gif`
   - Used on `virus` blocks (animated).
   - Square, transparent background, 64x64 or 128x128.
 
 ## Player / UI Faces
+
 - `public/faces/arlo_happy.png` (128x128, transparent optional)
 - `public/faces/arlo_sad.png` (128x128)
 - `public/faces/arlo_surprised.png` (128x128)
 
 ## Tool / Item Icons (64x64 PNG)
+
 - `public/icons/items/pick_wood.png`
 - `public/icons/items/sledge_iron.png`
 - `public/icons/items/power_blade.png`
@@ -24,6 +27,7 @@ Put all assets under `public/assets/` unless path says otherwise.
 - `public/icons/items/rocket_boots.png`
 
 ## Block Icons (64x64 PNG)
+
 - `public/icons/items/stone.png`
 - `public/icons/items/grass.png`
 - `public/icons/items/dirt.png`
@@ -36,6 +40,7 @@ Put all assets under `public/assets/` unless path says otherwise.
 - `public/icons/items/arlo.png`
 
 ## Optional World Textures (if you want a full texture pack)
+
 - `src/assets/stone_texture.png`
 - `src/assets/grass_top_texture.png`
 - `src/assets/grass_side_texture.png`

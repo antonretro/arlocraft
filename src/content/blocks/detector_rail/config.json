@@ -1,7 +1,7 @@
 {
-    "name": "Detector Rail",
-    "hardness": 0.7,
-    "xp": 1,
-    "transparent": true,
-    "flat": true
+  "name": "Detector Rail",
+  "hardness": 0.7,
+  "xp": 1,
+  "transparent": true,
+  "flat": true
 }

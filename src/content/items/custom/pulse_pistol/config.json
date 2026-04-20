@@ -1,8 +1,8 @@
 {
-    "id": "pulse_pistol",
-    "name": "Pulse Pistol",
-    "type": "gun",
-    "description": "A compact energy pistol. Fast fire, moderate damage.",
-    "sprite": "pulse_pistol.png",
-    "spriteStatus": "NEEDED"
+  "id": "pulse_pistol",
+  "name": "Pulse Pistol",
+  "type": "gun",
+  "description": "A compact energy pistol. Fast fire, moderate damage.",
+  "sprite": "pulse_pistol.png",
+  "spriteStatus": "NEEDED"
 }

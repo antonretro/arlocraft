@@ -1,10 +1,10 @@
 {
-    "name":  "Blueberry",
-    "hardness":  0.1,
-    "xp":  1,
-    "foodVal":  1,
-    "color":  "0x3f51b5",
-    "deco":  true,
-    "textureId": "blueberry",
-    "aliases": ["blueberry"]
+  "name": "Blueberry",
+  "hardness": 0.1,
+  "xp": 1,
+  "foodVal": 1,
+  "color": "0x3f51b5",
+  "deco": true,
+  "textureId": "blueberry",
+  "aliases": ["blueberry"]
 }

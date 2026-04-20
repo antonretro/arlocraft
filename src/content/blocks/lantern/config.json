@@ -1,9 +1,9 @@
 {
-    "name": "Lantern",
-    "hardness": 1,
-    "xp": 4,
-    "emissive": true,
-    "flicker": true,
-    "emissiveColor": "0xffaa33",
-    "color": "0xffdc78"
+  "name": "Lantern",
+  "hardness": 1,
+  "xp": 4,
+  "emissive": true,
+  "flicker": true,
+  "emissiveColor": "0xffaa33",
+  "color": "0xffdc78"
 }

@@ -1,1 +1,9 @@
-{"name":"Tomato","hardness":0,"xp":0,"deco":true,"transparent":true,"textureId":"sweet_berry_bush_stage1","id":"tomato_stage1"}
+{
+  "name": "Tomato",
+  "hardness": 0,
+  "xp": 0,
+  "deco": true,
+  "transparent": true,
+  "textureId": "sweet_berry_bush_stage1",
+  "id": "tomato_stage1"
+}

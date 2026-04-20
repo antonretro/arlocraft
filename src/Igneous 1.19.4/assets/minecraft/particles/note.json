@@ -1,5 +1,3 @@
 {
-  "textures": [
-    "minecraft:note"
-  ]
+  "textures": ["minecraft:note"]
 }

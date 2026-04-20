@@ -1,6 +1,6 @@
 {
-    "hardness":  1,
-    "emissive":  true,
-    "name":  "Shroomlight",
-    "xp":  2
+  "hardness": 1,
+  "emissive": true,
+  "name": "Shroomlight",
+  "xp": 2
 }

@@ -1,7 +1,7 @@
 {
-    "name": "Lava",
-    "hardness": 0,
-    "xp": 0,
-    "emissive": true,
-    "color": "0xff6b1a"
+  "name": "Lava",
+  "hardness": 0,
+  "xp": 0,
+  "emissive": true,
+  "color": "0xff6b1a"
 }

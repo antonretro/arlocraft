@@ -1,7 +1,7 @@
 {
-    "parent": "block/cube_column",
-    "textures": {
-        "end": "environmental:block/cherry_bookshelf_top",
-        "side": "environmental:block/cherry_bookshelf"
-    }
+  "parent": "block/cube_column",
+  "textures": {
+    "end": "environmental:block/cherry_bookshelf_top",
+    "side": "environmental:block/cherry_bookshelf"
+  }
 }

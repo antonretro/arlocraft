@@ -1,6 +1,6 @@
 {
-    "hardness":  1,
-    "transparent":  true,
-    "name":  "Ladder",
-    "xp":  2
+  "hardness": 1,
+  "transparent": true,
+  "name": "Ladder",
+  "xp": 2
 }

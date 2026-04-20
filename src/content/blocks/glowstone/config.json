@@ -1,1 +1,7 @@
-{ "name": "Glowstone", "hardness": 0.3, "xp": 10, "emissive": true, "emissiveColor": "0xfff0ad" }
+{
+  "name": "Glowstone",
+  "hardness": 0.3,
+  "xp": 10,
+  "emissive": true,
+  "emissiveColor": "0xfff0ad"
+}

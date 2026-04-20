@@ -1,1 +1,7 @@
-{"name": "Beetroot", "type": "item", "id": "beetroot", "consumable": true, "foodValue": 1}
+{
+  "name": "Beetroot",
+  "type": "item",
+  "id": "beetroot",
+  "consumable": true,
+  "foodValue": 1
+}

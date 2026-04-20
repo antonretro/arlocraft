@@ -3,9 +3,9 @@
 const handlers = new Map();
 
 export function registerBlockHandler(id, handler) {
-    handlers.set(id, handler);
+  handlers.set(id, handler);
 }
 
 export function getBlockHandler(id) {
-    return handlers.get(id) ?? null;
+  return handlers.get(id) ?? null;
 }

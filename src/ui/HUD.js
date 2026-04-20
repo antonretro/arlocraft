@@ -4,90 +4,106 @@ import { CraftingController } from './CraftingController.js';
 import { CollectionsUI } from './CollectionsUI.js';
 
 export class HUD {
-    constructor(gameState, game = null) {
-        this.gameState = gameState;
-        this.game = game;
+  constructor(gameState, game = null) {
+    this.gameState = gameState;
+    this.game = game;
 
-        // --- Modular Components ---
-        this.core = new HUDCore(gameState, game);
-        this.crafting = new CraftingController(game?.world, gameState);
-        this.collections = new CollectionsUI(gameState);
-        
-        this.inventory = new InventoryUI(gameState, {
-            onInventoryChanged: () => {
-                window.dispatchEvent(new CustomEvent('inventory-changed'));
-            },
-            onSlotChanged: (slot) => {
-                // Any specific logic when slot changes besides selection
-            },
-            onCraftRequest: () => {
-                this.crafting.executeCraft();
-            },
-            getCraftingResult: () => this.crafting.getCraftingResult(),
-            getCraftingRecipeName: () => this.crafting.getRecipeName()
-        });
-    }
+    // --- Modular Components ---
+    this.core = new HUDCore(gameState, game);
+    this.crafting = new CraftingController(game?.world, gameState);
+    this.collections = new CollectionsUI(gameState);
 
-    init() {
-        console.log('[ArloCraft] HUD modular initialization starting...');
-        
-        // 1. Core systems (bars, world info)
-        this.core.init();
+    this.inventory = new InventoryUI(gameState, {
+      onInventoryChanged: () => {
+        window.dispatchEvent(new CustomEvent('inventory-changed'));
+      },
+      onSlotChanged: (slot) => {
+        // Any specific logic when slot changes besides selection
+      },
+      onCraftRequest: () => {
+        this.crafting.executeCraft();
+      },
+      getCraftingResult: () => this.crafting.getCraftingResult(),
+      getCraftingRecipeName: () => this.crafting.getRecipeName(),
+    });
+  }
 
-        // 2. Inventory / Hotbar
-        this.inventory.init();
+  init() {
+    console.log('[ArloCraft] HUD modular initialization starting...');
 
-        // 3. Collections (tabs, blocklog)
-        this.collections.init();
+    // 1. Core systems (bars, world info)
+    this.core.init();
 
-        // 4. Crafting (discovery logic)
-        this.crafting.init();
+    // 2. Inventory / Hotbar
+    this.inventory.init();
 
-        // 5. Global Discovery Notifications (Bridge)
-        window.addEventListener('discovery-block', (e) => {
-            this.game?.notifications?.show('NEW DISCOVERY', e.detail.id, 'block');
-        });
-        window.addEventListener('discovery-recipe', (e) => {
-            this.game?.notifications?.show('RECIPE UNLOCKED', e.detail.id, 'recipe');
-        });
-        window.addEventListener('achievement-unlocked', (e) => {
-            this.game?.notifications?.show('ACHIEVEMENT UNLOCKED', e.detail.id, 'medal');
-        });
+    // 3. Collections (tabs, blocklog)
+    this.collections.init();
 
-        console.log('[ArloCraft] HUD modular initialization complete.');
-    }
+    // 4. Crafting (discovery logic)
+    this.crafting.init();
 
-    // --- Bridge Methods for Game.js / SurvivalSystem.js ---
-    
-    updateCoordinates(position, yaw = 0, world = null) {
-        this.core.updateCoordinates(position, yaw, world);
-    }
+    // 5. Global Discovery Notifications (Bridge)
+    window.addEventListener('discovery-block', (e) => {
+      this.game?.notifications?.show('NEW DISCOVERY', e.detail.id, 'block');
+    });
+    window.addEventListener('discovery-recipe', (e) => {
+      this.game?.notifications?.show('RECIPE UNLOCKED', e.detail.id, 'recipe');
+    });
+    window.addEventListener('achievement-unlocked', (e) => {
+      this.game?.notifications?.show(
+        'ACHIEVEMENT UNLOCKED',
+        e.detail.id,
+        'medal'
+      );
+    });
 
-    setEmotion(mood, reset = 0) {
-        this.core.setFace(mood, reset);
-    }
+    console.log('[ArloCraft] HUD modular initialization complete.');
+  }
 
-    setFace(mood, reset = 0) {
-        this.core.setFace(mood, reset);
-    }
+  // --- Bridge Methods for Game.js / SurvivalSystem.js ---
 
-    generateHotbar() {
-        this.inventory.generateHotbar();
-    }
+  updateCoordinates(position, yaw = 0, world = null) {
+    this.core.updateCoordinates(position, yaw, world);
+  }
 
-    updateInventoryUI() {
-        this.inventory.updateInventoryUI();
-    }
+  setEmotion(mood, reset = 0) {
+    this.core.setFace(mood, reset);
+  }
 
-    renderSelectedItem() {
-        this.inventory.renderSelectedItem();
-    }
+  setFace(mood, reset = 0) {
+    this.core.setFace(mood, reset);
+  }
 
-    updateHP(v) { this.core.updateHP(v); }
-    updateFood(v) { this.core.updateFood(v); }
-    updateMode(v) { this.core.updateMode(v); }
-    updateXPBar(v, m) { this.core.updateXPBar(v, m); }
-    
-    showActionPrompt(detail) { this.core.showActionPrompt(detail); }
-    flashPrompt(text, color) { this.core.flashPrompt(text, color); }
+  generateHotbar() {
+    this.inventory.generateHotbar();
+  }
+
+  updateInventoryUI() {
+    this.inventory.updateInventoryUI();
+  }
+
+  renderSelectedItem() {
+    this.inventory.renderSelectedItem();
+  }
+
+  updateHP(v) {
+    this.core.updateHP(v);
+  }
+  updateFood(v) {
+    this.core.updateFood(v);
+  }
+  updateMode(v) {
+    this.core.updateMode(v);
+  }
+  updateXPBar(v, m) {
+    this.core.updateXPBar(v, m);
+  }
+
+  showActionPrompt(detail) {
+    this.core.showActionPrompt(detail);
+  }
+  flashPrompt(text, color) {
+    this.core.flashPrompt(text, color);
+  }
 }

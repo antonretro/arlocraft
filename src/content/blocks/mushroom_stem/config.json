@@ -1,6 +1,6 @@
 {
-    "hardness":  0.2,
-    "transparent":  true,
-    "name":  "Mushroom Stem",
-    "xp":  0
+  "hardness": 0.2,
+  "transparent": true,
+  "name": "Mushroom Stem",
+  "xp": 0
 }

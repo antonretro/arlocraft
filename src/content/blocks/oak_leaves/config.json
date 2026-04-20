@@ -1,7 +1,7 @@
 {
-    "name": "Oak Leaves",
-    "hardness": 0.5,
-    "xp": 1,
-    "color": "0x3f8f3f",
-    "transparent": true
+  "name": "Oak Leaves",
+  "hardness": 0.5,
+  "xp": 1,
+  "color": "0x3f8f3f",
+  "transparent": true
 }

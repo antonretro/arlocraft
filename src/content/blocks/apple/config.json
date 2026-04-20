@@ -1,7 +1,7 @@
 {
-    "name": "Apple",
-    "hardness": 0.2,
-    "xp": 1,
-    "foodVal": 4,
-    "color": "0xf44336"
+  "name": "Apple",
+  "hardness": 0.2,
+  "xp": 1,
+  "foodVal": 4,
+  "color": "0xf44336"
 }

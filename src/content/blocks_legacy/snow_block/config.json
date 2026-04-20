@@ -1,6 +1,6 @@
 {
-    "name": "Snow Block",
-    "hardness": 0.5,
-    "xp": 1,
-    "color": "0xfafafa"
+  "name": "Snow Block",
+  "hardness": 0.5,
+  "xp": 1,
+  "color": "0xfafafa"
 }

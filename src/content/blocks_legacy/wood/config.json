@@ -1,6 +1,6 @@
 {
-    "name": "Wood",
-    "hardness": 3,
-    "xp": 10,
-    "color": "0x8f673c"
+  "name": "Wood",
+  "hardness": 3,
+  "xp": 10,
+  "color": "0x8f673c"
 }

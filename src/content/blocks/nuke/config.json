@@ -1,9 +1,9 @@
 {
-    "name": "Nuke",
-    "hardness": 0.1,
-    "xp": 25,
-    "emissive": true,
-    "emissiveColor": "0x662100",
-    "color": "0x1c1c1c",
-    "textureId": "nuke"
+  "name": "Nuke",
+  "hardness": 0.1,
+  "xp": 25,
+  "emissive": true,
+  "emissiveColor": "0x662100",
+  "color": "0x1c1c1c",
+  "textureId": "nuke"
 }

@@ -1,8 +1,8 @@
 {
-    "name":  "Corn",
-    "hardness":  0.2,
-    "xp":  1,
-    "foodVal":  4,
-    "color":  "0xffeb3b",
-    "deco":  true
+  "name": "Corn",
+  "hardness": 0.2,
+  "xp": 1,
+  "foodVal": 4,
+  "color": "0xffeb3b",
+  "deco": true
 }

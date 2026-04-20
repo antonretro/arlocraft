@@ -1,6 +1,6 @@
 {
-    "hardness":  3,
-    "emissive":  true,
-    "name":  "Sculk Catalyst",
-    "xp":  6
+  "hardness": 3,
+  "emissive": true,
+  "name": "Sculk Catalyst",
+  "xp": 6
 }

@@ -1,8 +1,8 @@
 {
-    "id": "scatter_blaster",
-    "name": "Scatter Blaster",
-    "type": "gun",
-    "description": "Fires a spread of energy bolts at close range. High burst damage.",
-    "sprite": "scatter_blaster.png",
-    "spriteStatus": "NEEDED"
+  "id": "scatter_blaster",
+  "name": "Scatter Blaster",
+  "type": "gun",
+  "description": "Fires a spread of energy bolts at close range. High burst damage.",
+  "sprite": "scatter_blaster.png",
+  "spriteStatus": "NEEDED"
 }

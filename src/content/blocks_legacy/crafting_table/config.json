@@ -1,6 +1,6 @@
 {
-    "name": "Crafting Table",
-    "hardness": 2.5,
-    "xp": 15,
-    "color": "0xa67c52"
+  "name": "Crafting Table",
+  "hardness": 2.5,
+  "xp": 15,
+  "color": "0xa67c52"
 }

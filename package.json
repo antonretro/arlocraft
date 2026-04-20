@@ -7,11 +7,16 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:pages": "vite build --base ./",
+    "build:pages": "npm run lint && vite build --base ./",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write \"src/**/*.{js,json,css,md}\" \"*.{js,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{js,json,css,md}\" \"*.{js,json,md}\"",
     "preview": "vite preview",
     "build:web:portable": "vite build --base ./",
     "build:exe": "npm run build:web:portable && npx electron-builder --win portable -c.electronVersion=41.2.0",
-    "start:desktop": "node desktop/start-desktop.cjs"
+    "start:desktop": "node desktop/start-desktop.cjs",
+    "validate": "npm run lint && npm run build"
   },
   "build": {
     "appId": "com.arlocraft.game",
@@ -41,6 +46,10 @@
   "devDependencies": {
     "electron": "^41.2.0",
     "electron-builder": "^26.8.1",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.8.3",
     "vite": "^8.0.4"
   },
   "dependencies": {

@@ -1,5 +1,3 @@
 {
-  "textures": [
-    "minecraft:glow"
-  ]
+  "textures": ["minecraft:glow"]
 }

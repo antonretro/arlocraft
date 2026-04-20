@@ -1,9 +1,9 @@
 {
-    "name": "Brown Mushroom",
-    "hardness": 0.1,
-    "xp": 1,
-    "foodVal": 1,
-    "deco": true,
-    "transparent": true,
-    "color": "0x795548"
+  "name": "Brown Mushroom",
+  "hardness": 0.1,
+  "xp": 1,
+  "foodVal": 1,
+  "deco": true,
+  "transparent": true,
+  "color": "0x795548"
 }

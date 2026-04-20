@@ -1,12 +1,12 @@
 {
-    "hardness":  1,
-    "transparent":  true,
-    "xp":  2,
-    "deco":  true,
-    "id":  "rose_bush",
-    "textureId":  "rose_bush_bottom",
-    "pairId":  "rose_bush_top",
-    "pairOffsetY":  1,
-    "dropId":  "rose_bush",
-    "pickId":  "rose_bush"
+  "hardness": 1,
+  "transparent": true,
+  "xp": 2,
+  "deco": true,
+  "id": "rose_bush",
+  "textureId": "rose_bush_bottom",
+  "pairId": "rose_bush_top",
+  "pairOffsetY": 1,
+  "dropId": "rose_bush",
+  "pickId": "rose_bush"
 }

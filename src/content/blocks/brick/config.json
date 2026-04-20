@@ -1,6 +1,6 @@
 {
-    "name": "Brick",
-    "hardness": 4,
-    "xp": 15,
-    "color": "0xb24936"
+  "name": "Brick",
+  "hardness": 4,
+  "xp": 15,
+  "color": "0xb24936"
 }

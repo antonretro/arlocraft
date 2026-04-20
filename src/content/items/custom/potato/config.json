@@ -1,1 +1,7 @@
-{"name": "Potato", "type": "item", "id": "potato", "consumable": true, "foodValue": 1}
+{
+  "name": "Potato",
+  "type": "item",
+  "id": "potato",
+  "consumable": true,
+  "foodValue": 1
+}

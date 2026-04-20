@@ -1,6 +1,6 @@
 {
-    "name": "Gold Ore",
-    "hardness": 4,
-    "xp": 30,
-    "color": "0xf2d438"
+  "name": "Gold Ore",
+  "hardness": 4,
+  "xp": 30,
+  "color": "0xf2d438"
 }

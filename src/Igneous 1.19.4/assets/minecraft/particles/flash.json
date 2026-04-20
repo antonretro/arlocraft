@@ -1,5 +1,3 @@
 {
-  "textures": [
-    "minecraft:flash"
-  ]
+  "textures": ["minecraft:flash"]
 }

@@ -1,6 +1,6 @@
 {
-    "name": "Coal Ore",
-    "hardness": 3,
-    "xp": 8,
-    "color": "0x3b3f47"
+  "name": "Coal Ore",
+  "hardness": 3,
+  "xp": 8,
+  "color": "0x3b3f47"
 }

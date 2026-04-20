@@ -1,9 +1,9 @@
 {
-    "id": "fire",
-    "name": "Fire",
-    "hardness": 0,
-    "deco": true,
-    "transparent": true,
-    "xp": 0,
-    "replaceable": true
+  "id": "fire",
+  "name": "Fire",
+  "hardness": 0,
+  "deco": true,
+  "transparent": true,
+  "xp": 0,
+  "replaceable": true
 }
