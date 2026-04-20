@@ -31,17 +31,33 @@ export class HUD {
   init() {
     console.log('[ArloCraft] HUD modular initialization starting...');
 
-    // 1. Core systems (bars, world info)
-    this.core.init();
+    try {
+      // 1. Core systems (bars, world info)
+      if (this.core) this.core.init();
+    } catch (e) {
+      console.error('[HUD] Core init failed:', e);
+    }
 
-    // 2. Inventory / Hotbar
-    this.inventory.init();
+    try {
+      // 2. Inventory / Hotbar
+      if (this.inventory) this.inventory.init();
+    } catch (e) {
+      console.error('[HUD] Inventory init failed:', e);
+    }
 
-    // 3. Collections (tabs, blocklog)
-    this.collections.init();
+    try {
+      // 3. Collections (tabs, blocklog)
+      if (this.collections) this.collections.init();
+    } catch (e) {
+      console.error('[HUD] Collections init failed:', e);
+    }
 
-    // 4. Crafting (discovery logic)
-    this.crafting.init();
+    try {
+      // 4. Crafting (discovery logic)
+      if (this.crafting) this.crafting.init();
+    } catch (e) {
+      console.error('[HUD] Crafting init failed:', e);
+    }
 
     // 5. Global Discovery Notifications (Bridge)
     window.addEventListener('discovery-block', (e) => {

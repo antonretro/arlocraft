@@ -17,11 +17,23 @@ const entityTextureModules = import.meta.glob(
 
 const entityTextureUrls = new Map(
   Object.entries(entityTextureModules).map(([path, url]) => {
-    const normalized = path
-      .replace('../Igneous 1.19.4/assets/minecraft/textures/entity/', '')
-      .replace(/\.png$/i, '');
+    // Better normalization that handles varying path prefixes
+    const searchStr = '/assets/minecraft/textures/entity/';
+    const idx = path.toLowerCase().indexOf(searchStr);
+    const normalized =
+      idx !== -1
+        ? path.substring(idx + searchStr.length).replace(/\.png$/i, '')
+        : path
+            .split('/')
+            .pop()
+            .replace(/\.png$/i, '');
+
     return [normalized, url];
   })
+);
+
+console.log(
+  `[ArloCraft] Entity textures loaded: ${entityTextureUrls.size} mappings created.`
 );
 
 function createTextureFromCanvas(canvas) {
