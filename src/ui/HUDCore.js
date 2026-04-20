@@ -119,7 +119,7 @@ export class HUDCore {
       img.src = canvas.toDataURL();
     };
     skinImg.onerror = () => {
-      if (skinUrl !== '/assets/steve.png') this.loadSkinFace(null);
+      if (skinUrl !== 'assets/steve.png') this.loadSkinFace(null);
     };
     skinImg.src = skinUrl;
   }

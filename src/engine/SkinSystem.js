@@ -57,7 +57,7 @@ export class SkinSystem {
 
     if (skinId === 'custom') return this.customSkinData;
 
-    return '/assets/steve.png';
+    return 'assets/steve.png';
   }
 
   applySkin(skinId, data = null) {

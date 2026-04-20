@@ -114,7 +114,7 @@ export const MOBS = [
     friendly: true,
     biomes: ['highlands'],
     chat: ['I see everything.', 'I am the code.', 'Anton is the path.'],
-    texture: '/anton_ai.png',
+    texture: 'anton_ai.png',
   },
   {
     id: 'anton_evil',
@@ -124,7 +124,7 @@ export const MOBS = [
     xp: 200,
     biomes: ['forest'],
     boss: true,
-    texture: '/anton_creepy.png',
+    texture: 'anton_creepy.png',
   },
   {
     id: 'prof_apple',
@@ -139,7 +139,7 @@ export const MOBS = [
       'Have you seen my bow tie?',
       'Synthesis is key.',
     ],
-    texture: '/apple_prof_mob.png',
+    texture: 'apple_prof_mob.png',
   },
   {
     id: 'super_ball',
@@ -150,7 +150,7 @@ export const MOBS = [
     friendly: true,
     biomes: ['highlands'],
     chat: ['Up and away!', 'I will save this land!', 'Zoom!'],
-    texture: '/blue_super_mob.png',
+    texture: 'blue_super_mob.png',
   },
   {
     id: 'friendly_nugget',
@@ -161,7 +161,7 @@ export const MOBS = [
     friendly: true,
     biomes: ['forest'],
     chat: ['*nugget noises*', 'Friend?', 'Roll roll roll.'],
-    texture: '/nugget_mob.png',
+    texture: 'nugget_mob.png',
   },
   {
     id: 'villager',

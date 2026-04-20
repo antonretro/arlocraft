@@ -9,6 +9,16 @@ export class Stats {
       agility: 1, // Speed / Jump
       spirit: 1, // Mana / Action Command Window
     };
+
+    // Tracking Metrics
+    this.distanceTravelled = 0;
+    this.blocksMined = new Map(); // id -> count
+    this.blocksPlaced = new Map(); // id -> count
+    this.blocksCrafted = new Map(); // id -> count
+    this.enemiesDefeated = 0;
+    this.daysSurvived = 0;
+    this.lowestY = 64;
+    this.discoveredBlocksCount = 0;
   }
 
   addXP(amount) {

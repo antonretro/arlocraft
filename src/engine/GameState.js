@@ -24,16 +24,7 @@ export class GameState {
     this.discoveredBlocks = new Set();
     this.discoveredRecipes = new Set();
     this.unlockedAchievements = new Set();
-    this.stats = {
-      distanceTravelled: 0,
-      blocksMined: new Map(), // id -> count
-      blocksPlaced: new Map(), // id -> count
-      blocksCrafted: new Map(), // id -> count
-      enemiesDefeated: 0,
-      daysSurvived: 0,
-      lowestY: 64,
-      discoveredBlocksCount: 0,
-    };
+    this.stats = null; // Injected by Game
 
     this.achievementCheckTimer = setInterval(
       () => this.checkAchievements(),

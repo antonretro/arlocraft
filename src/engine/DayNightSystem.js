@@ -41,13 +41,13 @@ export class DayNightSystem {
       cb(mat);
     };
 
-    loadTex('/textures/sky/sun.png', 0xfffde8, (mat) => {
+    loadTex('textures/sky/sun.png', 0xfffde8, (mat) => {
       this.sunPlane = new THREE.Mesh(planeGeo, mat);
       this.sunPlane.renderOrder = -1;
       scene.add(this.sunPlane);
     });
 
-    loadTex('/textures/sky/moon.png', 0xddeeff, (mat) => {
+    loadTex('textures/sky/moon.png', 0xddeeff, (mat) => {
       mat.opacity = 0;
       this.moonPlane = new THREE.Mesh(planeGeo.clone(), mat);
       this.moonPlane.renderOrder = -1;

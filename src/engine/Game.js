@@ -29,6 +29,7 @@ import { UpdateChecker } from './UpdateChecker.js';
 import { GameUI } from './GameUI.js';
 import { SkinSystem } from './SkinSystem.js';
 import { ParticleSystem } from './ParticleSystem.js';
+import { MultiplayerManager } from './MultiplayerManager.js';
 
 const LOCAL_APP_VERSION = 'v1.0';
 const GITHUB_REPO_OWNER = 'antonretro';
