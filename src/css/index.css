@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Press+Start+2P&display=swap');
 
 @import "tailwindcss";
-@config "../../tailwind.config.js";
+@reference "tailwindcss";
 
 @theme {
   --font-outfit: "Outfit", sans-serif;
@@ -11,11 +11,17 @@
   --color-arlo-glass: rgba(255, 255, 255, 0.05);
 }
 
+:root {
+  --color-arlo-blue: #00c3e3;
+  --color-arlo-dark: #0a0a0a;
+  --color-arlo-glass: rgba(255, 255, 255, 0.05);
+}
+
 @layer base {
   body {
-    @apply bg-black overflow-hidden font-outfit text-white;
+    @apply bg-black font-outfit text-white;
   }
-  
+
   canvas {
     @apply absolute inset-0 z-0;
   }
@@ -25,12 +31,11 @@
   .glass-card {
     @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl;
   }
-  
+
   .glass-btn {
-    @apply relative overflow-hidden px-6 py-3 rounded-xl transition-all duration-300
-           bg-white/5 border border-white/10 hover:bg-white/10 active:scale-95;
+    @apply relative overflow-hidden px-6 py-3 rounded-xl transition-all duration-300 bg-white/5 border border-white/10 hover:bg-white/10 active:scale-95;
   }
-  
+
   .glass-btn-blue {
     @apply bg-blue-500/20 border-blue-400/30 hover:bg-blue-500/30 text-blue-200;
   }
@@ -38,17 +43,73 @@
   .glass-btn-red {
     @apply bg-red-500/20 border-red-400/30 hover:bg-red-500/30 text-red-200;
   }
-  
+
   .ni-title {
-    @apply font-pixel text-4xl md:text-6xl text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)];
+    @apply font-pixel text-4xl md:text-6xl text-white;
+    filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.8));
   }
 }
 
-/* Custom Minecraft-style slot styling for React components */
+/* Item Icons & Isometric Logic */
+.item-icon {
+  @apply relative w-full h-full bg-contain bg-center bg-no-repeat;
+  image-rendering: pixelated;
+}
+
+.iso-icon {
+  @apply relative w-full h-full;
+  transform: scale(0.82) translateY(-2px);
+}
+
+.iso-face {
+  @apply absolute w-full h-full bg-cover;
+  image-rendering: pixelated;
+}
+
+.iso-face.top {
+  transform: rotate(-45deg) skew(15deg, 15deg) scale(0.707);
+  top: -24%;
+  filter: brightness(1.05);
+}
+
+.iso-face.left {
+  transform: skewY(15deg) scaleX(0.866);
+  left: -25%;
+  top: 13%;
+  filter: brightness(0.85);
+}
+
+.iso-face.right {
+  transform: skewY(-15deg) scaleX(0.866);
+  right: -25%;
+  top: 13%;
+  filter: brightness(0.65);
+}
+
+.item-count {
+  @apply absolute -bottom-1 -right-1 text-[10px] font-bold text-white px-1.5 py-0.5 rounded-md bg-black/60 border border-white/5;
+  font-family: var(--font-pixel);
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.8);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.tint-grass-face {
+  filter: brightness(1.1) sepia(1.2) hue-rotate(48deg) saturate(2.2);
+}
+
+.tint-grass {
+  filter: sepia(1.2) hue-rotate(48deg) saturate(2);
+}
+
+.tint-grass-sprite {
+  filter: sepia(1.2) hue-rotate(35deg) saturate(2.8);
+}
+
 .slot {
-    @apply w-12 h-12 bg-black/40 border-2 border-white/20 rounded shadow-inner;
+  @apply w-12 h-12 bg-black/40 border-2 border-white/20 rounded shadow-inner;
 }
 
 .hot-slot {
-    @apply w-14 h-14 bg-black/50 border-white/40;
+  @apply w-14 h-14 bg-black/50 border-white/40;
 }

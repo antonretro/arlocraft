@@ -28,6 +28,8 @@ import { FEATURES } from '../data/features.js';
 import { AudioSystem } from './AudioSystem.js';
 import { HUDCore } from '../ui/HUDCore.js';
 import { HelpPanel } from '../ui/HelpPanel.js';
+import { TouchControls } from '../ui/TouchControls.js';
+import { MiniMap } from '../ui/Minimap.js';
 
 const LOCAL_APP_VERSION = 'v1.0';
 const GITHUB_REPO_OWNER = 'antonretro';
@@ -43,6 +45,7 @@ export class Game {
     this.worldSlots = new WorldSlotManager(this.saveSystem);
     this.skinSystem = new SkinSystem();
     this.skinLoader = new SkinLoader();
+    this.minimap = new MiniMap(this);
     
     // Initialize UI Services First
     this.hud = new HUDCore(this);
@@ -1361,11 +1364,12 @@ export class Game {
     const isGrounded = this.physics.isGrounded() && !inWater;
 
     if (isGrounded && speed > 0.1) {
-      this.bobCycle = (this.bobCycle || 0) + delta * 8.5;
+      // Unify bobCycle increment here. Multiplier tuned for better rhythm.
+      this.bobCycle = (this.bobCycle || 0) + delta * 8.0;
     } else if (inWater) {
-      this.bobCycle = (this.bobCycle || 0) + delta * 4;
+      this.bobCycle = (this.bobCycle || 0) + delta * 3.5;
     } else {
-      this.bobCycle = THREE.MathUtils.lerp(this.bobCycle || 0, 0, delta * 3);
+      this.bobCycle = THREE.MathUtils.lerp(this.bobCycle || 0, 0, delta * 3.5);
     }
 
     this.camera.instance.rotation.order = 'YXZ';
@@ -1431,7 +1435,7 @@ export class Game {
       this.smeltTimer = 0;
     }
 
-    this.minimap.update(delta, playerPos, this.viewYaw);
+    if (this.minimap) this.minimap.update(delta, playerPos, this.viewYaw);
     this.screenShake = Math.max(0, this.screenShake - delta * 0.22);
     
     this.profiler.begin('render');
@@ -1574,7 +1578,7 @@ export class Game {
       this.playerParts.legL.rotation.x = -a;
       this.playerParts.armR.rotation.x = -a * 1.1;
       this.playerParts.armL.rotation.x = a * 1.1;
-      this.bobCycle = (this.bobCycle || 0) + delta * 15;
+      // Removed duplicate bobCycle increment to fix "too fast" bobbing
     } else {
       this.bobCycle = THREE.MathUtils.lerp(this.bobCycle || 0, 0, delta * 3);
     }

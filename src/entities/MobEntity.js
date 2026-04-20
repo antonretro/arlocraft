@@ -63,6 +63,7 @@ export class MobEntity {
     this.maxMoveSpeed = this.getBalancedSpeed();
     this.contactCooldown = 0;
     this.chatCooldown = 2 + Math.random() * 3;
+    this.height = size;
   }
 
   applyTexture(texture) {
@@ -271,11 +272,9 @@ export class MobEntity {
       // 3D Models: Face movement direction
       if (this.moveVelocity.lengthSq() > 0.001) {
         const targetAngle = Math.atan2(this.moveVelocity.x, this.moveVelocity.z);
-        this.mesh.rotation.y = THREE.MathUtils.lerpAngle(
-          this.mesh.rotation.y,
-          targetAngle,
-          Math.min(1, delta * 10)
-        );
+        const current = this.mesh.rotation.y;
+        const diff = (targetAngle - current + Math.PI + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+        this.mesh.rotation.y = current + diff * Math.min(1, delta * 10);
       }
       this.model.update(delta, this.moveVelocity, this.dead);
     }
@@ -364,8 +363,7 @@ export class MobEntity {
 
   updateSurfaceY(delta, canUseWater) {
     const world = this.game.world;
-    const halfHeight =
-      this.geometry.parameters.height * this.mesh.scale.y * 0.5;
+    const halfHeight = this.height * 0.5;
     const groundY =
       world.getTerrainHeight(this.mesh.position.x, this.mesh.position.z) +
       halfHeight;

@@ -502,6 +502,11 @@ export class Physics {
       if (keys['ShiftLeft'] || keys['ShiftRight']) vertical -= 1;
       this.velocity.y = vertical * speed;
     } else {
+      // Apply Gravity
+      if (!grounded && !inWater) {
+        this.velocity.y += this.gravity * delta;
+      }
+
       if (inWater) {
         // Minecraft: Space=rise fast, Shift=sink, otherwise slow natural float
         let targetY = this.buoyancy;

@@ -381,7 +381,7 @@ export class Chunk {
       this.world.shouldPlaceStructureChunk(this.cx, this.cz) ||
       this.world.shouldPlaceVillageChunk(this.cx, this.cz);
     const biome = this.world.getBiomeAt(wx, wz);
-    const waterLevel = this.world.seaLevel + (biome.waterLevelOffset ?? 0);
+    const waterLevel = this.world.seaLevel;
     let surfaceId = terrainHeight <= waterLevel ? 'sand' : biome.surfaceBlock;
     const hasRoad =
       !inForcedSpawnZone &&
@@ -562,7 +562,7 @@ export class Chunk {
       for (let dz = -minDryRadius; dz <= minDryRadius; dz += 2) {
         const h = this.world.getColumnHeight(x + dx, z + dz);
         const biome = this.world.getBiomeAt(x + dx, z + dz);
-        const wl = this.world.seaLevel + (biome.waterLevelOffset ?? 0);
+        const wl = this.world.seaLevel;
         if (h <= wl) return false;
       }
     }
@@ -575,7 +575,7 @@ export class Chunk {
 
     const h = this.world.getColumnHeight(centerX, centerZ);
     const biome = this.world.getBiomeAt(centerX, centerZ);
-    const wl = this.world.seaLevel + (biome.waterLevelOffset ?? 0);
+    const wl = this.world.seaLevel;
     if (h >= wl - 2) return; // must be properly submerged
 
     const pool = ['ocean_ruins', 'sunken_ship'];

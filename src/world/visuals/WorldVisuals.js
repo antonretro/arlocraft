@@ -25,12 +25,12 @@ export class WorldVisuals {
     return {
       solid: withWhiteVertexColors(new THREE.BoxGeometry(1, 1, 1)),
       path: (() => {
-        const geo = new THREE.BoxGeometry(1, 0.9375, 1); // 15/16 height
+        const geo = new THREE.BoxGeometry(1.001, 0.9375, 1.001); // 15/16 height, tiny inflate
         geo.translate(0, -0.03125, 0);
         return withWhiteVertexColors(geo);
       })(),
       farmland: (() => {
-        const geo = new THREE.BoxGeometry(1, 0.9375, 1); // 15/16 height
+        const geo = new THREE.BoxGeometry(1.001, 0.9375, 1.001); // 15/16 height, tiny inflate
         geo.translate(0, -0.03125, 0);
         return withWhiteVertexColors(geo);
       })(),

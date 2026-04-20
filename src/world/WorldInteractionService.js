@@ -5,7 +5,7 @@ export class WorldInteractionService {
     this.world = world;
   }
 
-  breakBlockAt(x, y, z) {
+  breakBlockAt(x, y, z, skipGravity = false) {
     const key = this.world.coords.getKey(x, y, z);
     const id = this.world.state.blockMap.get(key);
     if (!id || id === 'bedrock') return false;
@@ -42,8 +42,9 @@ export class WorldInteractionService {
 
     // Gravity collapse
     if (
-      this.world.blocks.isGravityBlock(id) ||
-      ['stone', 'dirt', 'grass_block', 'sand'].includes(id)
+      !skipGravity &&
+      (this.world.blocks.isGravityBlock(id) ||
+        ['stone', 'dirt', 'grass_block', 'sand'].includes(id))
     ) {
       this._applyGravityAbove(x, y, z);
     }
@@ -59,7 +60,7 @@ export class WorldInteractionService {
       );
       if (!aboveId) break;
       if (!this.world.blocks.isGravityBlock(aboveId)) break;
-      if (!this.breakBlockAt(x, ay, z)) break;
+      if (!this.breakBlockAt(x, ay, z, true)) break; // Skip nested gravity sweep
     }
   }
 
@@ -106,7 +107,7 @@ export class WorldInteractionService {
     );
 
     if (ratio >= 1) {
-      this.breakBlockAt(x, y, z);
+      this.breakBlockAt(x, y, z, false); // Normal break with gravity
       this.resetMiningProgress();
       return true;
     }

@@ -11,7 +11,7 @@ export class MainMenuPanorama {
     this.renderer = null;
     this.scene = null;
     this.camera = null;
-    this.clock = new THREE.Clock();
+    this.timer = new THREE.Timer();
     this.isDeconstructing = false;
 
     this.init();
@@ -85,7 +85,8 @@ export class MainMenuPanorama {
     if (this.isDeconstructing) return;
     requestAnimationFrame(this.animate.bind(this));
 
-    const time = this.clock.getElapsedTime();
+    this.timer.update();
+    const time = this.timer.getElapsed();
 
     // Rotate camera in a slow, cinematic circle
     const radius = 2;

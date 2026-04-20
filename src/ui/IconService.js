@@ -63,7 +63,8 @@ export class IconService {
       short_grass: 'grass',
       dripstone: 'dripstone_block',
       cherry_leaves: 'flowering_azalea_leaves',
-      nuke: 'tnt_side',
+      nuke: 'tnt',
+      chest: 'barrel',
       coal_ore: 'coal_ore',
       iron_ore: 'iron_ore',
       gold_ore: 'gold_ore',
@@ -117,7 +118,8 @@ export class IconService {
       cobblestone: 'stone',
       brick: 'bricks',
       path_block: 'dirt_path',
-      nuke: 'tnt_side',
+      nuke: 'tnt',
+      chest: 'barrel',
       obsidian: 'obsidian',
       wood: 'oak_log',
       leaves: 'oak_leaves',
@@ -278,6 +280,8 @@ export class IconService {
       path_block: 'dirt_path',
       clay: 'clay',
       brick: 'bricks',
+      nuke: 'tnt',
+      chest: 'barrel',
     };
 
     let alias = this.getBlockTextureKey(id);

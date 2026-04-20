@@ -212,16 +212,21 @@ export class Renderer {
   }
 
   setupClouds() {
-    this.cloudMeshes = []; // kept so nothing else breaks
+    this.cloudMeshes = [];
+    const loader = new THREE.TextureLoader();
+    const cloudsTexture = loader.load('assets/New Textures/clouds.png');
+    cloudsTexture.wrapS = cloudsTexture.wrapT = THREE.RepeatWrapping;
+    cloudsTexture.magFilter = THREE.LinearFilter;
+    cloudsTexture.minFilter = THREE.LinearFilter;
 
-    const cloudGeo = new THREE.PlaneGeometry(800, 800, 60, 60);
-    // Rotate so the plane lies flat (horizontal)
+    const cloudGeo = new THREE.PlaneGeometry(1600, 1600, 1, 1);
     cloudGeo.rotateX(-Math.PI / 2);
 
     this.cloudMat = new THREE.ShaderMaterial({
       uniforms: {
+        map: { value: cloudsTexture },
         offset: { value: new THREE.Vector2(0, 0) },
-        cloudOpacity: { value: 0.82 },
+        cloudOpacity: { value: 0.85 },
       },
       vertexShader: `
                 varying vec2 vUv;
@@ -233,44 +238,13 @@ export class Renderer {
             `,
       fragmentShader: `
                 varying vec2 vUv;
+                uniform sampler2D map;
                 uniform float cloudOpacity;
 
-                // Cheap fBm using layered sin/cos — no texture lookup needed
-                float hash(vec2 p) {
-                    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-                }
-
-                float noise(vec2 p) {
-                    vec2 i = floor(p);
-                    vec2 f = fract(p);
-                    vec2 u = f * f * (3.0 - 2.0 * f);
-                    return mix(
-                        mix(hash(i),             hash(i + vec2(1.0, 0.0)), u.x),
-                        mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0, 1.0)), u.x),
-                        u.y
-                    );
-                }
-
-                float fbm(vec2 p) {
-                    float v = 0.0;
-                    float a = 0.5;
-                    for (int i = 0; i < 3; i++) {
-                        v += a * noise(p);
-                        p  = p * 2.1 + vec2(1.7, 9.2);
-                        a *= 0.5;
-                    }
-                    return v;
-                }
-
                 void main() {
-                    float n = fbm(vUv * 3.8);
-                    
-                    // Fade clouds at the zenith (vUv 0.5,0.5) to reveal blue sky
-                    float distFromZenith = distance(vUv, vec2(0.5));
-                    float zenithFade = smoothstep(0.0, 0.25, distFromZenith);
-                    
-                    float alpha = smoothstep(0.38, 0.62, n) * cloudOpacity * zenithFade;
-                    gl_FragColor = vec4(0.98, 0.99, 1.0, alpha);
+                    vec4 tex = texture2D(map, vUv);
+                    gl_FragColor = vec4(tex.rgb, tex.a * cloudOpacity);
+                    if (gl_FragColor.a < 0.01) discard;
                 }
             `,
       transparent: true,
@@ -474,7 +448,8 @@ export class Renderer {
 
     // Scroll cloud noise plane
     if (this.cloudMat) {
-      this.cloudMat.uniforms.offset.value.x += delta * 0.003;
+      this.cloudMat.uniforms.offset.value.x += delta * 0.0015; // Even slower for "huge cloud" feel
+      this.cloudMat.uniforms.offset.value.y += delta * 0.0008;
     }
 
     // Follow camera so the cloud plane never falls out of view

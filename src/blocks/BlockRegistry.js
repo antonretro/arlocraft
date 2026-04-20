@@ -151,7 +151,8 @@ export class BlockRegistry {
       short_grass: 'grass',
       dripstone: 'dripstone_block',
       cherry_leaves: 'flowering_azalea_leaves',
-      nuke: 'tnt_side',
+      nuke: 'tnt',
+      chest: 'barrel',
     };
 
     for (const [path, module] of Object.entries(textureModules)) {
@@ -168,6 +169,7 @@ export class BlockRegistry {
           map: tex,
           transparent: true,
           blending: THREE.MultiplyBlending,
+          premultipliedAlpha: true,
           side: THREE.FrontSide,
           depthWrite: false,
           polygonOffset: true,

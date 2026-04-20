@@ -167,7 +167,7 @@ export class World {
   getBlockAt(x, y, z) {
     return (
       this.state.blockMap.get(
-        this.coords.getKey(Math.round(x), Math.round(y), Math.round(z))
+        this.coords.getKey(Math.floor(x), Math.floor(y), Math.floor(z))
       ) ?? null
     );
   }
@@ -188,8 +188,8 @@ export class World {
     const startY = Math.floor(y + 0.5);
 
     for (const [px, pz] of searchPoints) {
-      const gx = Math.round(px);
-      const gz = Math.round(pz);
+      const gx = Math.floor(px);
+      const gz = Math.floor(pz);
 
       const cx = this.getChunkCoord(gx);
       const cz = this.getChunkCoord(gz);
@@ -307,7 +307,7 @@ export class World {
     return this.mutations.setBlock(x, y, z, id, null, options);
   }
   removeBlockAt(x, y, z, options) {
-    const key = this.getKey(Math.round(x), Math.round(y), Math.round(z));
+    const key = this.getKey(Math.floor(x), Math.floor(y), Math.floor(z));
     return this.mutations.removeBlockByKey(key, options);
   }
 
