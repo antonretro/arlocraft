@@ -21,29 +21,28 @@ export class SkinSystem {
 
   _generateRandomSkins(count) {
     const skins = [];
-    const baseColors = ['#ffccaa', '#ffaa88', '#dd8866', '#aa6644', '#774433'];
-    const shirtColors = [
-      '#008888',
-      '#aa0000',
-      '#00aa00',
-      '#0000aa',
-      '#aaaa00',
-      '#880088',
+    const famousNames = [
+      'Jim', 'Bob', 'DanTDM', 'Mumbo Jumbo', 'Grian', 'Dream', 'Technoblade',
+      'Stampy', 'PopularMMOs', 'CaptainSparklez', 'JackSucksAtLife', 'AntVenom',
+      'Etho', 'SethBling', 'Notch', 'Jeb', 'Dinnerbone', 'Gruncle Stan'
     ];
+    
+    // Sort so Steve and Alex are top (handled by being in classicSkins or first here if desired)
+    
+    const baseColors = ['#ffccaa', '#ffaa88', '#dd8866', '#aa6644', '#774433'];
+    const shirtColors = ['#008888', '#aa0000', '#00aa00', '#0000aa', '#aaaa00', '#880088'];
     const pantColors = ['#4444aa', '#333333', '#446622', '#664422'];
 
     for (let i = 0; i < count; i++) {
-      const skin = {
-        id: `random_${i}`,
-        name: `Explorer #${100 + i}`,
-        isProcedural: true,
-        config: {
-          skin: baseColors[Math.floor(Math.random() * baseColors.length)],
-          shirt: shirtColors[Math.floor(Math.random() * shirtColors.length)],
-          pants: pantColors[Math.floor(Math.random() * pantColors.length)],
-        },
-      };
-      skins.push(skin);
+        const name = famousNames[i % famousNames.length];
+        const skin = {
+            id: `random_${i}`,
+            name: name,
+            url: `https://minotar.net/skin/${name.replace(' ', '_')}`,
+            faceUrl: `https://minotar.net/helm/${name.replace(' ', '_')}/64`,
+            isProcedural: false // Using Minotar now for these famous names
+        };
+        skins.push(skin);
     }
     return skins;
   }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import StatsPanel from 'stats.js';
+import { DebugProfiler } from '../utils/DebugProfiler.js';
 import { migrateInventoryItem } from '../data/blockMigrations.js';
 import { ActionSystem } from './ActionSystem.js';
 import { Camera } from './Camera.js';
@@ -11,25 +12,22 @@ import { Renderer } from './Renderer.js';
 import { Stats } from './Stats.js';
 import { SurvivalSystem } from './SurvivalSystem.js';
 import { EntityManager } from '../entities/EntityManager.js';
-import { HUD } from '../ui/HUD.js';
-import { World } from '../world/World.js';
-import { HelpPanel } from '../ui/HelpPanel.js';
-import { MiniMap } from '../ui/MiniMap.js';
-import { TouchControls } from '../ui/TouchControls.js';
-import { FEATURES } from '../data/features.js';
-import { PlayerHand } from '../entities/PlayerHand.js';
-import { AudioSystem } from './AudioSystem.js';
-import { SkinLoader } from '../utils/SkinLoader.js';
-import { NotificationSystem } from './NotificationSystem.js';
-import { VERSIONS } from '../data/versions.js';
+import { initReactUI } from '../ui/UIManager.jsx';
+import { SkinSystem } from './SkinSystem.js';
+import { MultiplayerManager } from './MultiplayerManager.js';
+import { ParticleSystem } from './ParticleSystem.js';
 import { SettingsManager } from './SettingsManager.js';
 import { SaveSystem } from './SaveSystem.js';
 import { WorldSlotManager } from './WorldSlotManager.js';
 import { UpdateChecker } from './UpdateChecker.js';
-import { GameUI } from './GameUI.js';
-import { SkinSystem } from './SkinSystem.js';
-import { ParticleSystem } from './ParticleSystem.js';
-import { MultiplayerManager } from './MultiplayerManager.js';
+import { World } from '../world/World.js';
+import { NotificationSystem } from './NotificationSystem.js';
+import { PlayerHand } from '../entities/PlayerHand.js';
+import { SkinLoader } from '../utils/SkinLoader.js';
+import { FEATURES } from '../data/features.js';
+import { AudioSystem } from './AudioSystem.js';
+import { HUDCore } from '../ui/HUDCore.js';
+import { HelpPanel } from '../ui/HelpPanel.js';
 
 const LOCAL_APP_VERSION = 'v1.0';
 const GITHUB_REPO_OWNER = 'antonretro';
@@ -39,13 +37,27 @@ export class Game {
   constructor() {
     console.log('[ArloCraft] Game constructor starting...');
 
-    this.settingsManager = new SettingsManager();
-    this.settings = this.settingsManager.getAll();
-
     this.saveSystem = new SaveSystem(this);
     this.worldSlots = new WorldSlotManager(this.saveSystem);
     this.skinSystem = new SkinSystem();
-    this.ui = new GameUI(this);
+    
+    // Initialize UI Services First
+    this.hud = new HUDCore(this);
+    this.helpPanel = new HelpPanel(this);
+
+    // Initialize React UI Root
+    this.reactRoot = initReactUI(this);
+
+    // Legacy Bridge (minimal stubs for other services)
+    this.ui = {
+      setMenuScreen: (screen) => window.dispatchEvent(new CustomEvent('ui-set-screen', { detail: screen })),
+      setStatus: (msg, error) => console.log(`[UI Status] ${msg}`),
+      showHUD: (visible) => window.dispatchEvent(new CustomEvent('ui-set-hud', { detail: visible })),
+      renderWorldList: () => {},
+      showTitle: (visible) => window.dispatchEvent(new CustomEvent('ui-set-screen', { detail: visible ? 'title' : 'ingame' })),
+      showSettings: (visible) => window.dispatchEvent(new CustomEvent('ui-set-screen', { detail: visible ? 'settings' : 'title' })),
+      isSettingsOpen: () => false // Handled in React state now
+    };
     this.updateChecker = new UpdateChecker('antonretro', 'arlocraft');
 
     this.selectedStartMode =
@@ -103,42 +115,29 @@ export class Game {
     this.actionSystem = new ActionSystem(this.gameState);
     this.input = new Input(this);
 
-    this.hud = new HUD(this.gameState, this);
+    this.notifications = new NotificationSystem();
+    this.multiplayer = new MultiplayerManager(this);
     this.particles = new ParticleSystem(this);
     this.survival = new SurvivalSystem(this.gameState, this.hud);
     this.dayNight = new DayNightSystem(
       this.renderer,
       this.world,
-      this.features ?? {}
+      {}
     );
-    this.helpPanel = new HelpPanel();
-    this.minimap = new MiniMap(this);
     this.audio = new AudioSystem();
     this.audio.applyFromSettings(this.settings);
     this.audio.installAutoUnlock(document);
+
+    this.renderer.applyFromSettings(this.settings);
     this.skinLoader = new SkinLoader();
 
     this.currentVersionId = 'v1.1';
     this.features = { ...FEATURES };
-    this.notifications = new NotificationSystem();
-    this.multiplayer = new MultiplayerManager(this);
 
-    this.profiler = { physicsMs: 0, worldMs: 0, uiMs: 0, renderMs: 0 };
+    this.profiler = new DebugProfiler(this);
     this.clock = new THREE.Timer();
     this.bindEvents();
-    this.setupUI();
     this.setupSkinListeners();
-
-    this.init().catch((e) => {
-      console.error('[ArloCraft] Init Failure:', e);
-    });
-  }
-
-  setupUI() {
-    const seedInput = document.getElementById('seed-input');
-    if (seedInput) seedInput.value = this.world.seedString;
-
-    this.ui.bindAll();
 
     this.setMenuMode(this.selectedStartMode, false);
     this.world.setRenderDistance(
@@ -147,13 +146,12 @@ export class Game {
       )
     );
 
-    this.ui.renderWorldList();
+    // Final polish for startup presentation
     this.ui.setMenuScreen('title');
 
-    // Final polish for startup presentation
-    if (this.hud && this.hud.core) {
-      this.hud.core.loadFaceData();
-    }
+    this.init().catch((e) => {
+      console.error('[ArloCraft] Init Failure:', e);
+    });
   }
 
   setupPlayerVisual() {
@@ -207,7 +205,7 @@ export class Game {
     head.position.set(0, 0, 0); // Local to headGroup
     headGroup.add(head);
 
-    const facePath = 'anton_real.png';
+    const facePath = 'arlo_real.png';
     const faceTexture = new THREE.TextureLoader().load(facePath);
     faceTexture.magFilter = THREE.NearestFilter;
     faceTexture.minFilter = THREE.NearestFilter;
@@ -400,6 +398,11 @@ export class Game {
       : this.input.setPointerLock();
     this.helpPanel.setState('playing');
 
+    // Auto-init multiplayer on world start so a Join Code is ready
+    if (this.multiplayer && !this.multiplayer.peer) {
+      this.multiplayer.init();
+    }
+
     window.dispatchEvent(new CustomEvent('inventory-changed'));
     window.dispatchEvent(new CustomEvent('offhand-changed', { detail: null }));
     window.dispatchEvent(
@@ -545,7 +548,8 @@ export class Game {
   }
 
   showPause(visible) {
-    this.ui.showPause(visible);
+    this.isPaused = visible;
+    window.dispatchEvent(new CustomEvent('ui-set-pause', { detail: visible }));
   }
 
   showSettings(visible) {
@@ -691,10 +695,10 @@ export class Game {
   }
 
   randomizeSeed() {
-    const seed = Math.random().toString(36).substring(2, 10);
-    this.world.seedString = seed;
+    const seed = Math.floor(Math.random() * 90000000) + 10000000;
+    this.world.setSeed(seed);
     const input = document.getElementById('seed-input');
-    if (input) input.value = seed;
+    if (input) input.value = String(seed);
     this.audio.play('ui-click');
   }
 
@@ -798,13 +802,8 @@ export class Game {
   }
 
   toggleDebugOverlay() {
-    this.debugVisible = !this.debugVisible;
-    const overlay = document.getElementById('debug-overlay');
-    if (!overlay) return;
-    overlay.style.display = this.debugVisible ? 'block' : 'none';
-    if (this.framePanel?.dom) {
-      this.framePanel.dom.style.display = this.debugVisible ? 'block' : 'none';
-    }
+    this.profiler.toggle();
+    this.debugVisible = this.profiler.visible;
     this.audio?.play('ui-click');
   }
 
@@ -891,16 +890,21 @@ export class Game {
     }
   }
 
+  setAreaInfluence(influence) {
+    this.areaInfluence = influence || { virus: 0, arlo: 0 };
+  }
+
+
   updateZoneMeter(influence) {
     const v = influence?.virus ?? 0;
-    const a = influence?.anton ?? 0;
+    const a = influence?.arlo ?? 0;
 
     // Cache DOM refs once
     if (!this._zoneDom) {
       this._zoneDom = {
         meter: document.getElementById('zone-meter'),
         fillV: document.getElementById('zone-fill-virus'),
-        fillA: document.getElementById('zone-fill-anton'),
+        fillA: document.getElementById('zone-fill-arlo'),
         status: document.getElementById('zone-status'),
       };
       this._zoneLastV = -1;
@@ -1266,6 +1270,8 @@ export class Game {
     const delta = Math.min(this.clock.getDelta(), 0.1);
     const frameStart = performance.now();
 
+    this.profiler.update(this.renderer.instance);
+
     // Resume Safety: If we just came back from a long pause,
     // skip world/chunk logic for 3 frames to let physics and positions settle.
     if (delta > 0.08) this.resumeGraceFrames = 3;
@@ -1290,14 +1296,16 @@ export class Game {
     if (canSimulate) {
       this.touchControls?.tick();
       const physicsStart = performance.now();
+      this.profiler.begin('physics');
       this.physics.update(delta, this.input, this.viewYaw);
-      this.profiler.physicsMs = performance.now() - physicsStart;
+      this.profiler.end('physics');
       playerPos = this.getPlayerPosition();
       this.entities.update(delta);
       this.particles.update(delta);
       const worldStart = performance.now();
+      this.profiler.begin('world');
       this.world.update(playerPos, delta);
-      this.profiler.worldMs = performance.now() - worldStart;
+      this.profiler.end('world');
       runWorldThisFrame = false;
       this.updateSurvivalSystems(delta);
       this.animatePlayer(delta);
@@ -1333,11 +1341,9 @@ export class Game {
       runWorldThisFrame ||
       (shouldRunPassiveWorld && this.world.pendingChunkLoads.length > 0)
     ) {
-      const worldStart = performance.now();
+      this.profiler.begin('world');
       this.world.update(playerPos, worldDelta);
-      this.profiler.worldMs = performance.now() - worldStart;
-    } else if (!canSimulate) {
-      this.profiler.worldMs = 0;
+      this.profiler.end('world');
     }
 
     const uiStart = performance.now();
@@ -1425,11 +1431,10 @@ export class Game {
 
     this.minimap.update(delta, playerPos, this.viewYaw);
     this.screenShake = Math.max(0, this.screenShake - delta * 0.22);
-    this.profiler.uiMs = performance.now() - uiStart;
-
-    const renderStart = performance.now();
+    
+    this.profiler.begin('render');
     this.renderer.render(this.camera.instance);
-    this.profiler.renderMs = performance.now() - renderStart;
+    this.profiler.end('render');
     this.updateDynamicQuality(delta);
     this.input.clearTransientInputs();
 
@@ -1519,7 +1524,7 @@ export class Game {
       const { materials } = await this.skinLoader.loadSkin(username);
       this._applyLoadedSkin(materials);
       // Update HUD avatar via crafatar for online username or canvas data for local skins
-      const h = document.getElementById('anton-face-image');
+      const h = document.getElementById('arlo-face-image');
       if (h) {
         const resolvedName = username || 'steve';
         if (materials.head?.[4]?.map?.image) {
@@ -1541,7 +1546,8 @@ export class Game {
       for (const part of parts) {
         if (materials[part]) {
           this.playerParts[part].material = materials[part];
-          materials[part].forEach((m) => {
+          const matArray = Array.isArray(materials[part]) ? materials[part] : [materials[part]];
+          matArray.forEach((m) => {
             m.needsUpdate = true;
           });
         }
@@ -1549,7 +1555,7 @@ export class Game {
       if (this.playerParts.face) this.playerParts.face.visible = false;
     }
     if (this.hand) this.hand.updateArmSkin(materials.armR);
-    const h = document.getElementById('anton-face-image');
+    const h = document.getElementById('arlo-face-image');
     if (h && materials.head?.[4]?.map?.image) {
       h.src = materials.head[4].map.image.toDataURL();
     }
