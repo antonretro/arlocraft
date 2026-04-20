@@ -54,18 +54,23 @@ export class GravitySystem {
   }
 
   triggerFall(x, y, z, id) {
-    console.log(`[Gravity] Block ${id} at ${x},${y},${z} is falling!`);
-
-    // Remove current block
+    // 60: Remove current block
     this.world.removeBlockAt(x, y, z, { silent: false });
 
-    // Find the impact point
+    // Find the impact point (checking down to void floor)
     let targetY = y - 1;
+    const VOID_LIMIT = -256;
+
     while (
-      targetY > 0 &&
+      targetY > VOID_LIMIT &&
       this.canFallThrough(this.world.getBlockAt(x, targetY - 1, z))
     ) {
       targetY--;
+    }
+
+    // If block fell into the deep void, just destroy it to prevent loops
+    if (targetY <= -128) {
+      return;
     }
 
     // Place at target (Instant fall for now, can add animation later)
