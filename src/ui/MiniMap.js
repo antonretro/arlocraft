@@ -31,7 +31,7 @@ export class MiniMap {
       platinum: '#bad6ea',
       mythril: '#4de4f0',
       virus: '#914cbc',
-      anton: '#e095ab',
+      arlo: '#e095ab',
       crafting_table: '#94724b',
       brick: '#a6543f',
       obsidian: '#2d283e',

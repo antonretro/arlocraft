@@ -10,6 +10,7 @@ export class ParticleSystem {
     this.scene = game.renderer.scene;
     this.particles = [];
     this.pool = [];
+    this.maxParticles = 500; // Cap for performance on lower-end devices
 
     // Configuration for different particle types
     this.types = {
@@ -37,6 +38,13 @@ export class ParticleSystem {
       PORTAL: { color: 0xaa00ff, size: 0.12, gravity: 0, drag: 0.9, life: 0.6 },
       CRIT: { color: 0xffffaa, size: 0.1, gravity: -10, drag: 0.95, life: 1.0 },
       SNOW: { color: 0xffffff, size: 0.08, gravity: -5, drag: 0.9, life: 0.5 },
+      DEBRIS: {
+        color: 0xffffff,
+        size: 0.12,
+        gravity: -15, // Falls down
+        drag: 0.95,
+        life: 0.6,
+      },
     };
 
     // Shared Geometry
@@ -46,10 +54,15 @@ export class ParticleSystem {
   /**
    * Spawn a burst of particles.
    */
-  spawnBurst(pos, typeName = 'EXPLOSION', count = 12, spread = 0.5) {
+  spawnBurst(pos, typeName = 'EXPLOSION', count = 12, spread = 0.5, colorOverride = null) {
     const config = this.types[typeName] || this.types.EXPLOSION;
+    
+    // Respect the global particle cap
+    const currentCount = this.particles.length;
+    const remaining = Math.max(0, this.maxParticles - currentCount);
+    const actualCount = Math.min(count, remaining);
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < actualCount; i++) {
       const particle = this.getFromPool();
 
       // Randomize trajectory
@@ -59,7 +72,8 @@ export class ParticleSystem {
         (Math.random() - 0.5) * spread * 10
       );
 
-      particle.init(pos, vel, config);
+      const particleConfig = colorOverride ? { ...config, color: colorOverride } : config;
+      particle.init(pos, vel, particleConfig);
       this.particles.push(particle);
     }
   }

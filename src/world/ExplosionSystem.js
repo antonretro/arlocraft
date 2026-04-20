@@ -96,7 +96,7 @@ export class ExplosionSystem {
       uranium: 0x7dff5d,
       platinum: 0xd8e8f8,
       mythril: 0x62f1ff,
-      anton: 0xffaac9,
+      arlo: 0xffaac9,
       obsidian: 0x3b3054,
     };
     return palette[id] ?? 0xb8c0ca;

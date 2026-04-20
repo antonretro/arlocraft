@@ -1,7 +1,7 @@
-import { TOOLS as BASE_TOOLS } from '../content/items/base.js';
-import { BUCKETS } from '../content/items/buckets.js';
+import { TOOLS as BASE_TOOLS } from './items/base.js';
+import { BUCKETS } from './items/buckets.js';
 
-const packModules = import.meta.glob('../content/items/packs/*.js', {
+const packModules = import.meta.glob('./items/packs/*.js', {
   eager: true,
 });
 

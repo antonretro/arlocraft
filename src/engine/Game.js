@@ -37,9 +37,12 @@ export class Game {
   constructor() {
     console.log('[ArloCraft] Game constructor starting...');
 
+    this.settingsManager = new SettingsManager();
+    this.settings = this.settingsManager.getAll();
     this.saveSystem = new SaveSystem(this);
     this.worldSlots = new WorldSlotManager(this.saveSystem);
     this.skinSystem = new SkinSystem();
+    this.skinLoader = new SkinLoader();
     
     // Initialize UI Services First
     this.hud = new HUDCore(this);
@@ -129,7 +132,6 @@ export class Game {
     this.audio.installAutoUnlock(document);
 
     this.renderer.applyFromSettings(this.settings);
-    this.skinLoader = new SkinLoader();
 
     this.currentVersionId = 'v1.1';
     this.features = { ...FEATURES };

@@ -1,0 +1,50 @@
+<div id="hud" style="display: none;">
+    <div id="hud-headline">
+        <div id="mode-pill" class="hud-pill">SURVIVAL</div>
+        <div id="world-time-pill" class="hud-pill">DAWN</div>
+        <div id="biome-pill" class="hud-pill">PLAINS</div>
+    </div>
+
+    <div id="selected-item-readout">
+        <div id="selected-item-name">STONE x64</div>
+        <div id="selected-item-stats">Block | Hardness 2 | XP 5</div>
+    </div>
+
+    <div id="stats-bars">
+        <div id="hp-bar" class="bar-container"></div>
+        <div id="food-bar" class="bar-container"></div>
+    </div>
+
+    <div id="hotbar"></div>
+
+    <div id="xp-bar-container">
+        <div id="xp-bar"></div>
+    </div>
+
+    <div id="minimap">
+        <canvas id="minimap-canvas" width="180" height="180"></canvas>
+        <div id="minimap-caption">Minimap [M]</div>
+        <div id="minimap-context">Scanning...</div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="underwater-light"></div>
+    <div id="corruption-overlay"></div>
+    <div id="interaction-prompt" class="hidden"></div>
+
+    <div id="zone-meter" aria-live="polite">
+        <div id="zone-label">ZONE</div>
+        <div id="zone-bars">
+            <div id="zone-bar-virus"><div id="zone-fill-virus"></div></div>
+            <div id="zone-bar-arlo"><div id="zone-fill-arlo"></div></div>
+        </div>
+        <div id="zone-status">NEUTRAL</div>
+    </div>
+
+    <div id="arlo-face-widget" aria-hidden="true">
+        <img id="arlo-face-image" src="/assets/steve.png" alt="Player Face" />
+    </div>
+
+    <pre id="coords-display"></pre>
+    <div id="notification-container"></div>
+</div>

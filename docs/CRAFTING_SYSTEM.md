@@ -1,4 +1,4 @@
-# AntonCraft Crafting System
+# ArloCraft Crafting System
 
 All crafting recipes are controlled in one place:
 

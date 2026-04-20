@@ -1,7 +1,7 @@
 export class WorldSlotManager {
   constructor(saveSystem) {
     this.saveSystem = saveSystem;
-    this.slotIds = ['slot-1', 'slot-2', 'slot-3', 'slot-4', 'slot-5'];
+    this.slotIds = ['slot-1', 'slot-2', 'slot-3', 'slot-4', 'slot-5', 'slot-6'];
   }
 
   getAll() {

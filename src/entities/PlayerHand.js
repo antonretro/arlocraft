@@ -5,7 +5,7 @@ import { FOOD_VALUES } from '../engine/SurvivalSystem.js';
 import { normalizeBlockVariantId } from '../data/blockIds.js';
 
 const itemTextureModules = import.meta.glob(
-  '../Igneous 1.19.4/assets/minecraft/textures/item/*.png',
+  '../Igneous_Pack/assets/minecraft/textures/item/*.png',
   { eager: true, query: '?url' }
 );
 const ITEM_TEXTURES = new Map();
@@ -15,7 +15,7 @@ for (const [path, module] of Object.entries(itemTextureModules)) {
 }
 
 const blockTextureModules = import.meta.glob(
-  '../Igneous 1.19.4/assets/minecraft/textures/block/*.png',
+  '../Igneous_Pack/assets/minecraft/textures/block/*.png',
   { eager: true, query: '?url' }
 );
 const BLOCK_TEXTURES = new Map();
@@ -87,7 +87,7 @@ export class PlayerHand {
     this.armGeometry = new THREE.BoxGeometry(0.21, 0.63, 0.21);
     this.armGeometry.rotateX(Math.PI / 2); // Map Top (Shoulder) to Z+ and Bottom (Hand) to Z-
 
-    this.armMaterial = new THREE.MeshLambertMaterial({ color: 0x4a9eff }); // Initial Anton Blue
+    this.armMaterial = new THREE.MeshLambertMaterial({ color: 0x4a9eff }); // Initial Arlo Blue
     this.arm = new THREE.Mesh(this.armGeometry, this.armMaterial);
     this.arm.rotation.y = 0; // Point away from player
     this.arm.position.set(0, 0, 0.3); // Push forward

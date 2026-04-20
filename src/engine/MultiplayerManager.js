@@ -133,6 +133,73 @@ export class MultiplayerManager {
     });
   }
 
+  sendWorldSync(peerId) {
+    const blockMap = this.game.world.state.blockMap;
+    const blockCount = blockMap.size;
+    if (blockCount === 0) return;
+
+    // Use a palette to minimize string data
+    const palette = [];
+    const paletteMap = new Map();
+    const getPaletteIndex = (id) => {
+      let idx = paletteMap.get(id);
+      if (idx === undefined) {
+        idx = palette.length;
+        palette.push(id);
+        paletteMap.set(id, idx);
+      }
+      return idx;
+    };
+
+    // Format: [x, y, z, paletteIndex, ...]
+    const data = new Int32Array(blockCount * 4);
+    let ptr = 0;
+    for (const [key, id] of blockMap.entries()) {
+      const [x, y, z] = this.game.world.coords.keyToCoords(key);
+      data[ptr++] = x;
+      data[ptr++] = y;
+      data[ptr++] = z;
+      data[ptr++] = getPaletteIndex(id);
+    }
+
+    // Send binary sync
+    this.send(peerId, {
+      type: 'world_sync_binary',
+      data: {
+        payload: data.buffer,
+        palette: palette,
+      },
+    });
+  }
+
+  handleWorldSync(data) {
+    const { payload, palette } = data;
+    if (!payload || !palette) return;
+
+    const blocks = new Int32Array(payload);
+    const count = blocks.length / 4;
+
+    console.log(
+      `[Multiplayer] Applying binary sync for ${count} blocks...`
+    );
+
+    // Use a silent mutation pass to avoid broadcast loops
+    for (let i = 0; i < blocks.length; i += 4) {
+      const x = blocks[i];
+      const y = blocks[i + 1];
+      const z = blocks[i + 2];
+      const id = palette[blocks[i + 3]];
+
+      if (id) {
+        this.game.world.addBlock(x, y, z, id, 'sync', true, {
+          silent: true,
+        });
+      }
+    }
+
+    this.game.notifications?.add('World Synchronized', 'success');
+  }
+
   handleMessage(peerId, payload) {
     const { type, data } = payload;
 
@@ -154,8 +221,8 @@ export class MultiplayerManager {
         this.game.hud?.addChat?.(peerId, data.text);
         break;
 
-      case 'world_sync':
-        console.log('[Multiplayer] Received World Sync from host');
+      case 'world_sync_binary':
+        console.log('[Multiplayer] Received Binary World Sync from host');
         this.handleWorldSync(data);
         break;
     }
@@ -199,8 +266,6 @@ export class MultiplayerManager {
   // --- Remote Player Management ---
 
   createRemotePlayer(peerId, data) {
-    // In ArloCraft, we can use the existing Mob system or a custom Mesh
-    // For now, let's just log it. We will implement proper rendering in the next step.
     console.log('[Multiplayer] Creating sprite for', peerId);
     this.remotePlayers.set(peerId, {
       id: peerId,
@@ -208,7 +273,6 @@ export class MultiplayerManager {
       lastUpdate: Date.now(),
     });
 
-    // Trigger skin loading for remote player
     if (this.game.entities) {
       this.game.entities.spawnRemotePlayer?.(peerId, data.skinUsername);
     }
@@ -222,7 +286,6 @@ export class MultiplayerManager {
     p.rot = { yaw: data.yaw, pitch: data.pitch };
     p.lastUpdate = Date.now();
 
-    // Pass to entity manager for visual update
     if (this.game.entities) {
       this.game.entities.updateRemotePlayer?.(peerId, p.pos, p.rot);
     }
@@ -242,37 +305,5 @@ export class MultiplayerManager {
     } else {
       this.game.world.removeBlockAt(x, y, z, { silent: true });
     }
-  }
-
-  sendWorldSync(peerId) {
-    // Collect all blocks from the blockMap.
-    // For performance, we send them as a list of entries.
-    const entries = [];
-    for (const [key, id] of this.game.world.state.blockMap.entries()) {
-      const [x, y, z] = this.game.world.coords.keyToCoords(key);
-      entries.push({ x, y, z, id });
-    }
-
-    this.send(peerId, {
-      type: 'world_sync',
-      data: { blocks: entries },
-    });
-  }
-
-  handleWorldSync(data) {
-    if (!data.blocks || !Array.isArray(data.blocks)) return;
-
-    console.log(
-      `[Multiplayer] Applying sync for ${data.blocks.length} blocks...`
-    );
-
-    // Use a silent mutation pass to avoid broadcast loops
-    for (const b of data.blocks) {
-      this.game.world.addBlock(b.x, b.y, b.z, b.id, 'sync', true, {
-        silent: true,
-      });
-    }
-
-    this.game.notifications?.add('World Synchronized', 'success');
   }
 }

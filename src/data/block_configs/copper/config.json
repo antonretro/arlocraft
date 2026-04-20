@@ -1,0 +1,7 @@
+{
+  "name": "Copper Ore",
+  "textureId": "copper_ore",
+  "hardness": 3,
+  "xp": 12,
+  "color": "0xc1773b"
+}

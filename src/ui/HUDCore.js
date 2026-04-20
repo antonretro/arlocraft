@@ -18,8 +18,8 @@ export class HUDCore {
     this.refs.minimapContext = document.getElementById('minimap-context');
     this.refs.statsMini = document.getElementById('ni-stats-mini');
     this.refs.actionPrompt = document.getElementById('action-prompt');
-    this.refs.faceImage = document.getElementById('anton-face-image');
-    this.refs.previewImage = document.getElementById('anton-preview-img');
+    this.refs.faceImage = document.getElementById('arlo-face-image');
+    this.refs.previewImage = document.getElementById('arlo-preview-img');
     this.ensureActionPrompt();
   }
 
@@ -79,10 +79,7 @@ export class HUDCore {
     if (!img) return;
 
     const faces = {
-      happy: 'faces/anton_happy.png',
-      sad: 'faces/anton_sad.png',
-      surprised: 'faces/anton_surprised.png',
-      mad: 'faces/anton_mad.png',
+      happy: 'faces/arlo_happy.png',
     };
 
     const faceUrl = faces[mood] ?? faces.happy;

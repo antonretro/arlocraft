@@ -2,39 +2,19 @@ import * as THREE from 'three';
 import { MOBS } from '../data/mobs.js';
 import { TOOLS } from '../data/tools.js';
 import { MobEntity } from './MobEntity.js';
+import { HumanoidModel } from './models/HumanoidModel.js';
 import { Snowball } from './throwables/Snowball.js';
 import { Egg } from './throwables/Egg.js';
 import { EnderPearl } from './throwables/EnderPearl.js';
 
-const entityTextureModules = import.meta.glob(
-  '../Igneous 1.19.4/assets/minecraft/textures/entity/**/*.png',
-  {
-    eager: true,
-    query: '?url',
-    import: 'default',
-  }
-);
+const RESOURCE_PACK_URL = '/resource_pack/assets/minecraft/textures/entity/';
 
-const entityTextureUrls = new Map(
-  Object.entries(entityTextureModules).map(([path, url]) => {
-    // Better normalization that handles varying path prefixes
-    const searchStr = '/assets/minecraft/textures/entity/';
-    const idx = path.toLowerCase().indexOf(searchStr);
-    const normalized =
-      idx !== -1
-        ? path.substring(idx + searchStr.length).replace(/\.png$/i, '')
-        : path
-            .split('/')
-            .pop()
-            .replace(/\.png$/i, '');
+function getEntityTextureUrl(textureKey) {
+  // Direct access to the public resource pack
+  return `${RESOURCE_PACK_URL}${textureKey}.png`;
+}
 
-    return [normalized, url];
-  })
-);
-
-console.log(
-  `[ArloCraft] Entity textures loaded: ${entityTextureUrls.size} mappings created.`
-);
+console.log(`[ArloCraft] Entity Manager using static resource pack: ${RESOURCE_PACK_URL}`);
 
 function createTextureFromCanvas(canvas) {
   const texture = new THREE.CanvasTexture(canvas);
@@ -88,6 +68,7 @@ export class EntityManager {
     this.billboardTextureCache = new Map();
     this.remotePlayers = new Map(); // PeerID -> {group, parts}
     this.projectiles = [];
+    this.failedTextureUrls = new Set();
   }
 
   // --- Remote Players (Multiplayer) ---
@@ -95,51 +76,20 @@ export class EntityManager {
   spawnRemotePlayer(peerId, skinUsername) {
     if (this.remotePlayers.has(peerId)) return;
 
-    const group = new THREE.Group();
-    const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x7289a2 });
-    const darkMaterial = new THREE.MeshLambertMaterial({ color: 0x425566 });
-
-    // Simple humanoid body parts (Box Man)
-    const torso = new THREE.Mesh(
-      new THREE.BoxGeometry(0.78, 0.9, 0.38),
-      bodyMaterial
-    );
-    torso.position.set(0, 0.95, 0);
-    group.add(torso);
-
-    const legL = new THREE.Mesh(
-      new THREE.BoxGeometry(0.28, 0.75, 0.28),
-      darkMaterial
-    );
-    legL.position.set(-0.18, 0.36, 0);
-    group.add(legL);
-
-    const legR = new THREE.Mesh(
-      new THREE.BoxGeometry(0.28, 0.75, 0.28),
-      darkMaterial
-    );
-    legR.position.set(0.18, 0.36, 0);
-    group.add(legR);
-
-    const headGroup = new THREE.Group();
-    headGroup.position.set(0, 1.72, 0);
-    const head = new THREE.Mesh(
-      new THREE.BoxGeometry(0.62, 0.62, 0.62),
-      bodyMaterial
-    );
-    headGroup.add(head);
-    group.add(headGroup);
-
+    const model = new HumanoidModel();
+    const group = model.group;
+    
     this.game.renderer.scene.add(group);
-    this.remotePlayers.set(peerId, { group, headGroup });
+    this.remotePlayers.set(peerId, { group, model });
 
     // Load skin async
-    if (this.game.skinLoader && skinUsername) {
-      this.game.skinLoader
+    if (this.game.skinSystem && skinUsername) {
+      this.game.skinSystem
         .loadSkin(skinUsername)
-        .then(({ materials }) => {
-          if (torso) torso.material = materials.torso;
-          if (head) head.material = materials.head;
+        .then((texture) => {
+          if (texture) {
+            model.setTexture(texture);
+          }
         })
         .catch((e) =>
           console.warn('[Multiplayer] Failed to load skin for', peerId, e)
@@ -153,9 +103,29 @@ export class EntityManager {
     const netPlayer = this.remotePlayers.get(peerId);
     if (!netPlayer) return;
 
-    netPlayer.group.position.set(pos.x, pos.y - 0.3, pos.z);
-    netPlayer.group.rotation.y = rot.yaw + Math.PI;
-    netPlayer.headGroup.rotation.x = rot.pitch;
+    const lerpSpeed = 0.15; // Smooth movement interpolation
+    netPlayer.group.position.lerp(new THREE.Vector3(pos.x, pos.y, pos.z), lerpSpeed);
+    
+    // Smoothly rotate body toward movement direction
+    netPlayer.group.rotation.y = THREE.MathUtils.lerpAngle(
+        netPlayer.group.rotation.y,
+        rot.yaw + Math.PI,
+        lerpSpeed
+    );
+    
+    // Update head rotation separately
+    if (netPlayer.model && netPlayer.model.parts.headGroup) {
+        netPlayer.model.parts.headGroup.rotation.x = rot.pitch;
+    }
+
+    // Pass velocity to the model for walking animations
+    if (netPlayer.model) {
+        // Estimate velocity from position delta or just use a fixed "walking" status if moving
+        const velocity = new THREE.Vector3(pos.x, 0, pos.z).sub(new THREE.Vector3(netPlayer.lastX || pos.x, 0, netPlayer.lastZ || pos.z));
+        netPlayer.model.update(0.016, velocity.divideScalar(0.016));
+        netPlayer.lastX = pos.x;
+        netPlayer.lastZ = pos.z;
+    }
   }
 
   removeRemotePlayer(peerId) {
@@ -174,7 +144,7 @@ export class EntityManager {
     const entity = new MobEntity(this.game, config, x, y, z);
 
     const textureUrl = this.resolveTextureUrl(config);
-    if (textureUrl && entity.mesh) {
+    if (textureUrl && !this.failedTextureUrls.has(textureUrl) && entity.mesh) {
       this.loadEntityTexture(textureUrl, config.textureMode)
         .then((texture) => {
           if (!texture || entity.dead) return;
@@ -229,12 +199,14 @@ export class EntityManager {
     if (typeof config.texture === 'string' && config.texture)
       return config.texture;
     if (typeof config.textureKey === 'string' && config.textureKey) {
-      return entityTextureUrls.get(config.textureKey) ?? null;
+      return getEntityTextureUrl(config.textureKey);
     }
     return null;
   }
 
   loadEntityTexture(url, textureMode = 'billboard') {
+    if (this.failedTextureUrls.has(url)) return Promise.resolve(null);
+
     const cacheKey = `${textureMode}:${url}`;
     if (this.billboardTextureCache.has(cacheKey)) {
       return Promise.resolve(this.billboardTextureCache.get(cacheKey));
@@ -254,7 +226,11 @@ export class EntityManager {
           this.loadedTextureCache.set(url, tex);
           resolve(tex);
         };
-        img.onerror = reject;
+        img.onerror = (e) => {
+          console.error(`[ArloCraft] FATAL: Image load failed for URL: "${url}"`);
+          this.failedTextureUrls.add(url);
+          reject(e);
+        };
         img.src = url;
       });
     };

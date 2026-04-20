@@ -213,7 +213,7 @@ export class Chunk {
     this.group.updateMatrix();
     this.group.matrixAutoUpdate = false;
     // Disabled active culling on the group level for small cubic stability; children handle their own.
-    this.group.frustumCulled = false;
+    this.group.frustumCulled = true;
     this.world.scene.add(this.group);
 
     this.instancedMeshes = new Map(); // id -> InstancedMesh
@@ -483,8 +483,8 @@ export class Chunk {
 
     if (this.world.shouldPlaceVirus(wx, wz, terrainHeight)) {
       this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'virus');
-    } else if (this.world.shouldPlaceAnton(wx, wz, terrainHeight)) {
-      this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'anton');
+    } else if (this.world.shouldPlaceArlo(wx, wz, terrainHeight)) {
+      this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'arlo');
     }
 
     if (!inForcedSpawnZone && terrainHeight > waterLevel) {
@@ -991,7 +991,7 @@ export class Chunk {
               this.isLandSuitable(centerX, centerZ, 8)
             ) {
               const vy = this.world.getColumnHeight(centerX, centerZ) + 1;
-              this.placeVillageCluster(centerX, vy, centerZ);
+              this.placeSettlementCluster(centerX, vy, centerZ);
             }
             this.placeUnderwaterStructure(centerX, centerZ);
             this.applyPlayerOverrides();
@@ -1121,49 +1121,45 @@ export class Chunk {
       const [dx, dz] = offsets[i];
       const hx = centerX + dx;
       const hz = centerZ + dz;
-      const hy = this.world.getColumnHeight(hx, hz) + 1;
-
       const struct = structures[i % structures.length];
 
       // --- Clearance Pass: Remove terrain/vegetation in the structure footprint + 1 margin ---
+      // We clear at a generic height first to ensure a flat starting area
+      const approxGround = this.world.getColumnHeight(hx, hz);
       const sw = struct.width || 5,
         sh = (struct.height || 4) + 1,
         sd = struct.depth || 5;
+
       for (let dx = -1; dx < sw + 1; dx++) {
         for (let dz = -1; dz < sd + 1; dz++) {
-          for (let dy = 0; dy < sh; dy++) {
-            this.addGeneratedBlock(hx + dx, hy + dy, hz + dz, 'air');
+          for (let dy = 0; dy < sh + 4; dy++) {
+            // clear higher up too
+            this.addGeneratedBlock(hx + dx, approxGround + dy, hz + dz, 'air');
           }
         }
       }
 
-      const blocks = struct.blueprints(hx, hy, hz);
+      // Now calculate the REAL ground height for placement AFTER clearance
+      const hy = this.world.getColumnHeight(hx, hz) + 1;
 
-      // Foundation: Fill air gaps below the house with dirt if it's placed on uneven ground
-      const lowestYAtXZ = new Map();
-      for (const b of blocks) {
-        const xzKey = `${b.x},${b.z}`;
-        if (!lowestYAtXZ.has(xzKey) || b.y < lowestYAtXZ.get(xzKey))
-          lowestYAtXZ.set(xzKey, b.y);
-      }
-      const filler = biome.fillerBlock || 'dirt';
-      for (const [xzStr, minY] of lowestYAtXZ.entries()) {
-        const [fx, fz] = xzStr.split(',').map(Number);
-        const groundY = this.world.getColumnHeight(fx, fz);
-        for (let fy = groundY; fy < minY; fy++)
-          this.addGeneratedBlock(fx, fy, fz, filler);
-      }
+      const blocks = struct.blueprints(hx, hy, hz);
 
       for (const block of blocks)
         this.addGeneratedBlock(block.x, block.y, block.z, block.id);
 
-      this.placeLampPost(hx + 2, hy, hz + 2);
+      // Lamp posts near houses should only spawn if grounded
+      if (this.world.isSolidAt(hx + 2, hy - 1, hz + 2)) {
+        this.placeLampPost(hx + 2, hy, hz + 2);
+      }
       placed.push({ x: hx, z: hz, y: hy });
     }
 
     for (const hut of placed)
       this.placePathBetween(centerX, centerZ, hut.x, hut.z);
-    this.placeLampPost(centerX, centerY, centerZ);
+    
+    // Town center lamp post: recalculate ground height after clearing pass
+    const centerGroundY = this.world.getColumnHeight(centerX, centerZ) + 1;
+    this.placeLampPost(centerX, centerGroundY, centerZ);
 
     // Spawn specialized villagers
     if (
@@ -1176,7 +1172,7 @@ export class Chunk {
           ? 'villager_desert'
           : type === 'castle_outpost'
             ? 'knight'
-            : 'villager_anton';
+            : 'villager_arlo';
       this.world.game.entities.spawn(
         villagerType,
         centerX + 0.5,

@@ -1,5 +1,4 @@
 export const SETTLEMENT_FIRST_PARTS = [
-  'Anton',
   'Arlo',
   'Ger',
   'Stone',

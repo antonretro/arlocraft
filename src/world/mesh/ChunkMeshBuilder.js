@@ -321,9 +321,15 @@ function _rebuildChunkInstancedMeshesInner(chunk) {
     blockData,
     lodFar
   ) => {
-    const isTintable = Array.isArray(material)
-      ? material.some(isTintableMaterial)
-      : isTintableMaterial(material);
+    const isTintable = (() => {
+      if (!Array.isArray(material)) return isTintableMaterial(material);
+      if (!geometry.groups || geometry.groups.length === 0) {
+        return material.some(isTintableMaterial);
+      }
+      return geometry.groups.some((g) =>
+        isTintableMaterial(material[g.materialIndex])
+      );
+    })();
     const mesh = new THREE.InstancedMesh(geometry, material, keys.length);
     if (owned) mesh.userData.ownedMaterial = true;
     finalizeInstancedMesh(mesh, id, blockData, material);
@@ -354,13 +360,14 @@ function _rebuildChunkInstancedMeshesInner(chunk) {
 
       tempPos.set(ax - worldX, ay - worldY, az - worldZ);
 
-      // Sinking plants on path blocks
-      if (
-        isDecoType(blockData) &&
-        chunk.world.state.blockMap.get(chunk.world.getKey(ax, ay - 1, az)) ===
-          'path_block'
-      ) {
-        tempPos.y -= 0.0625; // 1/16 height
+      // Sinking plants on shortened blocks (path, farmland)
+      if (isDecoType(blockData)) {
+        const below = chunk.world.state.blockMap.get(
+          chunk.world.getKey(ax, ay - 1, az)
+        );
+        if (below === 'path_block' || below === 'dirt_path' || below === 'farmland') {
+          tempPos.y -= 0.0625; // 1/16 height
+        }
       }
       tempEuler.set(0, 0, 0);
 
@@ -375,11 +382,11 @@ function _rebuildChunkInstancedMeshesInner(chunk) {
         if (id.includes(':x')) tempEuler.z = Math.PI / 2;
         else if (id.includes(':z')) tempEuler.x = Math.PI / 2;
 
-        if (id.includes('_stairs') || id.includes('glazed_terracotta')) {
-          if (id.endsWith('_n')) tempEuler.y = Math.PI;
-          else if (id.endsWith('_e')) tempEuler.y = Math.PI / 2;
-          else if (id.endsWith('_w')) tempEuler.y = -Math.PI / 2;
-        }
+        // Cardinal Orientation (_n, _s, _w, _e suffixes)
+        if (id.includes('_n')) tempEuler.y = Math.PI;
+        else if (id.includes('_e')) tempEuler.y = Math.PI / 2;
+        else if (id.includes('_w')) tempEuler.y = -Math.PI / 2;
+        else if (id.includes('_s')) tempEuler.y = 0;
       }
 
       tempQuat.setFromEuler(tempEuler);
@@ -413,7 +420,7 @@ function _rebuildChunkInstancedMeshesInner(chunk) {
     if (isTintable) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingBox();
     mesh.computeBoundingSphere();
-    mesh.frustumCulled = false;
+    mesh.frustumCulled = true;
     const meshKey = lodFar ? `${id}_lod` : id;
     chunk.instancedMeshes.set(meshKey, mesh);
     chunk.group.add(mesh);

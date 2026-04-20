@@ -9,7 +9,9 @@ export class DayNightSystem {
     this.world = world;
     this.features = features;
     this.timeOfDay = 0.3;
-    this.dayDurationSeconds = 420;
+    this.dayDurationSeconds = 480; // 8 minutes per day
+    this.totalDays = 0;
+    this._lastTime = 0.3;
 
     this._setupSunMoonPlanes();
   }
@@ -56,8 +58,8 @@ export class DayNightSystem {
   }
 
   update(delta, getPlayerPosition) {
-    this.timeOfDay = (this.timeOfDay + delta / this.dayDurationSeconds) % 1;
-    // angle 0 = sunrise, PI/2 = noon, PI = sunset, 3PI/2 = midnight
+    // DISABLING DAY/NIGHT CYCLE FOR TESTING AS REQUESTED
+    this.timeOfDay = 0.5; // Always noon
     const angle = this.timeOfDay * Math.PI * 2 - Math.PI / 2;
     const sunHeight = Math.sin(angle);
     const sunDistance = 110;
@@ -68,7 +70,7 @@ export class DayNightSystem {
       70
     );
 
-    const daylight = Math.max(0.08, Math.min(1, sunHeight + 0.3));
+    const daylight = 1.0; // Force full daylight
     this.renderer.setDaylightLevel(daylight);
 
     const cam = this.renderer?.camera ?? this.renderer?._lastCamera;
@@ -98,7 +100,6 @@ export class DayNightSystem {
         : 0;
       this.moonPlane.visible = this.moonPlane.material.opacity > 0.01;
     }
-
     if (this.features.dynamicLighting) {
       const pos = getPlayerPosition?.();
       let depthBlend = 0;
@@ -109,5 +110,26 @@ export class DayNightSystem {
       }
       this.renderer.updateEnvironmentLighting(daylight, pos, depthBlend);
     }
+
+    // Day counter
+    if (this._lastTime > 0.8 && this.timeOfDay < 0.2) {
+      this.totalDays++;
+    }
+    this._lastTime = this.timeOfDay;
+  }
+
+  getTimeString() {
+    // 0 = 6:00 AM, 0.25 = 12:00 PM, 0.5 = 6:00 PM, 0.75 = 12:00 AM
+    const totalMinutes = (this.timeOfDay + 0.25) % 1 * 1440;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = Math.floor(totalMinutes % 60);
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const h12 = hours % 12 || 12;
+    const mStr = minutes < 10 ? `0${minutes}` : minutes;
+    return `${h12}:${mStr} ${ampm}`;
+  }
+
+  getDayNumber() {
+    return this.totalDays + 1;
   }
 }

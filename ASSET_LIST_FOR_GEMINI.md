@@ -1,4 +1,4 @@
-# AntonCraft Asset Checklist (Gemini)
+# ArloCraft Asset Checklist (Gemini)
 
 Put all assets under `public/assets/` unless path says otherwise.
 

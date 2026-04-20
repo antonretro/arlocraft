@@ -1,0 +1,364 @@
+<div id="inventory-overlay" class="ni-screen" style="display: none;">
+    <div id="inventory-card">
+        <h1 id="menuTitle">ArloCraft</h1>
+        <div id="ni-inventory-tabs">
+            <button class="ni-inv-tab active" data-tab="pack">BAG</button>
+            <button class="ni-inv-tab" data-tab="blocklog">LOG</button>
+            <button class="ni-inv-tab" data-tab="recipes">CRAFT</button>
+            <button class="ni-inv-tab" data-tab="medals">MEDALS</button>
+        </div>
+
+        <div id="ni-inventory-content">
+            <!-- BAG TAB (Standard Inventory) -->
+            <div id="tab-pack" class="ni-inv-pane active">
+                <div id="inventory-layout">
+                    <div id="inventory-section">
+                        <div class="ni-label" style="display:flex;align-items:center;justify-content:space-between;"><span><span class="label-icon">🎒</span> INVENTORY</span><button id="btn-sort-inv">SORT</button></div>
+                        <div id="inventory-grid" class="ni-grid"></div>
+                        
+                        <div class="ni-label" style="margin-top: 24px;"><span class="label-icon">⚔️</span> HOTBAR</div>
+                        <div id="hotbar-grid" class="ni-grid"></div>
+                    </div>
+
+                    <div id="arlo-preview-section">
+                         <div class="ni-label">PLAYER</div>
+                         <div id="arlo-preview-card">
+                             <div id="arlo-preview-viewport">
+                                 <img id="arlo-preview-img" src="https://minotar.net/helm/MHF_Steve/128.png" alt="Steve">
+                             </div>
+                         </div>
+                         <div id="ni-stats-mini">
+                             <div class="mini-stat">HP 20/20</div>
+                             <div class="mini-stat">XP Lvl. 0</div>
+                         </div>
+                    </div>
+
+                    <div id="crafting-separator"></div>
+
+                    <div id="crafting-section">
+                        <div class="ni-label"><span class="label-icon">🔨</span> CRAFTING</div>
+                        <div id="crafting-container">
+                            <div id="crafting-grid" class="ni-grid-2x2"></div>
+                            <div id="crafting-arrow">➜</div>
+                            <div id="crafting-result-slot">
+                                <div id="crafting-result" class="slot large"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LOG TAB (Discovery / Creative Inventory) -->
+            <div id="tab-blocklog" class="ni-inv-pane">
+                <div id="creative-controls">
+                    <div class="creative-search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="creative-search" placeholder="Search blocks..." autocomplete="off">
+                    </div>
+                    <div id="creative-categories">
+                        <button class="cat-btn active" data-cat="all">All</button>
+                        <button class="cat-btn" data-cat="building">Build</button>
+                        <button class="cat-btn" data-cat="nature">Nature</button>
+                        <button class="cat-btn" data-cat="utility">Utility</button>
+                        <button class="cat-btn" data-cat="redstone">Logic</button>
+                    </div>
+                </div>
+                <div id="blocklog-grid"></div>
+            </div>
+            <div id="tab-recipes" class="ni-inv-pane">
+                <div id="recipe-list"></div>
+            </div>
+            <div id="tab-medals" class="ni-inv-pane">
+                <div id="medals-grid"></div>
+            </div>
+        </div>
+
+        <div class="ni-inventory-footer">
+            <div id="inventory-hint">CLICK TO MOVE ITEMS • [E] TO CLOSE</div>
+            <button id="btn-inventory-close">CLOSE</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════ CRAFTING TABLE OVERLAY ═══════════════════ -->
+<div id="crafting-table-overlay" style="display: none;">
+    <div class="bh-container">
+        <div class="bh-header">
+            <h2>Crafting Table</h2>
+            <button class="btn" onclick="document.getElementById('crafting-table-overlay').style.display='none'">Close [E]</button>
+        </div>
+        <div class="bh-body ct-body">
+            <section class="bh-section ct-craft-section">
+                <h3>Crafting (3x3)</h3>
+                <div id="ct-crafting-grid" class="grid-3x3"></div>
+                <div class="bh-arrow">Craft -></div>
+                <div id="ct-result-slot" class="slot large"></div>
+            </section>
+            <section class="bh-section ct-inv-section">
+                <h3>Inventory</h3>
+                <div id="ct-player-main" class="grid-9x3"></div>
+                <h3>Hotbar</h3>
+                <div id="ct-player-hotbar" class="grid-9x1"></div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════ CHEST OVERLAY ═══════════════════ -->
+<div id="chest-overlay" style="display: none;">
+    <div class="bh-container">
+        <div class="bh-header">
+            <h2>Chest</h2>
+            <button class="btn" onclick="document.getElementById('chest-overlay').style.display='none'">Close [E]</button>
+        </div>
+        <div class="bh-body">
+            <section class="bh-section">
+                <h3>Chest (9x3)</h3>
+                <div id="chest-grid" class="grid-9x3"></div>
+            </section>
+            <section class="bh-section">
+                <h3>Inventory</h3>
+                <div id="chest-player-main" class="grid-9x3"></div>
+                <h3>Hotbar</h3>
+                <div id="chest-player-hotbar" class="grid-9x1"></div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════ FURNACE OVERLAY ═══════════════════ -->
+<div id="furnace-overlay" style="display: none;">
+    <div class="bh-container bh-container-sm">
+        <div class="bh-header">
+            <h2>Furnace</h2>
+            <button class="btn" onclick="document.getElementById('furnace-overlay').style.display='none'">Close [E]</button>
+        </div>
+        <div class="bh-body">
+            <section class="bh-section furnace-section">
+                <div class="furnace-ui">
+                    <div class="furnace-slots">
+                        <div class="furnace-slot-group">
+                            <div class="furnace-slot-label">Input</div>
+                            <div id="furnace-input-slot" class="slot furnace-slot" title="Place smeltable item here (click with selected item)"></div>
+                        </div>
+                        <div class="furnace-middle">
+                            <div id="furnace-flame" class="furnace-flame" title="Burning"></div>
+                            <div class="furnace-progress-track" title="Smelting progress">
+                                <div id="furnace-progress-bar" class="furnace-progress-bar"></div>
+                            </div>
+                        </div>
+                        <div class="furnace-slot-group">
+                            <div class="furnace-slot-label">Output</div>
+                            <div id="furnace-output-slot" class="slot furnace-slot" title="Click to collect output"></div>
+                        </div>
+                    </div>
+                    <div class="furnace-fuel-row">
+                        <div class="furnace-slot-label">Fuel</div>
+                        <div id="furnace-fuel-slot" class="slot furnace-slot" title="Place fuel here (coal, charcoal, wood)"></div>
+                    </div>
+                    <div class="furnace-hint">Click a furnace slot with a selected hotbar item to load it. Click output to collect.</div>
+                </div>
+            </section>
+            <section class="bh-section">
+                <h3>Inventory</h3>
+                <div id="furnace-player-main" class="grid-9x3"></div>
+                <h3>Hotbar</h3>
+                <div id="furnace-player-hotbar" class="grid-9x1"></div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<div id="pause-overlay" class="ni-screen ni-glass" style="display: none;">
+    <div id="ni-pause-container">
+        <div id="ni-pause-sidebar">
+            <div class="ni-pause-user">
+                <div id="pause-avatar-container" class="ni-avatar-container">
+                    <canvas id="pause-avatar-head" width="64" height="64"></canvas>
+                </div>
+                <div class="ni-pause-info">
+                    <span class="ni-username">PLAYER</span>
+                    <span class="ni-pause-status">Exploring...</span>
+                </div>
+            </div>
+            
+            <nav class="ni-pause-nav">
+                <button id="btn-resume" class="ni-pause-btn">
+                    <span class="ni-pause-icon">▶</span> Resume
+                </button>
+                <button id="btn-pause-multiplayer" class="ni-pause-btn">
+                    <span class="ni-pause-icon">🌐</span> Multiplayer
+                </button>
+                <button id="btn-pause-settings" class="ni-pause-btn">
+                    <span class="ni-pause-icon">⚙</span> Options
+                </button>
+                <button id="btn-pause-skins" class="ni-pause-btn">
+                    <span class="ni-pause-icon">👥</span> Skins
+                </button>
+                <button id="btn-back-title" class="ni-pause-btn">
+                    <span class="ni-pause-icon">🏠</span> Save & Quit
+                </button>
+            </nav>
+
+        <div id="ni-pause-details">
+            <div class="ni-pause-dashboard">
+                <!-- Column 1: World Info -->
+                <div class="ni-dash-tile">
+                    <span class="tile-label">MODE</span>
+                    <span id="pause-world-mode" class="tile-val">--</span>
+                </div>
+                <div class="ni-dash-tile">
+                    <span class="tile-label">BIOME</span>
+                    <span id="pause-world-biome" class="tile-val">--</span>
+                </div>
+                <div class="ni-dash-tile">
+                    <span class="tile-label">REGION</span>
+                    <span id="pause-world-region" class="tile-val">--</span>
+                </div>
+
+                <!-- Column 2: Time & Seed -->
+                <div class="ni-dash-tile">
+                    <span class="tile-label">TIME</span>
+                    <span id="pause-world-time" class="tile-val">--</span>
+                </div>
+                <div class="ni-dash-tile">
+                    <span class="tile-label">WORLD DAY</span>
+                    <span id="pause-world-day" class="tile-val">Day 1</span>
+                </div>
+                <div class="ni-dash-tile">
+                    <span class="tile-label">WORLD SEED</span>
+                    <span id="pause-world-seed" class="tile-val">--</span>
+                </div>
+
+                <!-- Span: Coordinates & Join Code -->
+                <div class="ni-dash-tile span-2">
+                    <span class="tile-label">LOCATION (X, Y, Z)</span>
+                    <span id="pause-world-coords" class="tile-val">--</span>
+                </div>
+                <div class="ni-dash-tile ni-dash-action" id="tile-join-code">
+                    <div class="action-top">
+                        <span class="tile-label">JOIN CODE</span>
+                        <button id="btn-pause-copy-id" class="ni-btn-copy">COPY</button>
+                    </div>
+                    <span id="pause-my-id" class="tile-val highlight">--</span>
+                </div>
+            </div>
+            <div id="ni-pause-hint">Tip: Share your Join Code to explore with friends!</div>
+        </div>
+    </div>
+</div>
+
+<div id="settings-panel" class="ni-screen ni-glass" style="display: none;">
+    <div id="ni-settings-container">
+        <div id="ni-settings-sidebar">
+            <div class="ni-settings-header">
+                <h2 class="ni-settings-title">Options</h2>
+            </div>
+            <div class="ni-settings-tabs">
+                <button class="ni-tab-link active" data-tab="tab-general">General</button>
+                <button class="ni-tab-link" data-tab="tab-video">Graphics</button>
+                <button class="ni-tab-link" data-tab="tab-persistence">System</button>
+            </div>
+            <button class="ni-btn ni-btn-red" id="btn-settings-close">Close</button>
+        </div>
+
+        <div id="ni-settings-content">
+            <!-- GENERAL TAB -->
+            <div class="ni-tab-pane active" id="tab-general">
+                <h3 class="ni-tab-heading">Controls</h3>
+                <div class="ni-settings-grid">
+                    <div class="ni-setting-box">
+                        <label class="ni-label">Sensitivity</label>
+                        <input id="setting-sensitivity" type="range" min="0.0001" max="0.005" step="0.00005" />
+                        <span id="setting-sensitivity-value" class="ni-val">0.00145</span>
+                    </div>
+                    <div class="ni-setting-box">
+                        <label class="ni-label">Invert Y Axis</label>
+                        <input id="setting-invert-y" type="checkbox" class="ni-check" />
+                    </div>
+                    <div class="ni-setting-box">
+                        <label class="ni-label">Auto Jump</label>
+                        <input id="setting-auto-jump" type="checkbox" class="ni-check" />
+                    </div>
+                    <div class="ni-setting-box full-width">
+                        <label class="ni-label">Minecraft Skin (Username)</label>
+                        <div class="ni-input-row" style="margin-top: 8px;">
+                            <input id="world-name-input" type="text" placeholder="Minecraft ID..." class="ni-input-modern" />
+                            <button class="ni-btn ni-btn-sm" id="btn-update-skin">Apply</button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="ni-tab-heading" style="margin-top: 18px;">Audio</h3>
+                <div class="ni-settings-grid">
+                    <div class="ni-setting-box">
+                        <label class="ni-label">Mute Audio</label>
+                        <input id="setting-audio-muted" type="checkbox" class="ni-check" />
+                    </div>
+                    <div class="ni-setting-box">
+                        <label class="ni-label">Master Volume</label>
+                        <input id="setting-audio-master" type="range" min="0" max="1" step="0.01" />
+                        <span id="setting-audio-master-value" class="ni-val">80%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIDEO TAB -->
+            <div class="ni-tab-pane" id="tab-video">
+                <h3 class="ni-tab-heading">Graphics</h3>
+                <div class="ni-settings-grid">
+                    <div class="ni-setting-box full-width">
+                        <label class="ni-label">Graphics API (Requires Reload)</label>
+                        <select id="setting-graphics-api" class="ni-input-modern" style="width:100%;margin-top:6px;">
+                            <option value="webgl2">WebGL2 (Stability Mode)</option>
+                            <option value="webgpu">WebGPU (Experimental)</option>
+                        </select>
+                    </div>
+                    <div class="ni-setting-box">
+                        <label class="ni-label">Render Distance</label>
+                        <input id="setting-render-distance" type="range" min="1" max="12" step="1" />
+                        <span id="setting-render-distance-value" class="ni-val">4</span>
+                    </div>
+                    <div class="ni-setting-box">
+                        <label class="ni-label">Fog Density</label>
+                        <input id="setting-fog" type="range" min="0" max="2" step="0.1" />
+                        <span id="setting-fog-value" class="ni-val">1.0</span>
+                    </div>
+                    <div class="ni-setting-box">
+                        <label class="ni-label">Resolution Scale (HD)</label>
+                        <input id="setting-resolution" type="range" min="0.5" max="2.0" step="0.1" />
+                        <span id="setting-resolution-value" class="ni-val">1.0x</span>
+                    </div>
+                    <div class="ni-setting-box">
+                        <label class="ni-label">FPS Cap</label>
+                        <select id="setting-fps-cap" class="ni-input-modern" style="margin-top:6px;">
+                            <option value="30">30 FPS</option>
+                            <option value="60" selected>60 FPS</option>
+                            <option value="120">120 FPS</option>
+                            <option value="999">Uncapped</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SYSTEM TAB -->
+            <div class="ni-tab-pane" id="tab-persistence">
+                <h3 class="ni-tab-heading">System</h3>
+                <div class="ni-settings-grid">
+                    <div class="ni-setting-box full-width">
+                        <label class="ni-label">World Management</label>
+                        <div class="ni-btn-group" style="margin-top:8px;">
+                            <button class="ni-btn ni-btn-sm" id="btn-export-save">Export Save</button>
+                            <button class="ni-btn ni-btn-sm ni-btn-red" id="btn-reset-settings">Reset Settings</button>
+                        </div>
+                    </div>
+                    <div class="ni-setting-box">
+                        <label class="ni-label">Perf Overlay</label>
+                        <input id="setting-perf-panel" type="checkbox" class="ni-check" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="settings-status" class="ni-status-bar">Ready</div>
+</div>

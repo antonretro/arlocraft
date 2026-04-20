@@ -1,7 +1,17 @@
 import * as THREE from 'three';
 
+import { CowModel } from './models/CowModel.js';
+import { PigModel } from './models/PigModel.js';
+import { SheepModel } from './models/SheepModel.js';
+import { ChickenModel } from './models/ChickenModel.js';
+import { ZombieModel } from './models/ZombieModel.js';
+import { CreeperModel } from './models/CreeperModel.js';
+import { SkeletonModel } from './models/SkeletonModel.js';
+import { HumanoidModel } from './models/HumanoidModel.js';
+import { VillagerModel } from './models/VillagerModel.js';
+
 /**
- * Generic Mob Entity using high-performance 2D Billboards (Flat PNGs).
+ * Generic Mob Entity. Now supports high-fidelity 3D Voxel Models or legacy Billboards.
  * Handles movement, simple AI, and combat.
  */
 export class MobEntity {
@@ -12,22 +22,29 @@ export class MobEntity {
     this.maxHp = this.hp;
     this.dead = false;
 
+    // --- High-Fidelity 3D Model Selection ---
+    this.model = this.createModelById(config.id);
     const size = config.boss ? 4.5 : config.heavy ? 2.2 : 1.2;
-    this.geometry = new THREE.PlaneGeometry(size, size);
 
-    // Use color-based placeholder if texture isn't ready
-    const color = this.getMobColor(config.id);
-    this.material = new THREE.MeshBasicMaterial({
-      color: color,
-      side: THREE.DoubleSide,
-      transparent: true,
-      alphaTest: 0.5,
-    });
-    this.baseColor = new THREE.Color(color);
+    if (this.model) {
+      this.mesh = this.model.group;
+      this.material = this.model.material;
+    } else {
+      // Legacy Billboard Fallback
+      this.geometry = new THREE.PlaneGeometry(size, size);
+      const color = this.getMobColor(config.id);
+      this.material = new THREE.MeshBasicMaterial({
+        color: color,
+        side: THREE.DoubleSide,
+        transparent: true,
+        alphaTest: 0.5,
+      });
+      this.mesh = new THREE.Mesh(this.geometry, this.material);
+    }
 
-    this.mesh = new THREE.Mesh(this.geometry, this.material);
     this.mesh.position.set(x, y + size / 2, z);
     this.mesh.userData.entity = this;
+    this.baseColor = new THREE.Color(this.getMobColor(config.id));
     this.hitboxHalf = new THREE.Vector3(
       Math.max(0.38, size * 0.38),
       Math.max(0.6, size * 0.5),
@@ -50,10 +67,43 @@ export class MobEntity {
 
   applyTexture(texture) {
     if (!texture || !this.material) return;
-    this.material.map = texture;
+    if (this.model) {
+      this.model.setTexture(texture);
+    } else {
+      this.material.map = texture;
+    }
     this.baseColor.setHex(0xffffff);
     this.material.color.copy(this.baseColor);
     this.material.needsUpdate = true;
+  }
+
+  createModelById(id) {
+    switch (id) {
+      case 'cow':
+        return new CowModel();
+      case 'pig':
+        return new PigModel();
+      case 'sheep':
+        return new SheepModel();
+      case 'chicken':
+        return new ChickenModel();
+      case 'virus_grunt':
+      case 'sand_worm':
+      case 'arlo_evil':
+        return new ZombieModel();
+      case 'bit_spitter':
+        return new SkeletonModel();
+      case 'creeper':
+        return new CreeperModel();
+      case 'villager':
+      case 'villager_arlo':
+        return new VillagerModel();
+      case 'arlo_bot':
+      case 'prof_apple':
+        return new HumanoidModel();
+      default:
+        return null; // Fallback to billboard
+    }
   }
 
   canOccupyAt(x, y, z) {
@@ -133,8 +183,8 @@ export class MobEntity {
     const colors = {
       virus_grunt: 0x9c27b0,
       bit_spitter: 0x673ab7,
-      anton_evil: 0xff0000,
-      anton_ai: 0x00ffff,
+      arlo_evil: 0xff0000,
+      arlo_ai: 0x00ffff,
       prof_apple: 0xffffff,
       super_ball: 0x3f51b5,
       friendly_nugget: 0x795548,
@@ -210,13 +260,27 @@ export class MobEntity {
       this.checkMergeEvolution();
     }
 
-    // Billboarding: Face the camera
     const cam = this.game.camera.instance;
-    this.mesh.lookAt(cam.position.x, this.mesh.position.y, cam.position.z);
-
-    this.timer -= delta;
     const playerPos = cam.position;
     const distToPlayer = this.mesh.position.distanceTo(playerPos);
+
+    // Billboarding: Face the camera (Only for legacy 2D legacy mobs if any remain)
+    if (!this.model) {
+      this.mesh.lookAt(cam.position.x, this.mesh.position.y, cam.position.z);
+    } else {
+      // 3D Models: Face movement direction
+      if (this.moveVelocity.lengthSq() > 0.001) {
+        const targetAngle = Math.atan2(this.moveVelocity.x, this.moveVelocity.z);
+        this.mesh.rotation.y = THREE.MathUtils.lerpAngle(
+          this.mesh.rotation.y,
+          targetAngle,
+          Math.min(1, delta * 10)
+        );
+      }
+      this.model.update(delta, this.moveVelocity, this.dead);
+    }
+
+    this.timer -= delta;
     const isHostile = !this.config.friendly;
     const canUseWater = Boolean(
       this.config.aquatic || this.config.canSwim || isHostile

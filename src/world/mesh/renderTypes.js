@@ -29,7 +29,9 @@ export function resolveChunkGeometry(world, id, blockData) {
   }
   if (id === 'grass_block_top') return geo.grass_block_top ?? geo.solid;
   if (id === 'grass_block_sides') return geo.solid_no_top ?? geo.solid;
-  if (id === 'path_block') return geo.path ?? geo.solid;
+  if (id === 'path_block' || id === 'dirt_path') return geo.path ?? geo.solid;
+  if (id === 'farmland') return geo.farmland ?? geo.solid;
+  if (id === 'cake') return geo.cake ?? geo.solid;
   if (blockData?.renderType === 'flat' || blockData?.flat)
     return geo.flat ?? geo.deco ?? geo.solid;
   if (

@@ -1,22 +1,14 @@
 import { defineConfig } from 'vite';
-import { fileURLToPath, URL } from 'node:url';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  base: './',
-  resolve: {
-    alias: [
-      {
-        find: /^three$/,
-        replacement: fileURLToPath(
-          new URL('./src/vendor/three-webgpu-shim.js', import.meta.url)
-        ),
-      },
-    ],
-  },
-  optimizeDeps: {
-    exclude: ['three', 'three-mesh-bvh'],
-  },
+  plugins: [react()],
   build: {
-    chunkSizeWarningLimit: 1200,
+    outDir: 'dist',
+    emptyOutDir: true,
   },
+  server: {
+    port: 5173,
+    open: true,
+  }
 });

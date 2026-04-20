@@ -21,7 +21,7 @@ export class WorldMutationService {
     if (
       !allowCorruption &&
       !this.world.corruptionEnabled &&
-      (id === 'virus' || id === 'anton')
+      (id === 'virus' || id === 'arlo')
     )
       return null;
 
@@ -63,7 +63,7 @@ export class WorldMutationService {
 
     this.world.chunkManager.updateNeighborsDirty(gx, gy, gz);
 
-    if (id === 'virus' || id === 'anton') {
+    if (id === 'virus' || id === 'arlo') {
       const radius = this.world.config.virus?.influenceRadiusBlocks ?? 3;
       this.world.chunkManager.markChunksWithinBlockRadiusDirty(
         gx,
@@ -75,7 +75,8 @@ export class WorldMutationService {
     }
 
     if (id === 'water' || id === 'lava') {
-      this.world.fluids?.scheduleSpread(gx, gy, gz, id, 0);
+      const initialDepth = options.fluidDepth !== undefined ? options.fluidDepth : 0;
+      this.world.fluids?.scheduleSpread(gx, gy, gz, id, initialDepth);
     }
 
     this.world.gravity?.onBlockChanged(gx, gy, gz, 'add');
@@ -119,14 +120,27 @@ export class WorldMutationService {
     this.world.chunkManager.updateNeighborsDirty(x, y, z);
 
     // Spawn breaking particles
+    const blockConfig = this.world.game?.blockRegistry?.blocks?.get(id);
+    let particleColor = blockConfig?.color ? parseInt(blockConfig.color) : 0x888888;
+    
+    // Fallback for stained glass colors if not in config
+    if (id.includes('stained_glass')) {
+      const colorKey = id.split('_').pop();
+      const registry = this.world.game?.blockRegistry;
+      if (registry && registry.stainedGlassColors && registry.stainedGlassColors[colorKey]) {
+        particleColor = registry.stainedGlassColors[colorKey];
+      }
+    }
+
     this.world.game?.particles?.spawnBurst(
       new THREE.Vector3(x, y, z),
-      'SMOKE',
-      6,
-      0.1
+      'DEBRIS',
+      8,
+      0.15,
+      particleColor
     );
 
-    if (id === 'virus' || id === 'anton') {
+    if (id === 'virus' || id === 'arlo') {
       const radius = this.world.config.virus?.influenceRadiusBlocks ?? 3;
       this.world.chunkManager.markChunksWithinBlockRadiusDirty(
         x,

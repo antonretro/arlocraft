@@ -79,6 +79,7 @@ export class World {
 
     // 1. Chunk Management
     this.chunkManager.update(playerPos, delta);
+    this.gravity.update();
     this.fluids.update(performance.now());
 
     // 2. Visuals & Animations
@@ -285,8 +286,8 @@ export class World {
   shouldPlaceVirus(x, z, h) {
     return this.terrain.shouldPlaceVirus(x, z, h);
   }
-  shouldPlaceAnton(x, z, h) {
-    return this.terrain.shouldPlaceAnton(x, z, h);
+  shouldPlaceArlo(x, z, h) {
+    return this.terrain.shouldPlaceArlo(x, z, h);
   }
   shouldPlaceVillageChunk(cx, cz) {
     return this.terrain.shouldPlaceVillageChunk(cx, cz);
@@ -334,8 +335,11 @@ export class World {
     this.chunkManager.clearAll();
     this.objects = [];
     this.state.blockMap.clear();
+    this.state.changedBlocks.clear();
     this.state.blockOwners.clear();
     this.state.landmarks.clear();
+    this.state.openedChestKeys.clear();
+    this.state.restoredLandmarks.clear();
     this.state.terrainHeightCache.clear();
     this.state.biomeCache.clear();
     this.resetMiningProgress();
@@ -578,6 +582,44 @@ export class World {
     if (existingId && !this.isReplaceableForPlacement(existingId)) return false;
     if (blockData?.deco && this.getBlockData(existingId)?.deco) return false;
     let finalId = blockId;
+
+    // ORIENTATION LOGIC: Some blocks should face the player when placed.
+    const orientable = [
+      'furnace',
+      'chest',
+      'starter_chest',
+      'crafting_table',
+      'beehive',
+      'barrel',
+      'dispenser',
+      'dropper',
+      'observer',
+      'piston',
+      'sticky_piston',
+      'stonecutter',
+      'loom',
+      'cartography_table',
+      'grindstone',
+      'smithing_table',
+      'fletching_table',
+      'composter',
+    ];
+
+    if (orientable.includes(blockId)) {
+      const yaw = this.game?.viewYaw ?? 0;
+      // Map yaw to cardinal direction (0 is North/South depending on engine coord system)
+      // Standard: 0 = -Z (North), PI/2 = -X (West), PI = +Z (South), 3PI/2 = +X (East)
+      const absYaw = ((yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      let dir = 's';
+      if (absYaw < Math.PI / 4 || absYaw >= (7 * Math.PI) / 4) dir = 'n';
+      else if (absYaw >= Math.PI / 4 && absYaw < (3 * Math.PI) / 4) dir = 'w';
+      else if (absYaw >= (3 * Math.PI) / 4 && absYaw < (5 * Math.PI) / 4)
+        dir = 's';
+      else if (absYaw >= (5 * Math.PI) / 4 && absYaw < (7 * Math.PI) / 4)
+        dir = 'e';
+
+      finalId = `${blockId}_${dir}`;
+    }
 
     // Plant placement restrictions (only on soil/path)
     if (
@@ -867,23 +909,28 @@ export class World {
         return true;
       }
     }
-    if (blockId === 'starter_chest' || blockId === 'chest') {
+    const isChest = blockId === 'starter_chest' || blockId === 'chest' || blockId.startsWith('chest:');
+    if (isChest) {
       const chestKey = this.getKey(cell.x, cell.y, cell.z);
       if (!this.state.openedChestKeys.has(chestKey)) {
         this.state.openedChestKeys.add(chestKey);
 
-        // Determine loot table based on biome or structure context
-        const biomeId = this.getBiomeIdAt(cell.x, cell.z);
+        // Determine loot table: prioritize block ID tag, then fallback to context
         let tableId = 'common_village';
-        if (biomeId === 'desert') tableId = 'desert_loot';
-        if (this.getColumnHeight(cell.x, cell.z) > 100) tableId = 'castle_loot'; // High altitude/Castle context
+        if (blockId.includes(':')) {
+           tableId = blockId.split(':').pop();
+        } else {
+           const biomeId = this.getBiomeIdAt(cell.x, cell.z);
+           if (biomeId === 'desert') tableId = 'desert_loot';
+           if (this.getColumnHeight(cell.x, cell.z) > 100) tableId = 'castle_loot';
+        }
 
         const loot = rollLoot(tableId, 4);
         this.game?.state.grantLootRoll(loot);
 
         window.dispatchEvent(
           new CustomEvent('action-prompt', {
-            detail: { type: 'LOOT DISCOVERED: ' + tableId.toUpperCase() },
+            detail: { type: 'LOOT DISCOVERED: ' + tableId.toUpperCase().replace('_', ' ') },
           })
         );
         window.dispatchEvent(new CustomEvent('action-success'));
@@ -934,14 +981,14 @@ export class World {
 
   getAreaInfluence(position) {
     if (!this.corruptionEnabled)
-      return { x: 0, y: 0, z: 0, virus: 0, anton: 0 };
-    if (!position) return { x: 0, y: 0, z: 0, virus: 0, anton: 0 };
+      return { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+    if (!position) return { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
     const px = Math.round(position.x),
       py = Math.round(position.y),
       pz = Math.round(position.z);
     const radius = 3;
     let virusHits = 0,
-      antonHits = 0,
+      arloHits = 0,
       samples = 0;
     for (let dx = -radius; dx <= radius; dx += 2) {
       for (let dz = -radius; dz <= radius; dz += 2) {
@@ -952,7 +999,7 @@ export class World {
           if (!id) continue;
           samples++;
           if (id === 'virus') virusHits++;
-          else if (id === 'anton') antonHits++;
+          else if (id === 'arlo') arloHits++;
         }
       }
     }
@@ -962,7 +1009,7 @@ export class World {
       y: py,
       z: pz,
       virus: Math.min(1, virusHits / Math.max(16, base * 0.9)),
-      anton: Math.min(1, antonHits / Math.max(4, base * 0.3)),
+      arlo: Math.min(1, arloHits / Math.max(4, base * 0.3)),
     };
   }
 }

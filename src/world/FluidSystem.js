@@ -107,7 +107,9 @@ export class FluidSystem {
       y > this.world.minTerrainY &&
       (!downId || downId === 'air' || (downId !== id && this.isLiquid(downId)))
     ) {
-      this.placeFluid(x, y - 1, z, id, depth); // Moving down resets horizontal spread potential in Minecraft, but here we keep depth for simplicity or reset to 0 for vertical
+      // Priority 1: Vertical FALLING
+      // In Minecraft, falling fluid resets its spread potential once it hits a floor
+      this.placeFluid(x, y - 1, z, id, 0); 
       return;
     }
 
@@ -142,7 +144,7 @@ export class FluidSystem {
     const cz = this.world.coords.getChunkCoord(z);
     const ownerKey = this.world.coords.getChunkKey(cx, cy, cz);
 
-    this.world.mutations.addBlock(x, y, z, id, ownerKey, true);
+    this.world.mutations.addBlock(x, y, z, id, ownerKey, true, { fluidDepth: depth });
     this.scheduleSpread(x, y, z, id, depth);
   }
 }

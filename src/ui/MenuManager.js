@@ -1,3 +1,5 @@
+import packIcon from '../Igneous 1.19.4/pack.png?url';
+
 /**
  * MenuManager — handles navigation between the title, world-select,
  * and world-create screens. Instantiated by Game after setupUI().
@@ -7,6 +9,12 @@ export class MenuManager {
     this.game = game;
     this.current = 'screen-title';
     this._wire();
+    this._initPackDisplay();
+  }
+
+  _initPackDisplay() {
+    const el = document.getElementById('selected-pack-icon');
+    if (el) el.src = packIcon;
   }
 
   /** Show one of the three overlay sub-screens. */
@@ -15,6 +23,9 @@ export class MenuManager {
       'screen-title',
       'screen-world-select',
       'screen-world-create',
+      'screen-multiplayer',
+      'screen-skins',
+      'screen-texture-packs',
     ];
     for (const sid of screens) {
       const el = document.getElementById(sid);
@@ -38,6 +49,23 @@ export class MenuManager {
 
     // Title → Settings (uses existing showSettings)
     on('btn-to-settings', () => this.game.showSettings(true));
+
+    // Title → Multiplayer
+    on('btn-to-multiplayer', () => {
+      this.show('screen-multiplayer');
+      this.game.multiplayer?.init();
+    });
+
+    // Title → Skins
+    on('btn-to-skins', () => {
+      this.game.ui.renderSkinLibrary();
+      this.show('screen-skins');
+    });
+
+    // Title → Texture Packs
+    on('btn-to-packs', () => {
+      this.show('screen-texture-packs');
+    });
 
     // World Select → Back
     on('btn-worlds-back', () => this.show('screen-title'));
@@ -80,6 +108,22 @@ export class MenuManager {
 
     // World Create → Back
     on('btn-create-back', () => this.show('screen-world-select'));
+
+    // Multiplayer → Back
+    on('btn-multi-back-top', () => this.show('screen-title'));
+    on('btn-multi-back', () => this.show('screen-title'));
+
+    // Skins → Back
+    on('btn-skins-back-top', () => this.show('screen-title'));
+    on('btn-skins-back', () => this.show('screen-title'));
+
+    // Texture Packs → Back
+    on('btn-packs-back-top', () => this.show('screen-title'));
+    on('btn-packs-back', () => this.show('screen-title'));
+    on('btn-apply-pack', () => {
+      this.game.setStatus('Assets Applied Successfully', false);
+      this.show('screen-title');
+    });
   }
 
   _updateSlotLabel() {

@@ -1,4 +1,4 @@
-# AntonCraft — Known Issues & Fix List
+# ArloCraft — Known Issues & Fix List
 
 ## 🔴 Critical Bugs
 
@@ -37,7 +37,7 @@
 ### 5. Player Skin Head Not Showing in HUD Avatar
 
 - **File:** `src/engine/Game.js` → `updatePlayerSkin()`
-- **Issue:** The top-left avatar (`#anton-face-image`) loads from Crafatar only when a username is set. The default (no username) still shows `arlo_real.png`.
+- **Issue:** The top-left avatar (`#arlo-face-image`) loads from Crafatar only when a username is set. The default (no username) still shows `arlo_real.png`.
 - **Fix:** After skin loads, use the skin's head face canvas from `SkinLoader.createMaterials()` and render it to the HUD image element, or always try Crafatar with the stored `skinUsername`.
 
 ### 6. 3rd-Person Camera — Front Mode Broken

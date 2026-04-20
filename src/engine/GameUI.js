@@ -32,25 +32,105 @@ export class GameUI {
     const overlay = this.get('overlay');
     if (!overlay) return;
     overlay.style.display = visible ? 'flex' : 'none';
+    this.showHUD(!visible); // Hide HUD elements in menus
   }
 
   showHUD(visible) {
     const hud = this.get('hud');
     const minimap = this.get('minimap');
     if (hud) hud.style.display = visible ? 'flex' : 'none';
-    if (minimap) minimap.style.display = visible ? 'block' : 'none';
+    if (minimap) {
+      minimap.style.display = visible ? 'block' : 'none';
+      // Ensure visibility is also driven to prevent opacity-based ghosts
+      minimap.style.visibility = visible ? 'visible' : 'hidden';
+    }
   }
 
   showPause(visible) {
     const pause = this.get('pause-overlay');
     if (!pause) return;
     pause.style.display = visible ? 'flex' : 'none';
+
+    if (visible) {
+      this.updatePauseJoinCode();
+      this.updatePauseDetails();
+      this.updatePauseAvatar();
+    }
+  }
+
+  updatePauseAvatar() {
+    const canvas = this.get('pause-avatar-head');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const skinImg = this.game.skinSystem.currentSkinImage;
+
+    if (!skinImg) {
+      // Fallback: Gray silhoutte
+      ctx.fillStyle = '#334455';
+      ctx.fillRect(0, 0, 64, 64);
+      return;
+    }
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, 64, 64);
+    
+    // Minecraft Skin Head (Front): 8,8 to 16,16
+    ctx.drawImage(skinImg, 8, 8, 8, 8, 0, 0, 64, 64);
+    
+    // Minecraft Skin Overlay (Front): 40,8 to 48,16
+    ctx.drawImage(skinImg, 40, 8, 8, 8, 0, 0, 64, 64);
+  }
+
+  updatePauseDetails() {
+    const elMode = this.get('pause-world-mode');
+    const elSeed = this.get('pause-world-seed');
+    const elCoords = this.get('pause-world-coords');
+    const elRegion = this.get('pause-world-region');
+    const elBiome = this.get('pause-world-biome');
+    const elTime = this.get('pause-world-time');
+    const elDay = this.get('pause-world-day');
+
+    if (elMode) elMode.textContent = this.game.gameState.mode || 'SURVIVAL';
+    if (elSeed) elSeed.textContent = this.game.world.seedString || '0';
+    if (elRegion) elRegion.textContent = 'OVERWORLD';
+
+    if (elCoords) {
+      const pos = this.game.getPlayerPosition();
+      elCoords.textContent = `${Math.floor(pos.x)}, ${Math.floor(pos.y)}, ${Math.floor(pos.z)}`;
+
+      if (elBiome) {
+        const biome = this.game.world.terrain.getBiomeAt(pos.x, pos.z);
+        elBiome.textContent = biome?.name?.toUpperCase() || 'UNKNOWN';
+      }
+    }
+
+    if (elTime) elTime.textContent = this.game.dayNight.getTimeString();
+    if (elDay) elDay.textContent = `Day ${this.game.dayNight.getDayNumber()}`;
+
+    this.updatePauseJoinCode();
+  }
+
+  updatePauseJoinCode() {
+    const badge = this.get('pause-my-id');
+    if (!badge) return;
+
+    if (this.game.multiplayer?.peer?.id) {
+      badge.textContent = this.game.multiplayer.peer.id;
+    } else {
+      badge.textContent = 'CONNECTING...';
+    }
   }
 
   showSettings(visible) {
     const panel = this.get('settings-panel');
     if (!panel) return;
     panel.style.display = visible ? 'flex' : 'none';
+    
+    // If opening settings from pause, hide pause overlay to prevent z-index issues
+    if (visible && this.game.isPaused) {
+      this.showPause(false);
+    }
   }
 
   isSettingsOpen() {
@@ -71,8 +151,11 @@ export class GameUI {
       'screen-title',
       'screen-world-select',
       'screen-world-create',
+      'screen-multiplayer',
       'screen-skins',
       'screen-loading',
+      'screen-texture-packs',
+      'settings-panel',
     ];
 
     const nextId =
@@ -82,11 +165,15 @@ export class GameUI {
           ? 'screen-world-select'
           : screen === 'world-create'
             ? 'screen-world-create'
-            : screen === 'skins'
-              ? 'screen-skins'
-              : screen === 'loading'
-                ? 'screen-loading'
-                : 'screen-title';
+            : screen === 'multiplayer'
+              ? 'screen-multiplayer'
+                : screen === 'loading'
+                  ? 'screen-loading'
+                  : screen === 'texture-packs'
+                    ? 'screen-texture-packs'
+                    : screen === 'settings'
+                      ? 'settings-panel'
+                      : 'screen-title';
 
     for (const id of screenIds) {
       const node = this.get(id);
@@ -177,11 +264,12 @@ export class GameUI {
       slotLabel.textContent = this.game.selectedWorldSlot.toUpperCase();
 
     const icons = [
-      '\u{1F30D}',
-      '\u{1F5FA}',
-      '\u{1F3D4}',
-      '\u{1F33F}',
-      '\u26A1',
+      '\u{1F30D}', // Earth
+      '\u{1F5FA}', // Map
+      '\u{1F3D4}', // Mountains
+      '\u{1F33F}', // Herb
+      '\u26A1',    // Bolt
+      '\u{1F30C}', // Milky Way
     ];
 
     for (const [idx, slotId] of this.game.worldSlots.getAll().entries()) {
@@ -369,9 +457,41 @@ export class GameUI {
       });
     }
 
+    const btnToPacks = this.get('btn-to-packs');
+    if (btnToPacks) {
+      btnToPacks.addEventListener('click', () => {
+        this.setMenuScreen('texture-packs');
+      });
+    }
+
     if (btnTitleQuit) {
       btnTitleQuit.addEventListener('click', () => this.game.handleTitleQuit());
     }
+
+    // --- Missing Back Buttons Audit ---
+    const btnMultiBackTop = this.get('btn-multi-back-top');
+    const btnMultiBack = this.get('btn-multi-back');
+    const multiBack = () => this.setMenuScreen('title');
+    if (btnMultiBackTop) btnMultiBackTop.addEventListener('click', multiBack);
+    if (btnMultiBack) btnMultiBack.addEventListener('click', multiBack);
+
+    const btnSkinsBackTop = this.get('btn-skins-back-top');
+    const btnSkinsBack = this.get('btn-skins-back');
+    const skinsBack = () => this.setMenuScreen('title');
+    if (btnSkinsBackTop) btnSkinsBackTop.addEventListener('click', skinsBack);
+    if (btnSkinsBack) btnSkinsBack.addEventListener('click', skinsBack);
+
+    const btnPacksBackTop = this.get('btn-packs-back-top');
+    const btnPacksBack = this.get('btn-packs-back');
+    const packsBack = () => this.setMenuScreen('title');
+    if (btnPacksBackTop) btnPacksBackTop.addEventListener('click', packsBack);
+    if (btnPacksBack) btnPacksBack.addEventListener('click', packsBack);
+
+    const btnApplySkin = this.get('btn-apply-skin');
+    if (btnApplySkin) btnApplySkin.addEventListener('click', () => this.setMenuScreen('title'));
+
+    const btnApplyPack = this.get('btn-apply-pack');
+    if (btnApplyPack) btnApplyPack.addEventListener('click', () => this.setMenuScreen('title'));
   }
 
   switchSettingsTab(tabId) {
@@ -386,12 +506,10 @@ export class GameUI {
   bindPauseMenu() {
     const btnResume = this.get('btn-resume');
     const btnPauseSettings = this.get('btn-pause-settings');
-    const btnPauseSave = this.get('btn-pause-save');
-    const btnPauseLoad = this.get('btn-pause-load');
     const btnBackTitle = this.get('btn-back-title');
-    const btnPauseGraphics = this.get('btn-pause-graphics');
-    const btnPauseSystem = this.get('btn-pause-system');
     const btnPauseSkins = this.get('btn-pause-skins');
+    const btnPauseMulti = this.get('btn-pause-multiplayer');
+    const btnPauseCopy = this.get('btn-pause-copy-id');
 
     if (btnResume)
       btnResume.addEventListener('click', () => this.game.resumeGame());
@@ -404,19 +522,25 @@ export class GameUI {
       });
     }
 
-    if (btnPauseGraphics) {
-      btnPauseGraphics.addEventListener('click', () => {
+    if (btnPauseMulti) {
+      btnPauseMulti.addEventListener('click', () => {
         this.showPause(false);
-        this.switchSettingsTab('tab-video');
-        this.showSettings(true);
+        this.setMenuScreen('multiplayer');
+        this.showTitle(true);
       });
     }
 
-    if (btnPauseSystem) {
-      btnPauseSystem.addEventListener('click', () => {
-        this.showPause(false);
-        this.switchSettingsTab('tab-persistence');
-        this.showSettings(true);
+    if (btnPauseCopy) {
+      btnPauseCopy.addEventListener('click', () => {
+        const id = this.game.multiplayer?.peer?.id;
+        if (!id) return;
+        navigator.clipboard.writeText(id).then(() => {
+          const originalText = btnPauseCopy.textContent;
+          btnPauseCopy.textContent = 'COPIED!';
+          setTimeout(() => {
+            btnPauseCopy.textContent = originalText;
+          }, 2000);
+        });
       });
     }
 
@@ -429,20 +553,12 @@ export class GameUI {
       });
     }
 
-    if (btnPauseSave) {
-      btnPauseSave.addEventListener('click', () =>
-        this.game.saveWorldLocal(this.game.selectedWorldSlot)
-      );
-    }
-
-    if (btnPauseLoad) {
-      btnPauseLoad.addEventListener('click', () =>
-        this.game.loadWorldLocal(this.game.selectedWorldSlot)
-      );
-    }
-
     if (btnBackTitle) {
-      btnBackTitle.addEventListener('click', () => this.game.returnToTitle());
+      btnBackTitle.addEventListener('click', () => {
+        // "Save & Quit" functionality
+        this.game.saveWorldLocal(this.game.selectedWorldSlot);
+        this.game.returnToTitle();
+      });
     }
   }
 

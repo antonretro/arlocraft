@@ -1,0 +1,353 @@
+/* ── GAMEPLAY HUD (In-Game Overlay) ─────────────────────────────────────── */
+#hud {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 24px;
+}
+
+#hud > * {
+  pointer-events: auto;
+}
+
+/* ── COMPASS & MINIMAP ── */
+#minimap {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  padding: 4px;
+  background: var(--ni-glass);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+#minimap canvas {
+  display: block;
+  border-radius: 7px;
+}
+
+#minimap-caption {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  margin-top: 3px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+#minimap-context {
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.3);
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+
+/* ── CROSSHAIR ── */
+#crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 50;
+  display: none;
+}
+#crosshair::before,
+#crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+#crosshair::before {
+  width: 2px;
+  height: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+#crosshair::after {
+  height: 2px;
+  width: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+#crosshair.active {
+  display: block;
+}
+
+/* ── HEADLINE (Pills) ── */
+#hud-headline {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: auto; /* Push to top */
+  padding-top: 10px;
+}
+
+.hud-pill {
+  padding: 6px 14px;
+  border-radius: 99px;
+  background: rgba(5, 10, 18, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(14px);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+/* ── SELECTED ITEM READOUT ── */
+#selected-item-readout {
+  width: min(94vw, 540px);
+  padding: 18px 24px;
+  border-radius: var(--ni-radius-lg);
+  background: var(--ni-glass);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(28px) saturate(180%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: var(--ni-trans);
+  margin-bottom: 20px;
+}
+
+#selected-item-name {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: #fff;
+}
+
+/* ── STATS BARS (HP/Food) ── */
+#stats-bars {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.bar-container {
+  height: 34px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.hud-meter {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.hud-meter-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+.hp-fill {
+  background: linear-gradient(90deg, #ff1a4a, #ff7b2d);
+  box-shadow: 0 0 10px rgba(255, 26, 74, 0.4);
+}
+.food-fill {
+  background: linear-gradient(90deg, #d9be1f, #82d42d);
+  box-shadow: 0 0 10px rgba(130, 212, 45, 0.4);
+}
+
+.hp-critical {
+  animation: critical-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes critical-pulse {
+  from {
+    filter: drop-shadow(0 0 2px rgba(255, 0, 0, 0.4));
+    transform: scale(1);
+  }
+  to {
+    filter: drop-shadow(0 0 12px rgba(255, 0, 0, 0.9));
+    transform: scale(1.02);
+  }
+}
+
+/* ── HOTBAR ── */
+#hotbar {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: var(--ni-glass);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 18px;
+  box-shadow: var(--ni-shadow);
+  margin-bottom: 2px;
+}
+
+/* ── XP BAR ── */
+#xp-bar-container {
+  width: min(90vw, 420px);
+  height: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 2px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+#xp-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--ni-blue), #6bffe6);
+  box-shadow: 0 0 10px var(--ni-accent-glow);
+  transition: width 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+/* ── ARLO FACE WIDGET ── */
+#arlo-face-widget {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--ni-glass);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(0, 195, 227, 0.4);
+  z-index: 10;
+  overflow: hidden;
+}
+#arlo-face-image {
+  width: 90%;
+  height: 90%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* ── COORDS ── */
+#coords-display {
+  position: absolute;
+  top: 100px;
+  left: 24px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 6px 12px;
+  border-radius: 8px;
+  display: none;
+}
+
+/* ── STATUS OVERLAYS (Underwater, Corruption, Nuke) ── */
+#underwater-light {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 60, 120, 0) 0%,
+    rgba(0, 40, 90, 0.55) 100%
+  );
+  transition: opacity 0.5s ease;
+}
+
+#underwater-light.submerged {
+  opacity: 1;
+  animation: underwater-shimmer 3.5s ease-in-out infinite;
+}
+
+@keyframes underwater-shimmer {
+  0% {
+    background: radial-gradient(
+      ellipse at 50% 40%,
+      rgba(0, 80, 160, 0.1) 0%,
+      rgba(0, 30, 80, 0.62) 100%
+    );
+  }
+  33% {
+    background: radial-gradient(
+      ellipse at 55% 45%,
+      rgba(0, 100, 180, 0.15) 0%,
+      rgba(0, 35, 90, 0.65) 100%
+    );
+  }
+  66% {
+    background: radial-gradient(
+      ellipse at 45% 55%,
+      rgba(0, 70, 150, 0.08) 0%,
+      rgba(0, 25, 75, 0.6) 100%
+    );
+  }
+  100% {
+    background: radial-gradient(
+      ellipse at 50% 40%,
+      rgba(0, 80, 160, 0.1) 0%,
+      rgba(0, 30, 80, 0.62) 100%
+    );
+  }
+}
+
+#corruption-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 41;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 40%,
+    rgba(120, 0, 180, 0.5) 100%
+  );
+  transition: opacity 0.4s ease;
+}
+
+#nuke-flash-overlay {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  z-index: 1000000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.05s ease-out;
+}
+
+#nuke-flash-overlay.active {
+  opacity: 1;
+  transition: opacity 0.02s ease-in;
+}
+
+/* ── HUD MOBILE OVERRIDES ── */
+@media (max-width: 768px) {
+  #hud {
+    bottom: 8px;
+    gap: 3px;
+    scale: 0.85;
+  }
+  #selected-item-readout {
+    padding: 4px 8px;
+    width: min(94vw, 200px);
+  }
+  .slot {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+  }
+}

@@ -212,6 +212,7 @@ export const PauseMenu = ({ game, setIsPaused }) => {
                 </AnimatePresence>
               </div>
             </div>
+          </div>
           </motion.div>
         )}
       </AnimatePresence>

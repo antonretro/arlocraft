@@ -282,7 +282,7 @@ export class WorldTerrainService {
     return this.hash2D(x - 991, z + 417) > 0.9992;
   }
 
-  shouldPlaceAnton(x, z, height) {
+  shouldPlaceArlo(x, z, height) {
     if (!this.world.corruptionEnabled) return false;
     if (height < this.world.seaLevel + 1) return false;
     return this.hash2D(x + 613, z - 271) > 0.985;

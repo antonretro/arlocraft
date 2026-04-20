@@ -44,7 +44,7 @@ export class Renderer {
     this.daylight = 1;
     this.submerged = false;
     this.fogDensityScale = 1.0;
-    this.areaInfluence = { virus: 0, anton: 0 };
+    this.areaInfluence = { virus: 0, arlo: 0 };
     this.lastCloudUpdateMs = performance.now();
 
     this.setupLights();
@@ -104,8 +104,8 @@ export class Renderer {
     this.sun = new THREE.DirectionalLight(0xfffff5, 1.25);
     this.sun.position.set(20, 100, 20);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.width = 2048;
-    this.sun.shadow.mapSize.height = 2048;
+    this.sun.shadow.mapSize.width = 512;
+    this.sun.shadow.mapSize.height = 512;
     this.sun.shadow.camera.left = -100;
     this.sun.shadow.camera.right = 100;
     this.sun.shadow.camera.top = 100;
@@ -254,7 +254,7 @@ export class Renderer {
                 float fbm(vec2 p) {
                     float v = 0.0;
                     float a = 0.5;
-                    for (int i = 0; i < 5; i++) {
+                    for (int i = 0; i < 3; i++) {
                         v += a * noise(p);
                         p  = p * 2.1 + vec2(1.7, 9.2);
                         a *= 0.5;
@@ -319,7 +319,6 @@ export class Renderer {
     if (this.skyDome) {
       this.skyDome.material.uniforms.top.value.copy(top);
       this.skyDome.material.uniforms.bottom.value.copy(bottom);
-      // Horizon glow: strong at dawn/dusk, none at day/night
       const horizonGlowColor =
         state === 'DUSK'
           ? new THREE.Color(0xff4400)
@@ -331,7 +330,7 @@ export class Renderer {
           ? 0.85
           : state === 'DAY'
             ? 0.12
-            : 0.0;
+            : 0.05; // Small horizon bleed even at night
       this.skyDome.material.uniforms.horizon.value.copy(horizonGlowColor);
       this.skyDome.material.uniforms.horizonStrength.value = horizonStr;
     }
@@ -343,13 +342,17 @@ export class Renderer {
       computeFogDensity(daylight, this.submerged) *
       (this.fogDensityScale || 1.0);
 
-    this.sun.intensity = 0.45 + clamped * 1.05;
+    // Enforce visibility floor
+    const intensityFactor = 0.4 + clamped * 1.1; 
+    this.sun.intensity = intensityFactor;
     this.sun.color.copy(sunCol);
-    this.hemiLight.intensity = 0.95 + clamped * 0.5;
+    
+    this.hemiLight.intensity = 0.8 + clamped * 0.6;
     this.hemiLight.color.set(top);
     this.hemiLight.groundColor.set(0x6d6253);
+
     if (this.ambientFill) {
-      this.ambientFill.intensity = 0.34 + clamped * 0.16;
+      this.ambientFill.intensity = 0.35 + clamped * 0.2;
       this.ambientFill.color.copy(sunCol).lerp(new THREE.Color(0xffffff), 0.35);
     }
 
@@ -378,10 +381,12 @@ export class Renderer {
 
   setDaylightLevel(daylight) {
     this.daylight = Math.max(0, Math.min(1, daylight));
-    this.hemiLight.intensity = 0.85 + this.daylight * 0.55;
-    this.sun.intensity = 0.4 + this.daylight * 1.05;
+    
+    // Synced with updateEnvironmentLighting logic
+    this.sun.intensity = 0.4 + this.daylight * 1.1; 
+    this.hemiLight.intensity = 0.8 + this.daylight * 0.6;
     if (this.ambientFill) {
-      this.ambientFill.intensity = 0.32 + this.daylight * 0.18;
+      this.ambientFill.intensity = 0.35 + this.daylight * 0.2;
     }
 
     // Sky colors mix - use THREE.Color to wrap the hex constants from RenderConfig
@@ -490,8 +495,30 @@ export class Renderer {
   }
 
   setAreaInfluence(influence) {
-    this.areaInfluence = influence || { virus: 0, anton: 0 };
-    // Could apply color grading or post-processing here based on virus level
+    this.areaInfluence = influence || { virus: 0, arlo: 0 };
+  }
+
+  applyFromSettings(settings) {
+    if (!this.instance) return;
+    
+    // Resolution Scaling
+    if (settings.resolutionScale !== undefined) {
+      this.setResolutionScale(settings.resolutionScale);
+    }
+
+    // Shadow Management
+    const shadows = Boolean(settings.shadowsEnabled);
+    if (this.instance.shadowMap) {
+      this.instance.shadowMap.enabled = shadows;
+      
+      this.scene.traverse((obj) => {
+        if (obj.isMesh && obj.material) {
+          obj.material.needsUpdate = true;
+          obj.receiveShadow = shadows;
+          obj.castShadow = shadows;
+        }
+      });
+    }
   }
 
   async waitForInit() {

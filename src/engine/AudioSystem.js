@@ -22,10 +22,14 @@ export class AudioSystem {
     };
     this.recentPlay = new Map();
     this.unlockBound = false;
+    this.userInteracted = false;
   }
 
   ensureContext() {
     if (this.context) return this.context;
+    // Do not create context until user has interacted to avoid browser warnings
+    if (!this.userInteracted) return null;
+
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return null;
 
@@ -77,6 +81,7 @@ export class AudioSystem {
   installAutoUnlock(target = document) {
     if (this.unlockBound) return;
     const unlock = () => {
+      this.userInteracted = true;
       const ctx = this.ensureContext();
       if (!ctx) return;
       if (ctx.state !== 'running') ctx.resume().catch(() => {});
@@ -222,6 +227,12 @@ export class AudioSystem {
   play(eventName, detail = {}) {
     if (!this.enabled) return;
     if (!this.canPlay(eventName)) return;
+    
+    // Resume context if suspended (common after autoplay block)
+    if (this.context && this.context.state === 'suspended' && this.userInteracted) {
+      this.context.resume().catch(() => {});
+    }
+    
     this.ensureContext();
     if (!this.context) return;
 

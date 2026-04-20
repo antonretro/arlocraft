@@ -34,10 +34,10 @@ if (-not (Test-Path (Join-Path $projectRoot 'node_modules'))) {
 }
 
 if (-not (Test-LocalUrl -TargetUrl $url)) {
-    Write-Host "Starting AntonCraft server on $url" -ForegroundColor Cyan
+    Write-Host "Starting ArloCraft server on $url" -ForegroundColor Cyan
     Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "cd /d `"$projectRoot`" && npm run dev -- --host localhost --port $port"
     Start-Sleep -Seconds 3
 }
 
 Start-Process $url
-Write-Host "AntonCraft launched: $url" -ForegroundColor Green
+Write-Host "ArloCraft launched: $url" -ForegroundColor Green

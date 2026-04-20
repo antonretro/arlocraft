@@ -1,12 +1,12 @@
-# AntonCraft — GPT Reference Documentation
+# ArloCraft — GPT Reference Documentation
 
 > A concise technical overview intended for AI assistants (ChatGPT, Claude, etc.) helping with this codebase. Keep it updated when major systems change.
 
 ---
 
-## What is AntonCraft?
+## What is ArloCraft?
 
-AntonCraft is a browser-based, Minecraft-inspired voxel survival/restoration game built with:
+ArloCraft is a browser-based, Minecraft-inspired voxel survival/restoration game built with:
 
 - **Vite** (bundler + dev server)
 - **Three.js** (3D rendering)
@@ -20,7 +20,7 @@ Theme: *The world has been corrupted by a viral blight. The player mines, builds
 ## Project Structure
 
 ```
-antoncraft/
+ArloCraft/
 ├── index.html                  # All HUD/UI markup lives here
 ├── src/
 │   ├── main.js                 # Entry point — creates Game instance
@@ -70,8 +70,8 @@ antoncraft/
 │   ├── entities/               # Mob spawning, AI, entity rendering
 │   └── workers/                # Web worker stubs
 └── docs/
-    ├── ANTONCRAFT_GPT.md        # This file
-    ├── EXTENDING_ANTONCRAFT.md  # How to add blocks/tools via content packs
+    ├── ArloCraft_GPT.md        # This file
+    ├── EXTENDING_ArloCraft.md  # How to add blocks/tools via content packs
     ├── CONTENT_PACKS.md        # Content pack format spec
     ├── FEATURE_BACKLOG.md      # Planned features
     └── RENDERING.md            # Rendering pipeline notes
@@ -210,7 +210,7 @@ Game.animate()
 
 ---
 
-## Settings (persisted in localStorage `antoncraft-settings`)
+## Settings (persisted in localStorage `ArloCraft-settings`)
 
 | Key | Type | Default | Notes |
 |-----|------|---------|-------|

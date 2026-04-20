@@ -25,126 +25,18 @@ export class WorldVisuals {
     return {
       solid: withWhiteVertexColors(new THREE.BoxGeometry(1, 1, 1)),
       path: (() => {
-        // Full-height sides eliminate the 1/16 black seam.
-        // Top face stays sunken at 15/16 for correct path look.
-        const topY = 7 / 16; // 0.4375 above center
-        const H = 0.5;
-        const hw = 0.5;
-
-        const positions = new Float32Array([
-          // +X face (right): full height, x=+0.5
-          hw,
-          H,
-          -hw,
-          hw,
-          -H,
-          -hw,
-          hw,
-          -H,
-          hw,
-          hw,
-          H,
-          hw,
-          // -X face (left): full height, x=-0.5
-          -hw,
-          H,
-          hw,
-          -hw,
-          -H,
-          hw,
-          -hw,
-          -H,
-          -hw,
-          -hw,
-          H,
-          -hw,
-          // +Y face (top): sunken at topY
-          -hw,
-          topY,
-          hw,
-          hw,
-          topY,
-          hw,
-          hw,
-          topY,
-          -hw,
-          -hw,
-          topY,
-          -hw,
-          // -Y face (bottom): full depth, y=-0.5
-          -hw,
-          -H,
-          -hw,
-          hw,
-          -H,
-          -hw,
-          hw,
-          -H,
-          hw,
-          -hw,
-          -H,
-          hw,
-          // +Z face (front): full height, z=+0.5
-          hw,
-          H,
-          hw,
-          hw,
-          -H,
-          hw,
-          -hw,
-          -H,
-          hw,
-          -hw,
-          H,
-          hw,
-          // -Z face (back): full height, z=-0.5
-          -hw,
-          H,
-          -hw,
-          -hw,
-          -H,
-          -hw,
-          hw,
-          -H,
-          -hw,
-          hw,
-          H,
-          -hw,
-        ]);
-
-        const uvs = new Float32Array([
-          1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0,
-          0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0,
-          0, 1,
-        ]);
-
-        const normals = new Float32Array([
-          1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1,
-          0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1,
-          0, 0, -1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1,
-          0, 0, -1, 0, 0, -1,
-        ]);
-
-        const indices = [];
-        for (let f = 0; f < 6; f++) {
-          const b = f * 4;
-          indices.push(b, b + 1, b + 2, b, b + 2, b + 3);
-        }
-
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute(
-          'position',
-          new THREE.Float32BufferAttribute(positions, 3)
-        );
-        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-        geo.setAttribute(
-          'normal',
-          new THREE.Float32BufferAttribute(normals, 3)
-        );
-        geo.setIndex(indices);
-        // Each face group maps to the correct material slot in the array material:
-        // 0=right, 1=left, 2=top, 3=bottom, 4=front, 5=back
-        for (let f = 0; f < 6; f++) geo.addGroup(f * 6, 6, f);
+        const geo = new THREE.BoxGeometry(1, 0.9375, 1); // 15/16 height
+        geo.translate(0, -0.03125, 0);
+        return withWhiteVertexColors(geo);
+      })(),
+      farmland: (() => {
+        const geo = new THREE.BoxGeometry(1, 0.9375, 1); // 15/16 height
+        geo.translate(0, -0.03125, 0);
+        return withWhiteVertexColors(geo);
+      })(),
+      cake: (() => {
+        const geo = new THREE.BoxGeometry(0.875, 0.4375, 0.875); // 14/16 wide, 7/16 high
+        geo.translate(0, -0.28125, 0);
         return withWhiteVertexColors(geo);
       })(),
       water: (() => {

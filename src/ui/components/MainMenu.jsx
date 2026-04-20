@@ -229,6 +229,7 @@ export const MainMenu = ({ game, setScreen }) => {
             </motion.div>
           )}
 
+          {subScreen === 'settings' && (
             <motion.div
               key="settings"
               initial={{ opacity: 0, scale: 0.98 }}
@@ -337,7 +338,8 @@ export const MainMenu = ({ game, setScreen }) => {
                   </AnimatePresence>
                 </div>
               </div>
-            </motion.div>
+            </div>
+          </motion.div>
           )}
 
           {subScreen === 'multiplayer' && (

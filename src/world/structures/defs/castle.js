@@ -1,5 +1,5 @@
 export const castle = {
-  name: 'Anton Castle',
+  name: 'Arlo Castle',
   biomes: ['highlands', 'alpine', 'canyon'],
   width: 15,
   height: 20,

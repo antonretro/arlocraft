@@ -10,10 +10,6 @@ const blockTextureModules = import.meta.glob(
   '../Igneous 1.19.4/assets/minecraft/textures/block/*.png',
   { eager: true, query: '?url' }
 );
-const contentBlockTextureModules = import.meta.glob(
-  '../content/blocks/*/*.png',
-  { eager: true, query: '?url' }
-);
 
 const GRASS_PREVIEW_TINT_CLASS = 'tint-grass-face';
 
@@ -30,22 +26,90 @@ export class IconService {
       this.itemTextures[fileName] = module.default || module;
     }
 
+    const igneousFaceSuffixes = [
+      '_side_overlay',
+      '_top',
+      '_bottom',
+      '_side',
+      '_front',
+      '_back',
+      '_end',
+    ];
+
+    const compoundIds = new Set([
+      'tall_grass_bottom',
+      'tall_grass_top',
+      'grass_block_snow',
+      'large_fern_bottom',
+      'large_fern_top',
+      'rose_bush_bottom',
+      'rose_bush_top',
+      'peony_bottom',
+      'peony_top',
+      'lilac_bottom',
+      'lilac_top',
+      'sunflower_bottom',
+      'sunflower_top',
+    ]);
+
+    const globalAliases = {
+      copper: 'copper_block',
+      gold: 'gold_block',
+      lapis: 'lapis_block',
+      diamond: 'diamond_block',
+      emerald: 'emerald_block',
+      redstone: 'redstone_block',
+      path_block: 'dirt_path',
+      short_grass: 'grass',
+      dripstone: 'dripstone_block',
+      cherry_leaves: 'flowering_azalea_leaves',
+      nuke: 'tnt_side',
+      coal_ore: 'coal_ore',
+      iron_ore: 'iron_ore',
+      gold_ore: 'gold_ore',
+      diamond_ore: 'diamond_ore',
+      emerald_ore: 'emerald_ore',
+      lapis_ore: 'lapis_ore',
+      copper_ore: 'copper_ore',
+      redstone_ore: 'redstone_ore',
+      deepslate_coal_ore: 'deepslate_coal_ore',
+      deepslate_iron_ore: 'deepslate_iron_ore',
+      deepslate_gold_ore: 'deepslate_gold_ore',
+      deepslate_diamond_ore: 'deepslate_diamond_ore',
+      deepslate_emerald_ore: 'deepslate_emerald_ore',
+    };
+
     this.blockTextures = {};
     for (const [path, module] of Object.entries(blockTextureModules)) {
-      const fileName = path.split('/').pop().replace('.png', '');
-      this.blockTextures[fileName] = module.default || module;
-    }
-    for (const [path, module] of Object.entries(contentBlockTextureModules)) {
-      const parts = path.split('/');
-      const fileName = parts[parts.length - 1];
-      let folderId = parts[parts.length - 2];
+      const fileName = path.split('/').pop();
       const baseName = fileName.replace('.png', '');
+      const url = module.default || module;
 
-      if (baseName === 'all') {
-        this.blockTextures[folderId] = module.default || module;
-      } else {
-        this.blockTextures[`${folderId}_${baseName}`] =
-          module.default || module;
+      let blockId = baseName;
+      let faceKey = 'all.png';
+
+      for (const suffix of igneousFaceSuffixes) {
+        if (baseName.endsWith(suffix) && !compoundIds.has(baseName)) {
+          blockId = baseName.substring(0, baseName.length - suffix.length);
+          faceKey = suffix.substring(1) + '.png'; 
+          break;
+        }
+      }
+
+      const store = (id, face, assetUrl) => {
+        if (face === 'all.png') {
+          this.blockTextures[id] = assetUrl;
+        } else {
+          this.blockTextures[`${id}_${face.replace('.png', '')}`] = assetUrl;
+        }
+      };
+
+      store(blockId, faceKey, url);
+
+      for (const [alias, target] of Object.entries(globalAliases)) {
+        if (blockId === target) {
+          store(alias, faceKey, url);
+        }
       }
     }
 
@@ -53,7 +117,7 @@ export class IconService {
       cobblestone: 'stone',
       brick: 'bricks',
       path_block: 'dirt_path',
-      nuke: 'virus',
+      nuke: 'tnt_side',
       obsidian: 'obsidian',
       wood: 'oak_log',
       leaves: 'oak_leaves',
@@ -63,6 +127,16 @@ export class IconService {
       ice: 'water',
       cloud_block: 'water',
       lava: 'water',
+      coal_ore: 'coal_ore',
+      iron_ore: 'iron_ore',
+      gold_ore: 'gold_ore',
+      diamond_ore: 'diamond_ore',
+      emerald_ore: 'emerald_ore',
+      deepslate_coal_ore: 'deepslate_coal_ore',
+      deepslate_iron_ore: 'deepslate_iron_ore',
+      deepslate_gold_ore: 'deepslate_gold_ore',
+      deepslate_diamond_ore: 'deepslate_diamond_ore',
+      deepslate_emerald_ore: 'deepslate_emerald_ore',
       blueberry: 'sweet_berries',
       cooked_fish: 'water',
       byte_axe: 'power_blade',
@@ -405,7 +479,7 @@ export class IconService {
       pick_wood: '#ffcf8d',
       magnet_glove: '#ffd28f',
       virus: '#d08bff',
-      anton: '#ffb0d7',
+      arlo: '#ffb0d7',
     };
     if (palette[alias]) return palette[alias];
     let hash = 0;

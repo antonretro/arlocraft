@@ -1,11 +1,47 @@
 import { RECIPE_BOOK } from '../data/recipeBook.js';
 import { ACHIEVEMENTS } from '../data/achievements.js';
 import { iconService } from './IconService.js';
+import { BLOCKS } from '../data/blocks.js';
 
 export class CollectionsUI {
   constructor(gameState) {
     this.gameState = gameState;
     this.activeTab = 'blocklog';
+    this.filterText = '';
+    this.activeCategory = 'all';
+
+    this.categories = {
+      building: new Set([
+        'stone', 'cobblestone', 'oak_planks', 'spruce_planks', 'birch_planks',
+        'jungle_planks', 'acacia_planks', 'dark_oak_planks', 'cherry_planks',
+        'glass', 'stone_bricks', 'oak_log', 'gravel', 'sand', 'red_sand',
+        'smooth_stone', 'sandstone', 'iron_block', 'gold_block', 'copper_block',
+        'diamond_block', 'emerald_block', 'lapis_block', 'nether_bricks', 
+        'quartz_block', 'bricks', 'bookshelf',
+        'stained_glass_white', 'stained_glass_orange', 'stained_glass_magenta',
+        'stained_glass_light_blue', 'stained_glass_yellow', 'stained_glass_lime',
+        'stained_glass_pink', 'stained_glass_gray', 'stained_glass_light_gray',
+        'stained_glass_cyan', 'stained_glass_purple', 'stained_glass_blue',
+        'stained_glass_brown', 'stained_glass_green', 'stained_glass_red',
+        'stained_glass_black'
+      ]),
+      nature: new Set([
+        'grass', 'dirt', 'coarse_dirt', 'moss_block', 'oak_leaves', 'spruce_leaves',
+        'birch_leaves', 'jungle_leaves', 'acacia_leaves', 'dark_oak_leaves',
+        'azalea_leaves', 'flowering_azalea_leaves', 'short_grass', 'fern',
+        'rose', 'blue_orchid', 'poppy', 'oxeye_daisy', 'lily_of_the_valley',
+        'wither_rose', 'cactus', 'ice', 'snow_block', 'water', 'lava'
+      ]),
+      utility: new Set([
+        'crafting_table', 'furnace', 'starter_chest', 'torch', 'lantern',
+        'soul_lantern', 'sea_lantern', 'glowstone', 'ladder', 'iron_bars',
+        'glass_pane'
+      ]),
+      redstone: new Set([
+        'redstone_block', 'redstone_lamp', 'tnt', 'observer', 'dropper', 
+        'dispenser', 'piston', 'sticky_piston'
+      ])
+    };
   }
 
   init() {
@@ -21,6 +57,8 @@ export class CollectionsUI {
       blocklogList: document.getElementById('blocklog-grid'),
       recipeList: document.getElementById('recipe-list'),
       medalList: document.getElementById('medals-grid'),
+      searchInput: document.getElementById('creative-search'),
+      catBtns: document.querySelectorAll('.cat-btn'),
     };
   }
 
@@ -29,6 +67,23 @@ export class CollectionsUI {
       tab.addEventListener('click', () => {
         const target = tab.dataset.tab;
         if (target) this.switchTab(target);
+      });
+    });
+
+    if (this.refs.searchInput) {
+      this.refs.searchInput.addEventListener('input', (e) => {
+        this.filterText = e.target.value.toLowerCase();
+        this.renderBlocklog();
+      });
+    }
+
+    this.refs.catBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.activeCategory = btn.dataset.cat;
+        this.refs.catBtns.forEach((b) =>
+          b.classList.toggle('active', b === btn)
+        );
+        this.renderBlocklog();
       });
     });
 
@@ -66,16 +121,39 @@ export class CollectionsUI {
     const discovered = this.gameState.discoveredBlocks || new Set();
 
     // In creative mode show all blocks; in survival show only discovered
-    const visibleBlocks = isCreative
-      ? BLOCKS.filter((b) => !b.id.includes('_stage') && b.id !== 'air')
-      : BLOCKS.filter((b) => discovered.has(b.id));
+    const allBlocks = BLOCKS || [];
+    // Filtering
+    let visibleBlocks = isCreative
+      ? allBlocks.filter((b) => !b.id.includes('_stage') && b.id !== 'air')
+      : allBlocks.filter((b) => discovered.has(b.id));
 
-    if (isCreative) {
+    if (this.activeCategory !== 'all' && this.categories[this.activeCategory]) {
+      const catSet = this.categories[this.activeCategory];
+      visibleBlocks = visibleBlocks.filter((b) => catSet.has(b.id));
+    }
+
+    if (this.filterText) {
+      visibleBlocks = visibleBlocks.filter(
+        (b) =>
+          (b.name || '').toLowerCase().includes(this.filterText) ||
+          b.id.toLowerCase().includes(this.filterText)
+      );
+    }
+
+    if (isCreative && visibleBlocks.length > 0) {
       const hint = document.createElement('div');
       hint.style.cssText =
-        'grid-column:1/-1;color:var(--ni-blue);font-size:0.65rem;text-align:center;padding:4px 0;';
-      hint.textContent = 'CREATIVE — click any block to add 64 to inventory';
+        'grid-column:1/-1;color:var(--ni-blue);font-size:0.65rem;text-align:center;padding:4px 0;opacity:0.8;font-weight:800;';
+      hint.textContent = 'CREATIVE — TAP TO ADD 64';
       list.appendChild(hint);
+    } else if (visibleBlocks.length === 0) {
+      const none = document.createElement('div');
+      none.style.cssText =
+        'grid-column:1/-1;color:var(--ni-text-muted);font-size:0.75rem;text-align:center;padding:40px 0;';
+      none.textContent = this.filterText
+        ? `No blocks match "${this.filterText}"`
+        : 'Select a category to see items';
+      list.appendChild(none);
     }
 
     visibleBlocks.forEach((block) => {

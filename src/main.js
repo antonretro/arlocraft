@@ -6,13 +6,12 @@ import {
 } from 'three-mesh-bvh';
 import { Game } from './engine/Game.js';
 import { validateBlocks } from './utils/BlockValidator.js';
-import './style.css';
 
-// Block handler modules — each self-registers on import
-import './content/blocks/crafting_table/CraftingTableHandler.js';
-import './content/blocks/chest/ChestHandler.js';
-import './content/blocks/furnace/FurnaceHandler.js';
-import './content/blocks/command_block/CommandBlockHandler.js';
+// Block handler modules
+import './blocks/handlers/CraftingTableHandler.js';
+import './blocks/handlers/ChestHandler.js';
+import './blocks/handlers/FurnaceHandler.js';
+import './blocks/handlers/CommandBlockHandler.js';
 
 console.log('[ArloCraft] main.js fully loading...');
 

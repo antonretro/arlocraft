@@ -599,7 +599,7 @@ export class Physics {
       Math.abs(this.velocity.y * delta),
       Math.abs(this.velocity.z * delta)
     );
-    const steps = Math.max(1, Math.min(10, Math.ceil(maxMove / maxLinearStep)));
+    const steps = Math.max(1, Math.min(4, Math.ceil(maxMove / maxLinearStep)));
     const stepDelta = delta / steps;
 
     for (let i = 0; i < steps; i++) {

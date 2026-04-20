@@ -9,7 +9,10 @@ import {
   SEA_LEVEL,
   MIN_TERRAIN_Y,
 } from '../world/terrain/ContinentShaper.js';
-import { isCave, getCaveBiome } from '../world/terrain/CaveGenerator.js';
+import {
+  getCaveCell,
+  getCaveMaterialProfile,
+} from '../world/terrain/CaveGenerator.js';
 import {
   shouldPlaceTree,
   addTree,
@@ -85,7 +88,7 @@ function shouldPlaceVirus(wx, wz, height, corruptionEnabled) {
   return hash2D(wx - 991, wz + 417, currentSeed) > 0.9992;
 }
 
-function shouldPlaceAnton(wx, wz, height, corruptionEnabled) {
+function shouldPlaceArlo(wx, wz, height, corruptionEnabled) {
   if (!corruptionEnabled) return false;
   if (height < SEA_LEVEL + 1) return false;
   return hash2D(wx + 613, wz - 271, currentSeed) > 0.985;
@@ -207,40 +210,37 @@ const api = {
           surfaceId = 'snow_block';
         }
 
-        const surfaceCarved = isCave(
-          workerNoise,
-          wx,
-          terrainHeight,
-          wz,
-          terrainHeight,
-          cavesEnabled
-        );
-        if (!surfaceCarved && terrainHeight >= startY && terrainHeight < endY) {
-          setPlannedBlock(
-            planMap,
-            changedMap,
-            wx,
-            terrainHeight,
-            wz,
-            surfaceId
-          );
-        }
+        let surfaceCarved = false;
 
-        // ── Filler layers (dirt / biome filler) ───────────────────
-        for (let d = 1; d <= 3; d++) {
-          const y = terrainHeight - d;
-          if (y < MIN_TERRAIN_Y || y < startY || y >= endY) continue;
-          if (isCave(workerNoise, wx, y, wz, terrainHeight, cavesEnabled))
-            continue;
-          setPlannedBlock(planMap, changedMap, wx, y, wz, biome.fillerBlock);
-        }
-
-        // ── Stone / ore layers ────────────────────────────────────
+        // ── Unified Terrain & Cave Pass ──────────────────────────
         for (let y = startY; y < endY; y++) {
-          if (y >= terrainHeight - 3 || y <= MIN_TERRAIN_Y) continue;
-          if (isCave(workerNoise, wx, y, wz, terrainHeight, cavesEnabled))
+          const depthBelowSurface = terrainHeight - y;
+          if (y <= MIN_TERRAIN_Y) {
+             setPlannedBlock(planMap, changedMap, wx, y, wz, 'bedrock');
+             continue;
+          }
+
+          const cave = getCaveCell(workerNoise, wx, y, wz, terrainHeight, cavesEnabled, currentSeed);
+          
+          if (y === terrainHeight) surfaceCarved = cave.carve;
+
+          if (cave.carve) {
+            if (cave.fluid === 'water' || cave.fluid === 'ice_water') {
+              setPlannedBlock(planMap, changedMap, wx, y, wz, 'water');
+            } else if (cave.fluid === 'lava') {
+              setPlannedBlock(planMap, changedMap, wx, y, wz, 'lava');
+            }
+            // Air is implicit
             continue;
-          setPlannedBlock(planMap, changedMap, wx, y, wz, 'stone');
+          }
+
+          if (y === terrainHeight) {
+             setPlannedBlock(planMap, changedMap, wx, y, wz, surfaceId);
+          } else if (depthBelowSurface > 0 && depthBelowSurface <= 3) {
+             setPlannedBlock(planMap, changedMap, wx, y, wz, biome.fillerBlock);
+          } else if (depthBelowSurface > 3) {
+             setPlannedBlock(planMap, changedMap, wx, y, wz, 'stone');
+          }
         }
 
         // ── Bedrock Floor ─────────────────────────────────────────
@@ -304,7 +304,7 @@ const api = {
               'virus'
             );
           } else if (
-            shouldPlaceAnton(wx, wz, terrainHeight, corruptionEnabled)
+            shouldPlaceArlo(wx, wz, terrainHeight, corruptionEnabled)
           ) {
             setPlannedBlock(
               planMap,
@@ -312,7 +312,7 @@ const api = {
               wx,
               terrainHeight + 1,
               wz,
-              'anton'
+              'arlo'
             );
           }
         }
@@ -341,7 +341,7 @@ const api = {
               wx,
               terrainHeight + 1,
               wz,
-              'nuke'
+              'chest:common_village'
             );
         }
 
@@ -399,6 +399,26 @@ const api = {
               biome,
               workerNoise,
               currentSeed,
+              setPlannedBlock
+            );
+          }
+        }
+        if (
+          !surfaceCarved &&
+          !inSpawnZone &&
+          !isHighAltitude &&
+          terrainHeight > waterLevel
+        ) {
+          if (terrainHeight >= startY && terrainHeight < endY) {
+            addGroundLife(
+              planMap,
+              changedMap,
+              wx,
+              terrainHeight,
+              wz,
+              biome,
+              workerNoise,
+              currentSeed,
               setPlannedPlant,
               surfaceId
             );
@@ -408,277 +428,47 @@ const api = {
     }
 
     // ── Cave biome decoration pass ────────────────────────────────────
-    // Runs after the main column loop so every solid/air voxel is already
-    // committed to planMap.  We scan the chunk column-by-column looking for
-    // carved voxels, then decorate their floor/ceiling/walls according to
-    // the cave biome at that location.
     if (cavesEnabled) {
-      // Helper: is a position carved (absent from planMap and below terrain)?
-      const isAir = (x, y, z) => !planMap.has(getNumericKey(x, y, z));
-
       for (let lx = 0; lx < chunkSize; lx++) {
         for (let lz = 0; lz < chunkSize; lz++) {
           const wx = startX + lx;
           const wz = startZ + lz;
-          const terrainH = getColumnHeight(
-            router,
-            workerNoise,
-            wx,
-            wz,
-            currentSeed
-          );
+          const terrainH = getColumnHeight(router, workerNoise, wx, wz, currentSeed);
 
-          for (
-            let wy = Math.min(terrainH - 4, endY - 1);
-            wy >= Math.max(MIN_TERRAIN_Y + 1, startY);
-            wy--
-          ) {
-            if (!isCave(workerNoise, wx, wy, wz, terrainH, true)) continue;
+          for (let wy = Math.min(terrainH - 1, endY - 1); wy >= Math.max(MIN_TERRAIN_Y + 1, startY); wy--) {
+            const profile = getCaveMaterialProfile(workerNoise, wx, wy, wz, terrainH, true, currentSeed);
+            if (!profile) continue;
 
-            const biome = getCaveBiome(
-              workerNoise,
-              wx,
-              wy,
-              wz,
-              terrainH,
-              currentSeed
-            );
-
-            // Deterministic per-voxel hash for decoration rolls
             const roll = hash2D(wx + wy * 7, wz - wy * 13, currentSeed + 9371);
+            const key = getNumericKey(wx, wy, wz);
+            const belowKey = getNumericKey(wx, wy - 1, wz);
+            const aboveKey = getNumericKey(wx, wy + 1, wz);
 
-            // ── Floor decoration (block directly below carved air) ──
-            const floorY = wy - 1;
-            const floorKey = getNumericKey(wx, floorY, wz);
-            const floorId = planMap.get(floorKey);
-            if (floorId !== undefined) {
-              // floor voxel is solid — candidate for floor deco
-              switch (biome) {
-                case 'dripstone':
-                  // Replace stone floor with dripstone; occasional stalagmite on top
-                  if (floorId === 'stone') {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      wx,
-                      floorY,
-                      wz,
-                      'dripstone'
-                    );
-                  }
-                  if (
-                    roll < 0.12 &&
-                    isAir(wx, wy, wz) &&
-                    isAir(wx, wy + 1, wz)
-                  ) {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      wx,
-                      wy,
-                      wz,
-                      'dripstone'
-                    );
-                  }
-                  break;
-                case 'lush':
-                  if (floorId === 'stone' || floorId === 'dirt') {
-                    if (roll < 0.55)
-                      setPlannedBlock(
-                        planMap,
-                        changedMap,
-                        wx,
-                        floorY,
-                        wz,
-                        'moss_block'
-                      );
-                    else
-                      setPlannedBlock(
-                        planMap,
-                        changedMap,
-                        wx,
-                        floorY,
-                        wz,
-                        'clay'
-                      );
-                  }
-                  break;
-                case 'deep_dark':
-                  if (floorId === 'stone') {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      wx,
-                      floorY,
-                      wz,
-                      'deepslate'
-                    );
-                  }
-                  break;
-                case 'ice':
-                  if (floorId === 'stone' || floorId === 'dirt') {
-                    setPlannedBlock(planMap, changedMap, wx, floorY, wz, 'ice');
-                  }
-                  break;
-                case 'mushroom':
-                  if (floorId === 'stone' || floorId === 'dirt') {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      wx,
-                      floorY,
-                      wz,
-                      'mycelium'
-                    );
-                  }
-                  // Mushroom plants on top of solid floor
-                  if (roll < 0.09 && isAir(wx, wy, wz)) {
-                    const shroomId =
-                      roll < 0.045 ? 'mushroom_brown' : 'mushroom_red';
-                    setPlannedBlock(planMap, changedMap, wx, wy, wz, shroomId);
-                  }
-                  break;
-                default:
-                  break;
+            // ── Floor Decoration ──
+            if (!planMap.has(key) && planMap.has(belowKey)) {
+              if (roll < (profile.vegetationChance || 0) || (profile.sculkChance && roll < profile.sculkChance)) {
+                setPlannedBlock(planMap, changedMap, wx, wy - 1, wz, profile.floor);
+              }
+              // Chest Spawning: Standard visual chest with context-aware loot tag
+              if (roll < 0.005) {
+                const chestTag = `chest:cave_${profile.biome}`;
+                setPlannedBlock(planMap, changedMap, wx, wy, wz, chestTag);
               }
             }
 
-            // ── Ceiling decoration (block directly above carved air) ──
-            const ceilY = wy + 1;
-            const ceilKey = getNumericKey(wx, ceilY, wz);
-            const ceilId = planMap.get(ceilKey);
-            if (ceilId !== undefined) {
-              switch (biome) {
-                case 'dripstone':
-                  // Stalactite: dripstone hanging from ceiling
-                  if (roll > 0.88 && isAir(wx, wy, wz)) {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      wx,
-                      wy,
-                      wz,
-                      'dripstone'
-                    );
-                  }
-                  break;
-                case 'lush':
-                  // Cave vines hanging from ceiling
-                  if (roll > 0.82 && isAir(wx, wy, wz)) {
-                    const vineId =
-                      roll > 0.94 ? 'cave_vines_lit' : 'cave_vines';
-                    setPlannedBlock(planMap, changedMap, wx, wy, wz, vineId);
-                  }
-                  break;
-                case 'ice':
-                  // Packed ice stalactites hanging from ceiling
-                  if (roll > 0.85 && isAir(wx, wy, wz)) {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      wx,
-                      wy,
-                      wz,
-                      'packed_ice'
-                    );
-                  }
-                  if (ceilId === 'stone') {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      wx,
-                      ceilY,
-                      wz,
-                      'packed_ice'
-                    );
-                  }
-                  break;
-                default:
-                  break;
+            // ── Ceiling Decoration ──
+            if (!planMap.has(key) && planMap.has(aboveKey)) {
+              if (roll < (profile.stalactiteChance || 0)) {
+                setPlannedBlock(planMap, changedMap, wx, wy + 1, wz, profile.ceiling);
               }
             }
 
-            // ── Wall decoration (6-neighbour exposed-stone check) ──
-            const neighbors = [
-              [wx - 1, wy, wz],
-              [wx + 1, wy, wz],
-              [wx, wy, wz - 1],
-              [wx, wy, wz + 1],
-            ];
-            for (const [nx, ny, nz] of neighbors) {
-              const wallKey = getNumericKey(nx, ny, nz);
-              const wallId = planMap.get(wallKey);
-              if (wallId !== 'stone') continue; // only replace exposed stone
-              const wallRoll = hash2D(
-                nx + ny * 5,
-                nz - ny * 11,
-                currentSeed + 4817
-              );
-              switch (biome) {
-                case 'dripstone':
-                  if (wallRoll < 0.25) {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      nx,
-                      ny,
-                      nz,
-                      wallRoll < 0.12 ? 'calcite' : 'tuff'
-                    );
-                  }
-                  break;
-                case 'deep_dark':
-                  setPlannedBlock(planMap, changedMap, nx, ny, nz, 'deepslate');
-                  if (wallRoll < 0.04) {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      nx,
-                      ny,
-                      nz,
-                      'obsidian'
-                    );
-                  }
-                  break;
-                case 'ice':
-                  if (wallRoll < 0.5) {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      nx,
-                      ny,
-                      nz,
-                      'packed_ice'
-                    );
-                  }
-                  break;
-                case 'mushroom':
-                  if (wallRoll < 0.08) {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      nx,
-                      ny,
-                      nz,
-                      'glowstone'
-                    );
-                  }
-                  break;
-                case 'lush':
-                  if (wallRoll < 0.15) {
-                    setPlannedBlock(
-                      planMap,
-                      changedMap,
-                      nx,
-                      ny,
-                      nz,
-                      'moss_block'
-                    );
-                  }
-                  break;
-                default:
-                  break;
-              }
+            // ── Filler logic (Walls) ──
+            if (planMap.has(key)) {
+               const isExposed = !planMap.has(getNumericKey(wx+1, wy, wz)) || !planMap.has(getNumericKey(wx-1, wy, wz));
+               if (isExposed && roll < 0.3) {
+                 setPlannedBlock(planMap, changedMap, wx, wy, wz, profile.wall);
+               }
             }
           }
         }

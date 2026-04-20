@@ -40,7 +40,7 @@
       ]
     },
     "portable": {
-      "artifactName": "AntonCraft-${version}-Portable.exe"
+      "artifactName": "ArloCraft-${version}-Portable.exe"
     }
   },
   "devDependencies": {
@@ -54,10 +54,19 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.5.0",
     "comlink": "^4.4.2",
     "fastnoise-lite": "^1.1.1",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.8.0",
     "lz-string": "^1.5.0",
+    "postcss": "^8.5.10",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "stats.js": "^0.17.0",
+    "tailwindcss": "^4.2.2",
     "three": "^0.183.2",
     "three-mesh-bvh": "^0.9.9"
   }

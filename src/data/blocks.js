@@ -1,4 +1,4 @@
-const configModules = import.meta.glob('../content/blocks/*/config.json', {
+const configModules = import.meta.glob('./block_configs/*/config.json', {
   eager: true,
 });
 import { blockIdToDisplayName } from './blockIds.js';

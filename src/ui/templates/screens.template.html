@@ -1,0 +1,265 @@
+<!-- ═══════════════════ MENU OVERLAY ═══════════════════ -->
+<div id="overlay" style="display:block; position:fixed; inset:0; z-index:100;">
+
+    <!-- ── SCREEN: Booting ───────────────────────────────── -->
+    <div id="screen-booting" class="ni-screen ni-screen-active">
+        <div class="ni-boot-container">
+            <div class="ni-boot-logo-wrapper">
+                <h1 class="ni-title mc-logo" data-text="ARLOCRAFT"><span>ARLOCRAFT</span></h1>
+            </div>
+            <div class="ni-boot-spinner-row">
+                <div class="ni-boot-spinner"></div>
+                <div id="boot-status" class="ni-boot-status">Initializing Engine...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SCREEN: Title ─────────────────────────────────── -->
+    <div id="screen-title" class="ni-screen">
+        <div class="mc-bg-orb mc-orb-a"></div>
+        <div class="mc-bg-orb mc-orb-b"></div>
+        <div class="mc-bg-orb mc-orb-c"></div>
+
+        <div class="ni-hero">
+            <h1 class="ni-title"><span>ArloCraft</span></h1>
+            <p class="ni-subtitle">The Grandmaster's Vanguard</p>
+        </div>
+
+        <nav class="ni-main-nav">
+            <div class="ni-tile-row">
+                <button class="ni-tile ni-tile-blue" id="btn-to-worlds">
+                    <div class="ni-tile-icon">&#128100;</div>
+                    <span>Singleplayer</span>
+                </button>
+                <button class="ni-tile ni-tile-purple" id="btn-to-multiplayer">
+                    <div class="ni-tile-icon">&#127760;</div>
+                    <span>Multiplayer</span>
+                </button>
+                <button class="ni-tile ni-tile-green" id="btn-to-skins">
+                    <div class="ni-tile-icon">&#128101;</div>
+                    <span>Skins</span>
+                </button>
+                <button class="ni-tile ni-tile-orange" id="btn-to-packs">
+                    <div class="ni-tile-icon">&#128452;</div>
+                    <span>Texture Packs</span>
+                </button>
+                <button class="ni-tile ni-tile-red" id="btn-to-settings">
+                    <div class="ni-tile-icon">&#9881;</div>
+                    <span>Options</span>
+                </button>
+                <button class="ni-tile ni-tile-muted" id="btn-title-quit">
+                    <div class="ni-tile-icon">&#128274;</div>
+                    <span>Quit</span>
+                </button>
+            </div>
+        </nav>
+
+        <section id="ni-release-card" aria-live="polite">
+            <div class="ni-release-head">
+                <div id="ni-release-version">Version: v0.0.0</div>
+                <button class="ni-btn ni-btn-sm" id="btn-release-refresh">Refresh</button>
+            </div>
+            <div id="ni-release-date">Checking latest GitHub release...</div>
+            <ul id="ni-release-notes">
+                <li>Loading changelog...</li>
+            </ul>
+            <div class="ni-release-actions">
+                <button class="ni-btn ni-btn-sm" id="btn-open-release">Latest Release</button>
+                <button class="ni-btn ni-btn-sm" id="btn-open-repo">GitHub Repo</button>
+            </div>
+        </section>
+        <footer class="ni-title-footer">
+            <div class="ni-footer-hint">ArloCraft Alpha · antonretro</div>
+        </footer>
+    </div>
+
+    <!-- ── SCREEN: World Select ──────────────────────────── -->
+    <div id="screen-world-select" class="ni-screen ni-glass">
+        <div class="ni-container">
+            <div class="ni-header">
+                <h2 class="ni-heading">Select World</h2>
+                <button class="ni-btn ni-btn-sm ni-btn-world-back" id="btn-worlds-back-top">Back</button>
+            </div>
+            
+            <div id="world-list-container" class="ni-grid-worlds" aria-live="polite">
+                <!-- Cards will be injected by GameUI.js (6 slots) -->
+            </div>
+
+            <div class="ni-footer-actions">
+                <button class="ni-btn ni-btn-blue" id="btn-play-world">Play Selected</button>
+                <button class="ni-btn" id="btn-new-world">Create New</button>
+                <button class="ni-btn ni-btn-red" id="btn-delete-world">Delete</button>
+                <button class="ni-btn" id="btn-worlds-back">Back</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ── SCREEN: Multiplayer ───────────────────────────── -->
+    <div id="screen-multiplayer" class="ni-screen ni-glass">
+        <div class="ni-container">
+            <div class="ni-header">
+                <h2 class="ni-heading">Multiplayer</h2>
+                <button class="ni-btn ni-btn-sm" id="btn-multi-back-top">Back</button>
+            </div>
+            
+            <div class="ni-panel-modern">
+                <div class="ni-form-group">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <label class="ni-label">YOUR JOIN CODE</label>
+                        <label class="ni-switch-label" style="font-size:0.6rem; opacity:0.7;">
+                            <input id="multi-privacy-toggle" type="checkbox" checked /> HIDE CODE
+                        </label>
+                    </div>
+                    <div class="ni-input-row" style="gap: 8px; margin-top:8px;">
+                        <input id="multi-my-id" type="password" readonly class="ni-input-modern" style="opacity: 0.8; font-size: 0.75rem; letter-spacing: 2px;" value="Connecting..." />
+                        <button class="ni-btn ni-btn-sm" id="btn-copy-id" style="min-width: 80px;">Copy</button>
+                    </div>
+                    <p class="ni-hint" style="margin-top: 8px; font-size: 0.65rem; opacity: 0.6;">Sharing this code allows others to securely bridge into your world.</p>
+                </div>
+
+                <div class="ni-divider" style="margin: 24px 0; border-top: 1px dashed rgba(255,255,255,0.15);"></div>
+
+                <div class="ni-form-group">
+                    <label class="ni-label">JOIN REMOTE WORLD</label>
+                    <div class="ni-input-row" style="gap: 8px; margin-top:8px;">
+                        <input id="multi-join-id" type="text" placeholder="Paste Join Code here..." class="ni-input-modern" style="font-size: 0.75rem;" />
+                        <button class="ni-btn ni-btn-blue" id="btn-multi-join" style="min-width: 100px;">CONNECT</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ni-footer-actions" style="margin-top: 24px;">
+                <button class="ni-btn ni-btn-block" id="btn-multi-back">Back to Title</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SCREEN: World Create ──────────────────────────── -->
+    <div id="screen-world-create" class="ni-screen ni-glass">
+        <div class="ni-panel-modern">
+            <h2 class="ni-heading">New Adventure</h2>
+
+            <div class="ni-form-group">
+                <label class="ni-label" for="seed-input">World Seed</label>
+                    <input id="seed-input" type="text" class="ni-input-modern" />
+            </div>
+
+            <div class="ni-form-group">
+                <label class="ni-label">Game Mode</label>
+                <div id="gamemode-indicator" class="ni-mode-label">SURVIVAL</div>
+                <div class="ni-mode-selection">
+                    <button class="ni-mode-tab ni-mode-tab-active" id="btn-mode-survival">Survival</button>
+                    <button class="ni-mode-tab" id="btn-mode-creative">Creative</button>
+                </div>
+            </div>
+
+            <div class="ni-creation-footer">
+                <div class="ni-slot-hint">Location: <span id="create-slot-label">SLOT-1</span></div>
+                <div class="ni-action-row">
+                    <button class="ni-btn ni-btn-blue" id="btn-start">Create World</button>
+                    <button class="ni-btn" id="btn-create-back">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SCREEN: Skin Library ──────────────────────────── -->
+    <div id="screen-skins" class="ni-screen ni-glass" style="display: none;">
+        <div class="ni-container">
+            <div class="ni-header">
+                <h2 class="ni-heading">Skin Library</h2>
+                <button class="ni-btn ni-btn-sm" id="btn-skins-back-top">Back</button>
+            </div>
+
+            <div class="ni-skin-layout">
+                <div class="ni-skin-selector">
+                    <div class="ni-label">CUSTOM UPLOAD</div>
+                    <div class="ni-upload-box" id="skin-upload-area">
+                        <input type="file" id="skin-file-input" accept="image/png" style="display: none;" />
+                        <div class="ni-upload-hint">Drop .PNG skin here or click to browse</div>
+                    </div>
+
+                    <div class="ni-label" style="margin-top: 20px;">CLASSIC</div>
+                    <div id="classic-skins-grid" class="ni-skin-grid">
+                        <!-- Steve and Alex injected here -->
+                    </div>
+
+                    <div class="ni-label" style="margin-top: 20px;">RANDOM COLLECTION</div>
+                    <div id="random-skins-grid" class="ni-skin-grid">
+                        <!-- 10 Random skins injected here -->
+                    </div>
+                </div>
+
+                <div class="ni-skin-preview">
+                    <div class="ni-label">PREVIEW</div>
+                    <div id="skin-preview-viewport">
+                        <!-- 3D Preview Canvas injected here -->
+                    </div>
+                    <div id="selected-skin-name" class="ni-skin-info">Classic Steve</div>
+                </div>
+            </div>
+
+            <div class="ni-footer-actions">
+                <button class="ni-btn ni-btn-blue" id="btn-apply-skin">Save & Apply</button>
+                <button class="ni-btn" id="btn-skins-back">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SCREEN: Texture Packs ──────────────────────────── -->
+    <div id="screen-texture-packs" class="ni-screen ni-glass" style="display: none;">
+        <div class="ni-container">
+            <div class="ni-header">
+                <h2 class="ni-heading">Texture Packs</h2>
+                <button class="ni-btn ni-btn-sm" id="btn-packs-back-top">Back</button>
+            </div>
+            
+            <div class="ni-pack-layout">
+                <div class="ni-pack-list">
+                    <div class="ni-label">AVAILABLE PACKS</div>
+                    <div id="pack-list-items" class="ni-pack-grid">
+                        <!-- Pack items injected here -->
+                    </div>
+                </div>
+                
+                <div class="ni-pack-details">
+                    <div class="ni-label">SELECTED PACK</div>
+                    <div id="pack-preview-card" class="ni-pack-card-large">
+                        <div class="ni-pack-icon-large">
+                            <img id="selected-pack-icon" src="" alt="Pack Icon" />
+                        </div>
+                        <div class="ni-pack-info">
+                            <h3 id="selected-pack-name">Igneous 1.19.4</h3>
+                            <p id="selected-pack-desc">Ultra-clean, high-performance textures for the modern voyager.</p>
+                            <span class="ni-pack-ver">Stable Build 1.19.4</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ni-footer-actions">
+                <button class="ni-btn ni-btn-blue" id="btn-apply-pack">Apply Assets</button>
+                <button class="ni-btn" id="btn-packs-back">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SCREEN: Loading ────────────────────────────────── -->
+    <div id="screen-loading" class="ni-screen ni-glass" style="display: none;">
+        <div class="ni-loading-content">
+            <div class="ni-loading-logo">
+                <div id="loading-avatar-3d-container">
+                    <canvas id="loading-avatar-canvas"></canvas>
+                </div>
+                <div class="ni-loading-spinner"></div>
+            </div>
+            <h2 id="loading-status" class="ni-loading-text">Generating Terrain...</h2>
+            <div class="ni-progress-rail">
+                <div id="loading-progress" class="ni-progress-fill" style="width: 0%"></div>
+            </div>
+            <div id="loading-subtext" class="ni-loading-subtext">Calculating voxel structures...</div>
+            <div id="loading-eta" class="ni-loading-eta">Estimated: <span id="eta-value">--s</span></div>
+        </div>
+    </div>
+
+</div>

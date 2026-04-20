@@ -1,105 +1,120 @@
 /**
  * GravitySystem
  * Manages physics for falling blocks like Sand and Gravel.
+ * Updated to use a queued tick-based system to prevent main-thread hangs.
  */
 export class GravitySystem {
-  constructor(world) {
-    this.world = world;
-    this.fallingBlocks = new Set(); // Set of block keys that need a gravity check
-    this.activeGravityBlocks = new Map(); // key -> falling speed/state if we want animated falls
+    constructor(world) {
+        this.world = world;
+        this.pendingUpdates = new Set(); // Set of "x,y,z" strings
+        
+        this.fallableIds = new Set([
+            'sand',
+            'gravel',
+            'red_sand',
+            'concrete_powder',
+            'anvil',
+        ]);
 
-    this.fallableIds = new Set([
-      'sand',
-      'gravel',
-      'red_sand',
-      'concrete_powder',
-      'anvil',
-    ]);
-  }
-
-  /**
-   * Check if a block at (x, y, z) should start falling.
-   */
-  checkBlock(x, y, z) {
-    const id = this.world.getBlockAt(x, y, z);
-    if (!id) return;
-
-    // Basic check: is it a gravity block?
-    if (!this.isGravityBlock(id)) return;
-
-    // Is there air/replaceable below?
-    const belowId = this.world.getBlockAt(x, y - 1, z);
-    if (this.canFallThrough(belowId)) {
-      this.triggerFall(x, y, z, id);
-    }
-  }
-
-  isGravityBlock(id) {
-    if (!id) return false;
-    const baseId = id.split(':')[0]; // Handle variant IDs
-    return this.fallableIds.has(baseId);
-  }
-
-  canFallThrough(id) {
-    if (
-      !id ||
-      id === 'air' ||
-      id === 'water' ||
-      id === 'fire' ||
-      id === 'virus'
-    )
-      return true;
-    // In the future, check for deco/replaceable?
-    return false;
-  }
-
-  triggerFall(x, y, z, id) {
-    // 60: Remove current block
-    this.world.removeBlockAt(x, y, z, { silent: false });
-
-    // Find the impact point (checking down to void floor)
-    let targetY = y - 1;
-    const VOID_LIMIT = -256;
-
-    while (
-      targetY > VOID_LIMIT &&
-      this.canFallThrough(this.world.getBlockAt(x, targetY - 1, z))
-    ) {
-      targetY--;
+        this.updateBatchSize = 16; // Process 16 checks per frame
     }
 
-    // If block fell into the deep void, just destroy it to prevent loops
-    if (targetY <= -128) {
-      return;
+    /**
+     * Queues a block at (x, y, z) for a stability check.
+     */
+    queueCheck(x, y, z) {
+        this.pendingUpdates.add(`${x},${y},${z}`);
     }
 
-    // Place at target (Instant fall for now, can add animation later)
-    this.world.addBlock(x, targetY, z, id, 'gravity', true, { silent: false });
+    /**
+     * Called by World.update() every frame.
+     */
+    update() {
+        if (this.pendingUpdates.size === 0) return;
 
-    // After impact, check for more chain reactions around the old and new positions
-    this.checkNeighbors(x, y, z);
-    this.checkNeighbors(x, targetY, z);
-  }
+        let processed = 0;
+        const iterator = this.pendingUpdates.values();
+        
+        while (processed < this.updateBatchSize) {
+            const next = iterator.next();
+            if (next.done) break;
 
-  checkNeighbors(x, y, z) {
-    // Blocks above the changed position might now be unsupported
-    this.checkBlock(x, y + 1, z);
-    this.checkBlock(x + 1, y, z);
-    this.checkBlock(x - 1, y, z);
-    this.checkBlock(x, y, z + 1);
-    this.checkBlock(x, y, z - 1);
-  }
-
-  /**
-   * Hook into the world block updates
-   */
-  onBlockChanged(x, y, z, operation) {
-    // If a block was removed, neighbors might fall
-    if (operation === 'remove') {
-      this.checkNeighbors(x, y, z);
-    } else {
-      // If a block was added, it might immediately fall
-      this.checkBlock(x, y, z);
+            const key = next.value;
+            this.pendingUpdates.delete(key);
+            
+            const [x, y, z] = key.split(',').map(Number);
+            this.processCheck(x, y, z);
+            
+            processed++;
+        }
     }
-  }
+
+    /**
+     * Performs the actual physics check and executes the fall if necessary.
+     */
+    processCheck(x, y, z) {
+        const id = this.world.getBlockAt(x, y, z);
+        if (!id || !this.isGravityBlock(id)) return;
+
+        // Is there air/replaceable below?
+        const belowId = this.world.getBlockAt(x, y - 1, z);
+        if (this.canFallThrough(belowId)) {
+            this.triggerFall(x, y, z, id);
+        }
+    }
+
+    isGravityBlock(id) {
+        if (!id) return false;
+        const baseId = id.split(':')[0];
+        return this.fallableIds.has(baseId);
+    }
+
+    canFallThrough(id) {
+        if (!id || id === 'air' || id === 'water' || id === 'fire' || id === 'virus') {
+            return true;
+        }
+        return false;
+    }
+
+    triggerFall(x, y, z, id) {
+        // Remove current block
+        this.world.removeBlockAt(x, y, z, { silent: false });
+
+        // Find the impact point
+        let targetY = y - 1;
+        const VOID_LIMIT = -128;
+
+        while (targetY > VOID_LIMIT && this.canFallThrough(this.world.getBlockAt(x, targetY - 1, z))) {
+            targetY--;
+        }
+
+        // If block fell into the deep void, just destroyed
+        if (targetY <= -120) return;
+
+        // Place at target (Instant column fall)
+        this.world.addBlock(x, targetY, z, id, 'gravity', true, { silent: false });
+
+        // Queue checks for neighbors around both old and new positions
+        this.queueNeighbors(x, y, z);
+        this.queueNeighbors(x, targetY, z);
+    }
+
+    queueNeighbors(x, y, z) {
+        this.queueCheck(x, y + 1, z); // Block above might be unsupported now
+        this.queueCheck(x + 1, y, z);
+        this.queueCheck(x - 1, y, z);
+        this.queueCheck(x, y, z + 1);
+        this.queueCheck(x, y, z - 1);
+    }
+
+    /**
+     * Hook into the world block updates
+     */
+    onBlockChanged(x, y, z, operation) {
+        if (operation === 'remove') {
+            this.queueNeighbors(x, y, z);
+        } else {
+            this.queueCheck(x, y, z);
+        }
+    }
 }

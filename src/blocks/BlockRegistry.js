@@ -3,7 +3,7 @@ import { BLOCKS } from '../data/blocks.js';
 import { normalizeBlockVariantId } from '../data/blockIds.js';
 
 const textureModules = import.meta.glob(
-  ['../content/blocks/*/*.png', '../Igneous*/**/*.png'],
+  '../Igneous 1.19.4/assets/minecraft/textures/block/*.png',
   { eager: true, query: '?url' }
 );
 
@@ -38,6 +38,44 @@ export class BlockRegistry {
       berry_bush: 'sweet_berry_bush',
       nuke: 'nuke',
       fire: 'fire_0',
+      wool_white: 'white_wool',
+      wool_orange: 'orange_wool',
+      wool_magenta: 'magenta_wool',
+      wool_light_blue: 'light_blue_wool',
+      wool_yellow: 'yellow_wool',
+      wool_lime: 'lime_wool',
+      wool_pink: 'pink_wool',
+      wool_gray: 'gray_wool',
+      wool_light_gray: 'light_gray_wool',
+      wool_cyan: 'cyan_wool',
+      wool_purple: 'purple_wool',
+      wool_blue: 'blue_wool',
+      wool_brown: 'brown_wool',
+      wool_green: 'green_wool',
+      wool_red: 'red_wool',
+      wool_black: 'black_wool',
+      stained_glass_white: 'white_stained_glass',
+      stained_glass_orange: 'orange_stained_glass',
+      stained_glass_magenta: 'magenta_stained_glass',
+      stained_glass_light_blue: 'light_blue_stained_glass',
+      stained_glass_yellow: 'yellow_stained_glass',
+      stained_glass_lime: 'lime_stained_glass',
+      stained_glass_pink: 'pink_stained_glass',
+      stained_glass_gray: 'gray_stained_glass',
+      stained_glass_light_gray: 'light_gray_stained_glass',
+      stained_glass_cyan: 'cyan_stained_glass',
+      stained_glass_purple: 'purple_stained_glass',
+      stained_glass_blue: 'blue_stained_glass',
+      stained_glass_brown: 'brown_stained_glass',
+      stained_glass_green: 'green_stained_glass',
+      stained_glass_red: 'red_stained_glass',
+      stained_glass_black: 'black_stained_glass',
+    };
+    this.stainedGlassColors = {
+      white: 0xffffff, orange: 0xd87f33, magenta: 0xb24cd8, light_blue: 0x6699d8,
+      yellow: 0xe5e533, lime: 0x7fcc19, pink: 0xf27fa5, gray: 0x4c4c4c,
+      light_gray: 0x999999, cyan: 0x4c7f99, purple: 0x7f3fb2, blue: 0x334cb2,
+      brown: 0x664c33, green: 0x667f33, red: 0x993333, black: 0x191919
     };
     this.missingTexture = this.createMissingTexture();
     this.init();
@@ -74,75 +112,94 @@ export class BlockRegistry {
       return 0;
     });
 
-    for (const [path, module] of entries) {
-      const segments = path.split('/');
-      let blockId = segments[segments.length - 2];
-      let fileName = segments[segments.length - 1];
-      const isIgneous = path.includes('Igneous');
-      const baseName = fileName.replace('.png', '');
+    const igneousFaceSuffixes = [
+      '_side_overlay',
+      '_top',
+      '_bottom',
+      '_side',
+      '_front',
+      '_back',
+      '_end',
+    ];
 
+    const compoundIds = new Set([
+      'tall_grass_bottom',
+      'tall_grass_top',
+      'grass_block_snow',
+      'large_fern_bottom',
+      'large_fern_top',
+      'rose_bush_bottom',
+      'rose_bush_top',
+      'peony_bottom',
+      'peony_top',
+      'lilac_bottom',
+      'lilac_top',
+      'sunflower_bottom',
+      'sunflower_top',
+    ]);
+
+    const globalAliases = {
+      iron: 'iron_block',
+      coal: 'coal_block',
+      copper: 'copper_block',
+      gold: 'gold_block',
+      lapis: 'lapis_block',
+      diamond: 'diamond_block',
+      emerald: 'emerald_block',
+      redstone: 'redstone_block',
+      path_block: 'dirt_path',
+      short_grass: 'grass',
+      dripstone: 'dripstone_block',
+      cherry_leaves: 'flowering_azalea_leaves',
+      nuke: 'tnt_side',
+    };
+
+    for (const [path, module] of Object.entries(textureModules)) {
+      const fileName = path.split('/').pop();
+      let baseName = fileName.replace('.png', '');
+      const url = module.default || module;
+
+      // Handling breaking stages
       if (baseName.startsWith('destroy_stage_')) {
         const stage = parseInt(baseName.replace('destroy_stage_', ''));
-        const url = module.default || module;
         this.breakingTextures[stage] = url;
-
-        const tex = this.textureLoader.load(url);
-        tex.magFilter = THREE.NearestFilter;
-        tex.minFilter = THREE.NearestFilter;
-
+        const tex = this.loadTexture(url);
         this.breakingMaterialCache[stage] = new THREE.MeshBasicMaterial({
           map: tex,
           transparent: true,
           blending: THREE.MultiplyBlending,
-          premultipliedAlpha: true,
           side: THREE.FrontSide,
           depthWrite: false,
           polygonOffset: true,
           polygonOffsetFactor: -1.5,
-          polygonOffsetUnits: -1.5,
         });
         continue;
       }
 
-      const isTallFoliage = /tall_grass|sunflower|rose_bush|lilac|peony/.test(
-        baseName
-      );
+      let blockId = baseName;
+      let faceKey = 'all.png';
 
-      if (baseName.endsWith('_top') && !isTallFoliage) {
-        blockId = baseName.substring(0, baseName.length - 4);
-        fileName = 'top.png';
-      } else if (baseName.endsWith('_side') && !isTallFoliage) {
-        blockId = baseName.substring(0, baseName.length - 5);
-        fileName = 'side.png';
-      } else if (baseName.endsWith('_bottom') && !isTallFoliage) {
-        blockId = baseName.substring(0, baseName.length - 7);
-        fileName = 'bottom.png';
-      } else if (baseName.endsWith('_front') && !isTallFoliage) {
-        blockId = baseName.substring(0, baseName.length - 6);
-        fileName = 'front.png';
-      } else if (
-        fileName === 'top.png' ||
-        fileName === 'side.png' ||
-        fileName === 'bottom.png' ||
-        fileName === 'front.png' ||
-        fileName === 'all.png'
-      ) {
-        // Folder-named block with generic face file (e.g. copper/all.png, path_block/top.png)
-        // blockId is already set from folder name; just normalize fileName
-        // keep blockId as folder name, set fileName as-is
-      } else {
-        blockId = baseName;
-        fileName = 'all.png';
+      for (const suffix of igneousFaceSuffixes) {
+        if (baseName.endsWith(suffix) && !compoundIds.has(baseName)) {
+          blockId = baseName.substring(0, baseName.length - suffix.length);
+          faceKey = suffix.substring(1) + '.png'; // e.g. "top.png"
+          break;
+        }
       }
 
-      if (isIgneous) {
-        igneousOwnedBlocks.add(blockId);
-      } else if (igneousOwnedBlocks.has(blockId)) {
-        continue;
-      }
+      const addTexture = (id, face, assetUrl) => {
+        if (!this.blockTextures.has(id)) this.blockTextures.set(id, {});
+        this.blockTextures.get(id)[face] = assetUrl;
+      };
 
-      if (!this.blockTextures.has(blockId)) this.blockTextures.set(blockId, {});
-      this.blockTextures.get(blockId)[fileName] = module.default || module;
+      addTexture(blockId, faceKey, url);
+
+      // Apply aliases
+      for (const [alias, target] of Object.entries(globalAliases)) {
+        if (blockId === target) {
+          addTexture(alias, faceKey, url);
+        }
+      }
     }
 
     BLOCKS.forEach((config) => {
@@ -204,6 +261,37 @@ export class BlockRegistry {
         );
       }
     }
+  }
+
+  getMaterial(blockId) {
+    if (!this.materials.has(blockId)) {
+      const materialConfigs = this.blockConfigs.get(blockId);
+      if (!materialConfigs) return this.magentaFallback;
+
+      const textures = this.getBlockTextures(blockId);
+      const materials = [];
+
+      for (let i = 0; i < 6; i++) {
+        const tex = textures[i];
+        const isGlass = blockId === 'glass' || blockId.includes('stained_glass');
+        const mat = new THREE.MeshLambertMaterial({
+          map: tex,
+          transparent: isGlass || blockId.includes('leaves'),
+          opacity: isGlass ? 0.72 : 1.0,
+          alphaTest: blockId.includes('leaves') ? 0.35 : 0.0,
+          side: THREE.FrontSide,
+        });
+
+        // Grass block tinting disabled per request
+        if (blockId === 'grass_block' && (i === 2 || i === 3)) {
+          // mat.color.setHex(0x79c05a);
+        }
+
+        materials.push(mat);
+      }
+      this.materials.set(blockId, materials);
+    }
+    return this.materials.get(blockId);
   }
 
   injectWindShader(material, options = {}) {

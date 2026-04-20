@@ -1,4 +1,4 @@
-# AntonCraft Rendering
+# ArloCraft Rendering
 
 Rendering behavior is now centralized for easier tuning:
 

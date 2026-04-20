@@ -14,7 +14,7 @@ The ArloCraft engine has been stabilized with a major polish pass. Current focus
 ## Pending Items (Next Session)
 
 1. **Tree Logic Polish**: Structure placement clearing (Item burial fix) needs monitoring in various biomes.
-2. **Mob AI**: Investigate villager anton spawning and pathfinding in generated structures.
+2. **Mob AI**: Investigate villager arlo spawning and pathfinding in generated structures.
 3. **Sound Overhaul**: Integrate `action-success` events into a dedicated audio spatializer.
 4. **CSS Refactoring**: Proposal to split `style.css` into `engine.css`, `ui.css`, and `menu.css`.
 

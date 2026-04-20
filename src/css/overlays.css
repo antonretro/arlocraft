@@ -1,0 +1,150 @@
+/* ── INTERACTIVE CONTAINER OVERLAYS (Inventory, Chest, Furnace) ───────────── */
+
+#inventory-overlay,
+#crafting-table-overlay,
+#chest-overlay,
+#furnace-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(16px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  animation: ni-fade-in 0.25s ease-out;
+}
+
+/* ── SHARED CONTAINER BOX (The "Block Handler" Layout) ── */
+.bh-container {
+  width: min(95vw, 600px);
+  background: var(--ni-bg-alt);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--ni-radius-lg);
+  display: flex;
+  flex-direction: column;
+  padding: 30px;
+}
+
+.bh-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.bh-header h2 {
+  margin: 0;
+  color: var(--ni-blue);
+  font-weight: 900;
+}
+
+.bh-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.bh-section h3 {
+  font-size: 0.75rem;
+  color: var(--ni-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 10px;
+}
+
+/* ── GRID SYSTEMS ── */
+.grid-9x3 {
+  display: grid;
+  grid-template-columns: repeat(9, 52px);
+  gap: 8px;
+}
+.grid-9x1 {
+  display: grid;
+  grid-template-columns: repeat(9, 52px);
+  gap: 8px;
+}
+.grid-3x3 {
+  display: grid;
+  grid-template-columns: repeat(3, 52px);
+  gap: 8px;
+}
+
+/* ── ARROW & PROGRESS (Furnace/Crafting) ── */
+.bh-arrow {
+  color: var(--ni-blue);
+  font-size: 1.5rem;
+  font-weight: 900;
+  margin: 0 10px;
+}
+
+/* ── FURNACE SPECIFICS ── */
+.furnace-ui {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.furnace-slots {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+.furnace-middle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.furnace-flame {
+  width: 24px;
+  height: 24px;
+  background: url('/assets/gui/furnace_flame.png') no-repeat center;
+  background-size: contain;
+  opacity: 0.3;
+}
+.furnace-progress-track {
+  width: 40px;
+  height: 10px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+}
+.furnace-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--ni-green);
+  border-radius: 4px;
+  transition: width 0.2s;
+}
+
+/* ── INVENTORY OVERLAY (The large one with tabs) ── */
+#inventory-card {
+  width: min(95vw, 1200px);
+  background: var(--ni-bg-alt);
+  border-radius: var(--ni-radius-lg);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+#ni-inventory-tabs {
+  position: absolute;
+  top: -52px;
+  left: 40px;
+  display: flex;
+  gap: 12px;
+}
+.ni-inv-tab {
+  padding: 10px 24px;
+  background: var(--ni-bg-alt);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  color: var(--ni-text-muted);
+  cursor: pointer;
+}
+.ni-inv-tab.active {
+  background: var(--ni-blue);
+  color: #fff;
+}

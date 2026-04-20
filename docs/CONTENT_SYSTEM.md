@@ -1,6 +1,6 @@
-# AntonCraft Content System
+# ArloCraft Content System
 
-AntonCraft now uses folder-based packs so blocks, tools, restoration sites, and names are easy to expand.
+ArloCraft now uses folder-based packs so blocks, tools, restoration sites, and names are easy to expand.
 
 ## Add Blocks
 
