@@ -86,6 +86,7 @@ export class Game {
     this.gameState = new GameState();
     this.stats = new Stats();
     this.gameState.stats = this.stats;
+    this.gameState.initStartingInventory();
 
     this.renderer = new Renderer(this.settings.graphicsAPI);
     this.camera = new Camera(this.renderer.scene);

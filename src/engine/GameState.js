@@ -30,8 +30,6 @@ export class GameState {
       () => this.checkAchievements(),
       2000
     );
-
-    this.initStartingInventory();
   }
 
   initStartingInventory() {
@@ -51,7 +49,9 @@ export class GameState {
   discoverBlock(id) {
     if (!id || this.discoveredBlocks.has(id)) return;
     this.discoveredBlocks.add(id);
-    this.stats.discoveredBlocksCount = this.discoveredBlocks.size;
+    if (this.stats) {
+      this.stats.discoveredBlocksCount = this.discoveredBlocks.size;
+    }
     window.dispatchEvent(
       new CustomEvent('discovery-block', { detail: { id } })
     );
@@ -86,6 +86,7 @@ export class GameState {
 
     for (const ach of ACHIEVEMENTS) {
       if (this.unlockedAchievements.has(ach.id)) continue;
+      if (!this.stats) continue;
       try {
         if (ach.check(this.stats)) {
           this.unlockAchievement(ach.id);
