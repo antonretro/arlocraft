@@ -18,33 +18,33 @@ export const RENDER_LAYERS = {
 };
 
 export const FOG_SETTINGS = {
-  dayDensity: 0.006,
-  nightDensity: 0.009,
-  underwaterMultiplier: 2.5,
-  minDensity: 0.004,
-  maxDensity: 0.030,
+  dayDensity: 0.0055,
+  nightDensity: 0.0085,
+  underwaterMultiplier: 3.2,
+  minDensity: 0.003,
+  maxDensity: 0.024,
 };
 
 export const ATMOSPHERIC_COLORS = {
   DAY: {
-    top: 0x0256cc, 
-    bottom: 0x86cefb, 
-    sun: 0xfffbe8, 
+    top: 0x0256cc,
+    bottom: 0x86cefb,
+    sun: 0xfffbe8,
   },
   NIGHT: {
-    top: 0x080f1e,   // Slightly bluer
+    top: 0x080f1e, // Slightly bluer
     bottom: 0x141d35, // Brighter floor
-    sun: 0x4a6ebc,    // Luminous moonlight
+    sun: 0x4a6ebc, // Luminous moonlight
   },
   DAWN: {
-    top: 0x142852, 
-    bottom: 0xff6622, 
-    sun: 0xffcc88, 
+    top: 0x142852,
+    bottom: 0xff7733, // More vibrant sunrise
+    sun: 0xffddaa,
   },
   DUSK: {
-    top: 0x100832, 
-    bottom: 0xff3a00, 
-    sun: 0xff5511, 
+    top: 0x100832,
+    bottom: 0xff4411, // Moody sunset
+    sun: 0xff6622,
   },
 };
 

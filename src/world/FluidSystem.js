@@ -56,11 +56,35 @@ export class FluidSystem {
     if (this.dirtyBlocks.length === 0) return;
 
     // Process a batch of fluid updates
-    const batchSize = Math.min(this.dirtyBlocks.length, 64);
+    const batchSize = Math.min(this.dirtyBlocks.length, 128); // Increased batch size since it's now more efficient
     const nextBatch = this.dirtyBlocks.splice(0, batchSize);
+    
+    const affectedChunks = new Set();
 
     for (const block of nextBatch) {
+      const { x, y, z, id, depth } = block;
+      
+      const cx = this.world.coords.getChunkCoord(x);
+      const cy = this.world.coords.getChunkCoord(y);
+      const cz = this.world.coords.getChunkCoord(z);
+      const ownerKey = this.world.coords.getChunkKey(cx, cy, cz);
+      
+      // Use silent placement to avoid immediate rebuilds
+      this.world.mutations.setBlock(x, y, z, id, ownerKey, { silent: true });
+      
+      affectedChunks.add(ownerKey);
+      this.scheduleSpread(x, y, z, id, depth);
+      
       this.processSpread(block);
+    }
+
+    // Trigger chunk rebuilds once for all affected chunks in this batch
+    for (const chunkKey of affectedChunks) {
+      const chunk = this.world.chunks.get(chunkKey);
+      if (chunk) {
+        chunk.dirty = true;
+        this.world.chunkManager.priorityDirtyChunkKeys.add(chunkKey);
+      }
     }
   }
 
@@ -99,7 +123,7 @@ export class FluidSystem {
       id === 'water' ? this.MAX_DEPTH_WATER : this.MAX_DEPTH_LAVA;
     if (depth >= maxDepth) return;
 
-    // 1. Try flowing DOWN first (Hole filling)
+    // 1. Try flowing DOWN first
     const downKey = this.world.coords.getKey(x, y - 1, z);
     const downId = this.world.state.blockMap.get(downKey);
 
@@ -107,9 +131,7 @@ export class FluidSystem {
       y > this.world.minTerrainY &&
       (!downId || downId === 'air' || (downId !== id && this.isLiquid(downId)))
     ) {
-      // Priority 1: Vertical FALLING
-      // In Minecraft, falling fluid resets its spread potential once it hits a floor
-      this.placeFluid(x, y - 1, z, id, 0); 
+      this.placeFluid(x, y - 1, z, id, 0);
       return;
     }
 
@@ -139,12 +161,7 @@ export class FluidSystem {
   }
 
   placeFluid(x, y, z, id, depth) {
-    const cx = this.world.coords.getChunkCoord(x);
-    const cy = this.world.coords.getChunkCoord(y);
-    const cz = this.world.coords.getChunkCoord(z);
-    const ownerKey = this.world.coords.getChunkKey(cx, cy, cz);
-
-    this.world.mutations.addBlock(x, y, z, id, ownerKey, true, { fluidDepth: depth });
+    // This is now just a scheduling helper; mutations are handled in the update() batch
     this.scheduleSpread(x, y, z, id, depth);
   }
 }

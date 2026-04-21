@@ -25,13 +25,39 @@ export class WorldVisuals {
     return {
       solid: withWhiteVertexColors(new THREE.BoxGeometry(1, 1, 1)),
       path: (() => {
-        const geo = new THREE.BoxGeometry(1.001, 0.9375, 1.001); // 15/16 height, tiny inflate
-        geo.translate(0, -0.03125, 0);
+        const height = 0.9375;
+        const geo = new THREE.BoxGeometry(1.001, height, 1.001);
+        geo.translate(0, (height - 1) / 2, 0);
+        // Manual UV cropping for side faces (0, 1, 4, 5) to avoid squishing
+        const uv = geo.attributes.uv;
+        const sideFaces = [0, 1, 4, 5];
+        for (const faceIdx of sideFaces) {
+          const start = faceIdx * 4;
+          // uv is Top-Left, Top-Right, Bottom-Left, Bottom-Right
+          // In Three.js BoxGeometry:
+          // vertex 0: TL, 1: TR, 2: BL, 3: BR
+          // Standard UVs are [0,1], [1,1], [0,0], [1,0]
+          // We want the TOP of the geometry (height 0.9375) to map to v=0.9375
+          uv.setY(start + 0, 0.9375); // TL
+          uv.setY(start + 1, 0.9375); // TR
+          uv.setY(start + 2, 0); // BL
+          uv.setY(start + 3, 0); // BR
+        }
         return withWhiteVertexColors(geo);
       })(),
       farmland: (() => {
-        const geo = new THREE.BoxGeometry(1.001, 0.9375, 1.001); // 15/16 height, tiny inflate
-        geo.translate(0, -0.03125, 0);
+        const height = 0.9375;
+        const geo = new THREE.BoxGeometry(1.001, height, 1.001);
+        geo.translate(0, (height - 1) / 2, 0);
+        const uv = geo.attributes.uv;
+        const sideFaces = [0, 1, 4, 5];
+        for (const faceIdx of sideFaces) {
+          const start = faceIdx * 4;
+          uv.setY(start + 0, 0.9375);
+          uv.setY(start + 1, 0.9375);
+          uv.setY(start + 2, 0);
+          uv.setY(start + 3, 0);
+        }
         return withWhiteVertexColors(geo);
       })(),
       cake: (() => {
@@ -52,7 +78,7 @@ export class WorldVisuals {
         return withWhiteVertexColors(geo);
       })(),
       water_side: (() => {
-        const geo = new THREE.PlaneGeometry(1.002, 0.9385); // Tiny inflate to hide seams
+        const geo = new THREE.PlaneGeometry(1.0, 0.9375); // Flush with blocks (No more land clipping)
         geo.translate(0, -0.03125, 0);
         geo.translate(0, 0, 0.5);
         return withWhiteVertexColors(geo);
@@ -87,9 +113,10 @@ export class WorldVisuals {
         return withWhiteVertexColors(merged);
       })(),
       tallDeco: (() => {
+        // Correct 2-block height centering
         const p1 = new THREE.PlaneGeometry(1, 2);
         p1.rotateY(Math.PI / 4);
-        p1.translate(0, 0.5, 0);
+        p1.translate(0, 0.5, 0); // Corrected: y-range is -0.5 to 1.5, relative to block-center y=0.5 -> absolute 0 to 2
         const p2 = new THREE.PlaneGeometry(1, 2);
         p2.rotateY(-Math.PI / 4);
         p2.translate(0, 0.5, 0);
@@ -102,18 +129,9 @@ export class WorldVisuals {
         const norm2 = p2.attributes.normal.array;
         const idx1 = Array.from(p1.index.array);
         const idx2 = Array.from(p2.index.array).map((i) => i + 4);
-        merged.setAttribute(
-          'position',
-          new THREE.Float32BufferAttribute([...pos1, ...pos2], 3)
-        );
-        merged.setAttribute(
-          'uv',
-          new THREE.Float32BufferAttribute([...uv1, ...uv2], 2)
-        );
-        merged.setAttribute(
-          'normal',
-          new THREE.Float32BufferAttribute([...norm1, ...norm2], 3)
-        );
+        merged.setAttribute('position', new THREE.Float32BufferAttribute([...pos1, ...pos2], 3));
+        merged.setAttribute('uv', new THREE.Float32BufferAttribute([...uv1, ...uv2], 2));
+        merged.setAttribute('normal', new THREE.Float32BufferAttribute([...norm1, ...norm2], 3));
         merged.setIndex([...idx1, ...idx2]);
         return withWhiteVertexColors(merged);
       })(),
@@ -122,11 +140,11 @@ export class WorldVisuals {
         geo.translate(0, 0, 0);
         return withWhiteVertexColors(geo);
       })(),
-      tallDecoLOD: (() => {
-        const geo = new THREE.PlaneGeometry(1, 2);
-        geo.translate(0, 0.5, 0);
-        return withWhiteVertexColors(geo);
-      })(),
+  tallDecoLOD: (() => {
+    const geo = new THREE.PlaneGeometry(1, 2);
+    geo.translate(0, 0.5, 0); // Corrected: y-range -0.5 to 1.5 -> relative to center 0.5 is 0 to 2
+    return withWhiteVertexColors(geo);
+  })(),
       face_top: (() => {
         const geo = new THREE.PlaneGeometry(1, 1);
         geo.rotateX(-Math.PI / 2);
@@ -316,17 +334,17 @@ export class WorldVisuals {
   }
 
   updateHover(x, y, z, visible) {
-    this.hoverOutline.position.set(x, y, z);
+    this.hoverOutline.position.set(x + 0.5, y + 0.5, z + 0.5);
     this.hoverOutline.visible = visible;
   }
 
   updatePlacement(x, y, z, visible) {
-    this.placementOutline.position.set(x, y, z);
+    this.placementOutline.position.set(x + 0.5, y + 0.5, z + 0.5);
     this.placementOutline.visible = visible;
   }
 
   updateMiningCracks(x, y, z, visible, material, geometry = null) {
-    this.miningCracks.position.set(x, y, z);
+    this.miningCracks.position.set(x + 0.5, y + 0.5, z + 0.5);
     this.miningCracks.visible = visible;
     if (material) this.miningCracks.material = material;
     if (geometry && this.miningCracks.geometry !== geometry) {

@@ -114,6 +114,20 @@ function isHighwayAt(x, z) {
   return corridorA < 0.015 || corridorB < 0.018;
 }
 
+// -- WORLD CLASS: RUIN STRUCTURE GENERATOR --
+function addRuinStructure(planMap, changedMap, x, y, z, seed) {
+    const size = 3 + Math.floor(hash2D(x, z, seed) * 3);
+    for (let lx = -size; lx <= size; lx++) {
+        for (let lz = -size; lz <= size; lz++) {
+            const h = 1 + Math.floor(hash2D(x + lx, z + lz, seed + 123) * 4);
+            for (let ly = 0; ly < h; ly++) {
+                const block = hash2D(x+lx, z+lz, ly+seed) > 0.6 ? 'mossy_cobblestone' : 'cobblestone';
+                setPlannedBlock(planMap, changedMap, x + lx, y + ly, z + lz, block);
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Plan-map helpers
 // ---------------------------------------------------------------------------
@@ -183,7 +197,7 @@ const api = {
           wz,
           currentSeed
         );
-        const waterLevel = SEA_LEVEL + (biome.waterLevelOffset ?? 0);
+        const waterLevel = SEA_LEVEL;
 
         // ── Surface block ──────────────────────────────────────────
         let surfaceId =
@@ -216,12 +230,20 @@ const api = {
         for (let y = startY; y < endY; y++) {
           const depthBelowSurface = terrainHeight - y;
           if (y <= MIN_TERRAIN_Y) {
-             setPlannedBlock(planMap, changedMap, wx, y, wz, 'bedrock');
-             continue;
+            setPlannedBlock(planMap, changedMap, wx, y, wz, 'bedrock');
+            continue;
           }
 
-          const cave = getCaveCell(workerNoise, wx, y, wz, terrainHeight, cavesEnabled, currentSeed);
-          
+          const cave = getCaveCell(
+            workerNoise,
+            wx,
+            y,
+            wz,
+            terrainHeight,
+            cavesEnabled,
+            currentSeed
+          );
+
           if (y === terrainHeight) surfaceCarved = cave.carve;
 
           if (cave.carve) {
@@ -235,11 +257,11 @@ const api = {
           }
 
           if (y === terrainHeight) {
-             setPlannedBlock(planMap, changedMap, wx, y, wz, surfaceId);
+            setPlannedBlock(planMap, changedMap, wx, y, wz, surfaceId);
           } else if (depthBelowSurface > 0 && depthBelowSurface <= 3) {
-             setPlannedBlock(planMap, changedMap, wx, y, wz, biome.fillerBlock);
+            setPlannedBlock(planMap, changedMap, wx, y, wz, biome.fillerBlock);
           } else if (depthBelowSurface > 3) {
-             setPlannedBlock(planMap, changedMap, wx, y, wz, 'stone');
+            setPlannedBlock(planMap, changedMap, wx, y, wz, 'stone');
           }
         }
 
@@ -345,6 +367,14 @@ const api = {
             );
         }
 
+        // World Class: Ruin Spawning
+        const ruinRoll = hash2D(wx + 99, wz - 88, currentSeed);
+        if (!inSpawnZone && terrainHeight > waterLevel && ruinRoll > 0.9995) {
+            if (terrainHeight >= startY && terrainHeight < endY) {
+                addRuinStructure(planMap, changedMap, wx, terrainHeight + 1, wz, currentSeed);
+            }
+        }
+
         // ── Trees & ground decoration ─────────────────────────────
         // Deterministic Tree Check: We must check ground heights potentially below us
         // if a tree can span multiple vertical chunks.
@@ -433,10 +463,28 @@ const api = {
         for (let lz = 0; lz < chunkSize; lz++) {
           const wx = startX + lx;
           const wz = startZ + lz;
-          const terrainH = getColumnHeight(router, workerNoise, wx, wz, currentSeed);
+          const terrainH = getColumnHeight(
+            router,
+            workerNoise,
+            wx,
+            wz,
+            currentSeed
+          );
 
-          for (let wy = Math.min(terrainH - 1, endY - 1); wy >= Math.max(MIN_TERRAIN_Y + 1, startY); wy--) {
-            const profile = getCaveMaterialProfile(workerNoise, wx, wy, wz, terrainH, true, currentSeed);
+          for (
+            let wy = Math.min(terrainH - 1, endY - 1);
+            wy >= Math.max(MIN_TERRAIN_Y + 1, startY);
+            wy--
+          ) {
+            const profile = getCaveMaterialProfile(
+              workerNoise,
+              wx,
+              wy,
+              wz,
+              terrainH,
+              true,
+              currentSeed
+            );
             if (!profile) continue;
 
             const roll = hash2D(wx + wy * 7, wz - wy * 13, currentSeed + 9371);
@@ -446,8 +494,18 @@ const api = {
 
             // ── Floor Decoration ──
             if (!planMap.has(key) && planMap.has(belowKey)) {
-              if (roll < (profile.vegetationChance || 0) || (profile.sculkChance && roll < profile.sculkChance)) {
-                setPlannedBlock(planMap, changedMap, wx, wy - 1, wz, profile.floor);
+              if (
+                roll < (profile.vegetationChance || 0) ||
+                (profile.sculkChance && roll < profile.sculkChance)
+              ) {
+                setPlannedBlock(
+                  planMap,
+                  changedMap,
+                  wx,
+                  wy - 1,
+                  wz,
+                  profile.floor
+                );
               }
               // Chest Spawning: Standard visual chest with context-aware loot tag
               if (roll < 0.005) {
@@ -459,16 +517,25 @@ const api = {
             // ── Ceiling Decoration ──
             if (!planMap.has(key) && planMap.has(aboveKey)) {
               if (roll < (profile.stalactiteChance || 0)) {
-                setPlannedBlock(planMap, changedMap, wx, wy + 1, wz, profile.ceiling);
+                setPlannedBlock(
+                  planMap,
+                  changedMap,
+                  wx,
+                  wy + 1,
+                  wz,
+                  profile.ceiling
+                );
               }
             }
 
             // ── Filler logic (Walls) ──
             if (planMap.has(key)) {
-               const isExposed = !planMap.has(getNumericKey(wx+1, wy, wz)) || !planMap.has(getNumericKey(wx-1, wy, wz));
-               if (isExposed && roll < 0.3) {
-                 setPlannedBlock(planMap, changedMap, wx, wy, wz, profile.wall);
-               }
+              const isExposed =
+                !planMap.has(getNumericKey(wx + 1, wy, wz)) ||
+                !planMap.has(getNumericKey(wx - 1, wy, wz));
+              if (isExposed && roll < 0.3) {
+                setPlannedBlock(planMap, changedMap, wx, wy, wz, profile.wall);
+              }
             }
           }
         }

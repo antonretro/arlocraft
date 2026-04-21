@@ -36,11 +36,20 @@ class CommandBlockHandler {
     saveBtn.onclick = () => {
       const newCode = textarea.value;
       world.state.blockData.set(key + ':cmd', newCode);
-      game.notifications?.add('Command saved!', 'success');
+      game.notifications?.show('System', 'Command saved!', 'success');
       close();
     };
 
     return true;
+  }
+
+  execute(game, world, x, y, z) {
+    const key = world.coords.getKey(x, y, z);
+    const code = world.state.blockData.get(key + ':cmd');
+    if (!code) return;
+
+    console.log(`[CommandBlock] Executing at ${x},${y},${z}`);
+    game.scripts?.execute(code, { pos: { x, y, z } });
   }
 }
 

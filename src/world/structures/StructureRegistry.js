@@ -40,6 +40,7 @@ import { village_farm } from './defs/village_farm.js';
 import { desert_hut } from './defs/desert_hut.js';
 import { desert_well } from './defs/desert_well.js';
 import { castle_wall } from './defs/castle_wall.js';
+import { dungeon_chamber } from './defs/dungeon_chamber.js';
 
 export const STRUCTURES = {
   ruined_tower,
@@ -80,4 +81,5 @@ export const STRUCTURES = {
   desert_hut,
   desert_well,
   castle_wall,
+  dungeon_chamber,
 };

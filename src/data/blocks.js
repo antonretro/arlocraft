@@ -11,11 +11,35 @@ function inferRenderType(block) {
   const hasPairId =
     typeof block.pairId === 'string' && block.pairId.trim().length > 0;
   if (hasPairId) return 'paired_plant';
+  const id = String(block.id || '');
   if (block.flat) return 'flat';
-  if (block.slab || block.id.includes('_slab')) return 'slab';
-  if (block.id.includes('_stairs')) return 'stairs';
+  if (block.slab || id.includes('_slab')) return 'slab';
+  if (id.includes('_stairs')) return 'stairs';
   if (block.deco) return 'plant';
   return 'cube';
+}
+
+function inferCategory(id) {
+  const lowId = id.toLowerCase();
+  if (lowId.includes('redstone') || lowId.includes('piston') || lowId.includes('repeater') || 
+      lowId.includes('comparator') || lowId.includes('lever') || lowId.includes('button') || 
+      lowId.includes('observer') || lowId.includes('tnt') || lowId.includes('lamp') ||
+      lowId.includes('command_block')) return 'Redstone';
+  
+  if (lowId.includes('log') || lowId.includes('leaves') || lowId.includes('sapling') || 
+      lowId.includes('grass') || lowId.includes('dirt') || lowId.includes('sand') || 
+      lowId.includes('gravel') || lowId.includes('stone') || lowId.includes('ore') || 
+      lowId.includes('mushroom') || lowId.includes('flower') || lowId.includes('coral')) return 'Natural';
+
+  if (lowId.includes('planks') || lowId.includes('brick') || lowId.includes('glass') || 
+      lowId.includes('concrete') || lowId.includes('terracotta') || lowId.includes('wool') || 
+      lowId.includes('prismarine') || lowId.includes('blackstone')) return 'Construction';
+
+  if (lowId.includes('apple') || lowId.includes('bread') || lowId.includes('cookie') || 
+      lowId.includes('berry') || lowId.includes('melon') || lowId.includes('potato') || 
+      lowId.includes('carrot') || lowId.includes('wheat')) return 'Consumables';
+
+  return 'Decorative';
 }
 
 function normalizeBlock(folderId, raw) {
@@ -38,6 +62,7 @@ function normalizeBlock(folderId, raw) {
     : 1;
   normalized.xp = Number.isFinite(Number(raw.xp)) ? Number(raw.xp) : 0;
   normalized.renderType = inferRenderType(normalized);
+  normalized.category = raw.category || inferCategory(normalized.id);
 
   return normalized;
 }

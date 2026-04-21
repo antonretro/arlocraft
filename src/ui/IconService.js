@@ -92,7 +92,7 @@ export class IconService {
       for (const suffix of igneousFaceSuffixes) {
         if (baseName.endsWith(suffix) && !compoundIds.has(baseName)) {
           blockId = baseName.substring(0, baseName.length - suffix.length);
-          faceKey = suffix.substring(1) + '.png'; 
+          faceKey = suffix.substring(1) + '.png';
           break;
         }
       }
@@ -148,6 +148,16 @@ export class IconService {
       pulse_pistol: 'static_bow',
       rail_rifle: 'static_bow',
       scatter_blaster: 'static_bow',
+      mushroom_red: 'red_mushroom',
+      mushroom_brown: 'brown_mushroom',
+      short_grass: 'grass',
+      grass_tall: 'grass',
+      flower_rose: 'poppy',
+      flower_dandelion: 'dandelion',
+      tall_grass_bottom: 'tall_grass_bottom',
+      tall_grass_top: 'tall_grass_top',
+      large_fern_bottom: 'large_fern_bottom',
+      large_fern_top: 'large_fern_top',
     };
   }
 
@@ -525,6 +535,16 @@ export class IconService {
       if (tool.type === 'utility') return 'magnet_glove';
       return 'power_blade';
     }
+    const decoMatch = {
+      mushroom_red: 'red_mushroom',
+      mushroom_brown: 'brown_mushroom',
+      short_grass: 'grass',
+      grass_tall: 'grass',
+      flower_rose: 'poppy',
+      tall_grass_bottom: 'tall_grass_bottom',
+      tall_grass_top: 'tall_grass_top',
+    };
+    if (decoMatch[id]) return decoMatch[id];
     return null;
   }
 

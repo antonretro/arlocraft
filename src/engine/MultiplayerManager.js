@@ -59,7 +59,7 @@ export class MultiplayerManager {
       if (err.type === 'peer-unavailable')
         msg = 'The Join Code is invalid or the host is offline.';
       if (err.type === 'network') msg = 'P2P tunnel could not be established.';
-      this.game.notifications?.add(msg, 'error');
+      this.game.notifications?.show('Multiplayer Error', msg, 'error');
     });
   }
 
@@ -118,7 +118,7 @@ export class MultiplayerManager {
         this.sendWorldSync(conn.peer);
       }
 
-      this.game.notifications?.add('Peer Connected!', 'success');
+      this.game.notifications?.show('Multiplayer', 'Peer Connected!', 'success');
     });
 
     conn.on('data', (payload) => {
@@ -129,7 +129,7 @@ export class MultiplayerManager {
       console.log('[Multiplayer] Peer Disconnected:', conn.peer);
       this.connections.delete(conn.peer);
       this.removeRemotePlayer(conn.peer);
-      this.game.notifications?.add('Peer Disconnected', 'warning');
+      this.game.notifications?.show('Multiplayer', 'Peer Disconnected', 'warning');
     });
   }
 
@@ -179,9 +179,7 @@ export class MultiplayerManager {
     const blocks = new Int32Array(payload);
     const count = blocks.length / 4;
 
-    console.log(
-      `[Multiplayer] Applying binary sync for ${count} blocks...`
-    );
+    console.log(`[Multiplayer] Applying binary sync for ${count} blocks...`);
 
     // Use a silent mutation pass to avoid broadcast loops
     for (let i = 0; i < blocks.length; i += 4) {
@@ -197,7 +195,7 @@ export class MultiplayerManager {
       }
     }
 
-    this.game.notifications?.add('World Synchronized', 'success');
+    this.game.notifications?.show('Multiplayer', 'World Synchronized', 'success');
   }
 
   handleMessage(peerId, payload) {

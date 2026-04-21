@@ -1,5 +1,7 @@
 {
+  "id": "mushroom_brown",
   "name": "Brown Mushroom",
+  "textureId": "mushroom_brown",
   "hardness": 0.1,
   "xp": 1,
   "foodVal": 1,

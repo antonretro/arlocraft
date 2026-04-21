@@ -75,14 +75,14 @@ function sampleWarp(noise, wx, wy, wz) {
 
   return {
     x:
-      wx +
-      noise.simplex3D(wx * 0.010 + 71.13, wy * 0.010, wz * 0.010) * warpAmpXZ,
+      wx + noise.simplex3D(wx * 0.01 + 71.13, wy * 0.01, wz * 0.01) * warpAmpXZ,
     y:
       wy +
-      noise.simplex3D(wx * 0.010 - 19.8, wy * 0.010 + 33.1, wz * 0.010) * warpAmpY,
+      noise.simplex3D(wx * 0.01 - 19.8, wy * 0.01 + 33.1, wz * 0.01) * warpAmpY,
     z:
       wz +
-      noise.simplex3D(wx * 0.010, wy * 0.010 + 43.77, wz * 0.010 - 12.2) * warpAmpXZ,
+      noise.simplex3D(wx * 0.01, wy * 0.01 + 43.77, wz * 0.01 - 12.2) *
+        warpAmpXZ,
   };
 }
 
@@ -92,9 +92,13 @@ function sampleWarp(noise, wx, wy, wz) {
 function sampleWormCaves(noise, x, y, z, depthFactor, regionStrength) {
   const threshold = 0.072 + depthFactor * 0.032 + regionStrength * 0.01;
 
-  const n1 = noise.simplex3D(x * 0.045, y * 0.060, z * 0.045);
-  const n2 = noise.simplex3D(x * 0.045 + 31.7, y * 0.060 - 9.3, z * 0.045 + 4.1);
-  const n3 = noise.simplex3D(x * 0.051 - 17.4, y * 0.056 + 22.8, z * 0.051 - 8.6);
+  const n1 = noise.simplex3D(x * 0.045, y * 0.06, z * 0.045);
+  const n2 = noise.simplex3D(x * 0.045 + 31.7, y * 0.06 - 9.3, z * 0.045 + 4.1);
+  const n3 = noise.simplex3D(
+    x * 0.051 - 17.4,
+    y * 0.056 + 22.8,
+    z * 0.051 - 8.6
+  );
 
   const a1 = abs(n1);
   const a2 = abs(n2);
@@ -108,12 +112,18 @@ function sampleWormCaves(noise, x, y, z, depthFactor, regionStrength) {
 }
 
 function sampleSpaghettiCaves(noise, x, y, z, region, depthFactor) {
-  const regionMask = noise.simplex3D(x * 0.018 + 403.2, y * 0.012 - 93.4, z * 0.018 - 201.5);
+  const regionMask = noise.simplex3D(
+    x * 0.018 + 403.2,
+    y * 0.012 - 93.4,
+    z * 0.018 - 201.5
+  );
   const neededMask = 0.06 - Math.max(0, region) * 0.04;
   if (regionMask < neededMask) return false;
 
   const lineA = abs(noise.simplex3D(x * 0.066, y * 0.028, z * 0.066));
-  const lineB = abs(noise.simplex3D(x * 0.062 + 55.1, y * 0.030 - 14.2, z * 0.062 + 81.4));
+  const lineB = abs(
+    noise.simplex3D(x * 0.062 + 55.1, y * 0.03 - 14.2, z * 0.062 + 81.4)
+  );
   const threshold = 0.028 + depthFactor * 0.004;
 
   return lineA < threshold || lineB < threshold * 0.92;
@@ -121,10 +131,14 @@ function sampleSpaghettiCaves(noise, x, y, z, region, depthFactor) {
 
 function sampleCheeseCaves(noise, x, y, z, depthFactor, region, biomeBias) {
   const cheese = noise.simplex3D(x * 0.012, y * 0.008, z * 0.012);
-  const broad = noise.simplex3D(x * 0.008 + 144.2, y * 0.006 - 29.4, z * 0.008 + 212.7);
+  const broad = noise.simplex3D(
+    x * 0.008 + 144.2,
+    y * 0.006 - 29.4,
+    z * 0.008 + 212.7
+  );
 
   const threshold =
-    0.73 - depthFactor * 0.10 - Math.max(0, region) * 0.08 - biomeBias * 0.05;
+    0.73 - depthFactor * 0.1 - Math.max(0, region) * 0.08 - biomeBias * 0.05;
 
   return cheese > threshold && broad > -0.2;
 }
@@ -132,8 +146,16 @@ function sampleCheeseCaves(noise, x, y, z, depthFactor, region, biomeBias) {
 function sampleCathedralCaves(noise, x, y, z, depthFactor, region) {
   if (depthFactor < 0.45 || region < 0.38) return false;
 
-  const huge = noise.simplex3D(x * 0.0065 + 800.4, y * 0.0052 - 151.3, z * 0.0065 + 370.6);
-  const body = noise.simplex3D(x * 0.010 + 210.7, y * 0.0065 - 91.1, z * 0.010 - 76.8);
+  const huge = noise.simplex3D(
+    x * 0.0065 + 800.4,
+    y * 0.0052 - 151.3,
+    z * 0.0065 + 370.6
+  );
+  const body = noise.simplex3D(
+    x * 0.01 + 210.7,
+    y * 0.0065 - 91.1,
+    z * 0.01 - 76.8
+  );
 
   return huge > 0.72 && body > 0.1;
 }
@@ -144,7 +166,7 @@ function sampleRavines(noise, wx, wy, wz, terrainH, depthBelowSurface) {
   const line = abs(noise.simplex2D(wx * 0.0075 + 901.4, wz * 0.0075 - 502.8));
   if (line > 0.032) return false;
 
-  const floor = noise.simplex2D(wx * 0.010 + 200.5, wz * 0.010 - 199.8) * 22 - 46;
+  const floor = noise.simplex2D(wx * 0.01 + 200.5, wz * 0.01 - 199.8) * 22 - 46;
   const center = floor + 10;
   const dy = wy - center;
   const halfHeight = 22;
@@ -157,8 +179,13 @@ function sampleRavines(noise, wx, wy, wz, terrainH, depthBelowSurface) {
 }
 
 function sampleAquifer(noise, wx, wy, wz, region, temperature) {
-  const levelBase = -18 + noise.simplex2D(wx * 0.010 + 711.9, wz * 0.010 - 103.2) * 13;
-  const pressure = noise.simplex3D(wx * 0.015 - 91.2, wy * 0.015 + 41.5, wz * 0.015 + 16.7);
+  const levelBase =
+    -18 + noise.simplex2D(wx * 0.01 + 711.9, wz * 0.01 - 103.2) * 13;
+  const pressure = noise.simplex3D(
+    wx * 0.015 - 91.2,
+    wy * 0.015 + 41.5,
+    wz * 0.015 + 16.7
+  );
   const level = levelBase + Math.max(0, region) * 5;
 
   if (wy > level) return null;
@@ -201,11 +228,11 @@ export function getCaveBiome(noise, wx, wy, wz, terrainH, seed = 0) {
   }
 
   if (depthBelowSurface >= 8 && depthBelowSurface <= 56) {
-    const lushField = noise.simplex2D(wx * 0.010 + 7193, wz * 0.010 - 4421);
+    const lushField = noise.simplex2D(wx * 0.01 + 7193, wz * 0.01 - 4421);
     if (humidity > 0.2 && temperature > -0.15 && lushField > 0.08) {
       return CaveBiome.LUSH;
     }
-    if (humidity > -0.05 && lushField < -0.30) {
+    if (humidity > -0.05 && lushField < -0.3) {
       return CaveBiome.MUSHROOM;
     }
   }
@@ -227,7 +254,15 @@ export function isCave(noise, wx, wy, wz, terrainH, cavesEnabled) {
 // Use this instead of calling isCave() + getCaveBiome() separately if you want
 // fewer repeated noise samples.
 // ---------------------------------------------------------------------------
-export function getCaveCell(noise, wx, wy, wz, terrainH, cavesEnabled, seed = 0) {
+export function getCaveCell(
+  noise,
+  wx,
+  wy,
+  wz,
+  terrainH,
+  cavesEnabled,
+  seed = 0
+) {
   if (!cavesEnabled) {
     return {
       carve: false,
@@ -260,7 +295,9 @@ export function getCaveCell(noise, wx, wy, wz, terrainH, cavesEnabled, seed = 0)
   }
 
   const allowEntrance = sampleSurfaceEntranceAllowance(noise, wx, wz, terrainH);
-  const sealDepth = allowEntrance ? CLIFF_SURFACE_SEAL_DEPTH : SURFACE_SEAL_DEPTH;
+  const sealDepth = allowEntrance
+    ? CLIFF_SURFACE_SEAL_DEPTH
+    : SURFACE_SEAL_DEPTH;
   if (wy >= terrainH - sealDepth) {
     return {
       carve: false,
@@ -278,14 +315,41 @@ export function getCaveCell(noise, wx, wy, wz, terrainH, cavesEnabled, seed = 0)
   const warp = sampleWarp(noise, wx, wy, wz);
 
   const biomeHint =
-    humidity > 0.25 && temperature > -0.1 ? 1 :
-    humidity < -0.25 ? -0.5 :
-    0;
+    humidity > 0.25 && temperature > -0.1 ? 1 : humidity < -0.25 ? -0.5 : 0;
 
-  const worm = sampleWormCaves(noise, warp.x, warp.y, warp.z, depthFactor, Math.max(0, region));
-  const spaghetti = sampleSpaghettiCaves(noise, warp.x, warp.y, warp.z, region, depthFactor);
-  const cheese = sampleCheeseCaves(noise, warp.x, warp.y, warp.z, depthFactor, region, biomeHint);
-  const cathedral = sampleCathedralCaves(noise, warp.x, warp.y, warp.z, depthFactor, region);
+  const worm = sampleWormCaves(
+    noise,
+    warp.x,
+    warp.y,
+    warp.z,
+    depthFactor,
+    Math.max(0, region)
+  );
+  const spaghetti = sampleSpaghettiCaves(
+    noise,
+    warp.x,
+    warp.y,
+    warp.z,
+    region,
+    depthFactor
+  );
+  const cheese = sampleCheeseCaves(
+    noise,
+    warp.x,
+    warp.y,
+    warp.z,
+    depthFactor,
+    region,
+    biomeHint
+  );
+  const cathedral = sampleCathedralCaves(
+    noise,
+    warp.x,
+    warp.y,
+    warp.z,
+    depthFactor,
+    region
+  );
   const ravine = sampleRavines(noise, wx, wy, wz, terrainH, depthBelowSurface);
 
   const carve = worm || spaghetti || cheese || cathedral || ravine;
@@ -321,7 +385,15 @@ export function getCaveCell(noise, wx, wy, wz, terrainH, cavesEnabled, seed = 0)
 // Optional helper for generators that want block recommendations.
 // This keeps biome decoration rules near cave logic without forcing them.
 // ---------------------------------------------------------------------------
-export function getCaveMaterialProfile(noise, wx, wy, wz, terrainH, cavesEnabled, seed = 0) {
+export function getCaveMaterialProfile(
+  noise,
+  wx,
+  wy,
+  wz,
+  terrainH,
+  cavesEnabled,
+  seed = 0
+) {
   const cell = getCaveCell(noise, wx, wy, wz, terrainH, cavesEnabled, seed);
   if (!cell.carve) return null;
 
@@ -379,7 +451,7 @@ export function getCaveMaterialProfile(noise, wx, wy, wz, terrainH, cavesEnabled
         wall: 'stone',
         filler: 'mushroom_stem',
         mushroomChance: 0.15,
-        waterChance: 0.10,
+        waterChance: 0.1,
       };
 
     default:

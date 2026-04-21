@@ -108,10 +108,13 @@ export class NoiseRouter {
   }
 
   selectBiomeID(temperature, humidity, elevation, ridge) {
+    if (elevation > 0.92 && temperature < 0.5) return 'void_peaks';
     if (elevation > 0.88 && temperature < 0.66) return 'alpine';
     if (elevation > 0.8) return ridge > 0.58 ? 'alpine' : 'highlands';
 
     if (temperature < 0.14) return 'tundra';
+
+    if (humidity > 0.82 && temperature > 0.4 && temperature < 0.7) return 'lush_grove';
 
     if (temperature > 0.72 && humidity < 0.33) {
       if (elevation > 0.66) return 'badlands';

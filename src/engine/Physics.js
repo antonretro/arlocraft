@@ -30,11 +30,11 @@ export class Physics {
     this.waterExitBoost = 7.6;
     this.waterSurfaceExitWindow = 0.95;
     this.waterExitStepHeight = 2.0;
-    this.feetOffset = 0.3;
-    this.maxStepHeight = 0.62;
-    this.playerRadius = 0.32;
-    this.bodyHeight = 1.75;
-    this.eyeHeight = 1.32;
+    this.feetOffset = 0;
+    this.maxStepHeight = 0.6;
+    this.playerRadius = 0.3;
+    this.bodyHeight = 1.8;
+    this.eyeHeight = 1.62;
     this.currentEyeHeight = 1.32;
     this.isCrouching = false;
     this.voidFallTimer = 0;
@@ -198,13 +198,16 @@ export class Physics {
   }
 
   isGrounded() {
-    const groundY = this.getGroundYAt(
-      this.position.x,
-      this.position.z,
-      this.position.y
-    );
-    // Loosen epsilon from 0.06 to 0.14 for much more reliable jumping on steps/slabs
-    return this.position.y <= groundY + 0.14;
+    // RESTORED: Unified floor detection. Checks multiple offset points for better slab/stair stability.
+    const r = this.playerRadius * 0.8;
+    const offsets = [[0,0], [r,0], [-r,0], [0,r], [0,-r]];
+    let maxGroundY = -Infinity;
+    for (const [ox, oz] of offsets) {
+      const gy = this.world.getGroundYBelow(this.position.x + ox, this.position.y, this.position.z + oz);
+      if (gy > maxGroundY) maxGroundY = gy;
+    }
+    const groundY = maxGroundY + this.feetOffset;
+    return this.position.y <= groundY + 0.16;
   }
 
   resolveHorizontalCollisions() {
@@ -225,15 +228,15 @@ export class Physics {
         for (let bz = minZ; bz <= maxZ; bz++) {
           if (!this.world.isSolidAt(bx, by, bz)) continue;
 
-          const blockMinY = by - 0.5;
-          const blockMaxY = by + 0.5;
+          const blockMinY = by;
+          const blockMaxY = by + 1;
           if (maxY <= blockMinY || minY >= blockMaxY) continue;
 
-          const dx = this.position.x - bx;
+          const dx = this.position.x - (bx + 0.5);
           const overlapX = this.playerRadius + 0.5 - Math.abs(dx);
           if (overlapX <= 0) continue;
 
-          const dz = this.position.z - bz;
+          const dz = this.position.z - (bz + 0.5);
           const overlapZ = this.playerRadius + 0.5 - Math.abs(dz);
           if (overlapZ <= 0) continue;
 
@@ -270,15 +273,15 @@ export class Physics {
           for (let bz = minZ; bz <= maxZ; bz++) {
             if (!this.world.isSolidAt(bx, by, bz)) continue;
 
-            const blockMinY = by - 0.5;
-            const blockMaxY = by + 0.5;
+            const blockMinY = by;
+            const blockMaxY = by + 1;
             if (maxY <= blockMinY || minY >= blockMaxY) continue;
 
-            const dx = this.position.x - bx;
+            const dx = this.position.x - (bx + 0.5);
             const overlapX = this.playerRadius + 0.5 - Math.abs(dx);
             if (overlapX <= 0) continue;
 
-            const dz = this.position.z - bz;
+            const dz = this.position.z - (bz + 0.5);
             const overlapZ = this.playerRadius + 0.5 - Math.abs(dz);
             if (overlapZ <= 0) continue;
 
@@ -324,15 +327,15 @@ export class Physics {
         for (let bz = minZ; bz <= maxZ; bz++) {
           if (!this.world.isSolidAt(bx, by, bz)) continue;
 
-          const blockMinY = by - 0.5;
-          const blockMaxY = by + 0.5;
+          const blockMinY = by;
+          const blockMaxY = by + 1;
           if (maxY <= blockMinY || minY >= blockMaxY) continue;
 
-          const dx = x - bx;
+          const dx = x - (bx + 0.5);
           const overlapX = this.playerRadius + 0.5 - Math.abs(dx);
           if (overlapX <= 0) continue;
 
-          const dz = z - bz;
+          const dz = z - (bz + 0.5);
           const overlapZ = this.playerRadius + 0.5 - Math.abs(dz);
           if (overlapZ <= 0) continue;
           return false;
@@ -386,7 +389,7 @@ export class Physics {
           this.position.x,
           this.position.y,
           this.position.z,
-          1.75
+          1.5
         )
       ) {
         wantsToCrouch = true;
@@ -396,14 +399,14 @@ export class Physics {
     this.isCrouching = wantsToCrouch;
 
     // Eye Height Interpolation
-    const targetEyeHeight = this.isCrouching ? 1.05 : 1.32;
+    const targetEyeHeight = this.isCrouching ? 1.2 : 1.62;
     this.currentEyeHeight = THREE.MathUtils.lerp(
-      this.currentEyeHeight ?? 1.32,
+      this.currentEyeHeight ?? 1.62,
       targetEyeHeight,
       delta * 14
     );
     this.eyeHeight = this.currentEyeHeight;
-    this.bodyHeight = this.isCrouching ? 1.45 : 1.75;
+    this.bodyHeight = this.isCrouching ? 1.5 : 1.8;
     if (this.mode === 'SURVIVAL') {
       this.tryResolveEmbeddedPosition(8);
     }
@@ -556,7 +559,7 @@ export class Physics {
             this.shouldAutoJump()
           ) {
             this.velocity.y = this.jumpSpeed;
-            this.autoJumpCooldown = 0.4;
+            this.autoJumpCooldown = 0.38; // Increased from 0.2 for professional rhythm
           }
         }
       }

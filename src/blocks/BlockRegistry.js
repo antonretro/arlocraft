@@ -2,10 +2,7 @@ import * as THREE from 'three';
 import { BLOCKS } from '../data/blocks.js';
 import { normalizeBlockVariantId } from '../data/blockIds.js';
 
-const textureModules = import.meta.glob(
-  '../Igneous 1.19.4/assets/minecraft/textures/block/*.png',
-  { eager: true, query: '?url' }
-);
+import { ResourcePackManager } from '../world/ResourcePackManager.js';
 
 export class BlockRegistry {
   constructor() {
@@ -35,6 +32,7 @@ export class BlockRegistry {
       leaves_willow: 'mangrove_leaves',
       tall_grass: 'tall_grass_bottom',
       mushroom_red: 'red_mushroom',
+      mushroom_brown: 'brown_mushroom',
       berry_bush: 'sweet_berry_bush',
       nuke: 'nuke',
       fire: 'fire_0',
@@ -70,15 +68,37 @@ export class BlockRegistry {
       stained_glass_green: 'green_stained_glass',
       stained_glass_red: 'red_stained_glass',
       stained_glass_black: 'black_stained_glass',
+      tomato: 'sweet_berry_bush_stage3',
+      tomato_stage3: 'sweet_berry_bush_stage3',
     };
+    this.VIRTUAL_IDS = new Set([
+      'cave_lush',
+      'cave_default',
+      'cave_dripstone',
+      'common_village',
+      'structure_center',
+      'teleport_marker',
+    ]);
     this.stainedGlassColors = {
-      white: 0xffffff, orange: 0xd87f33, magenta: 0xb24cd8, light_blue: 0x6699d8,
-      yellow: 0xe5e533, lime: 0x7fcc19, pink: 0xf27fa5, gray: 0x4c4c4c,
-      light_gray: 0x999999, cyan: 0x4c7f99, purple: 0x7f3fb2, blue: 0x334cb2,
-      brown: 0x664c33, green: 0x667f33, red: 0x993333, black: 0x191919
+      white: 0xffffff,
+      orange: 0xd87f33,
+      magenta: 0xb24cd8,
+      light_blue: 0x6699d8,
+      yellow: 0xe5e533,
+      lime: 0x7fcc19,
+      pink: 0xf27fa5,
+      gray: 0x4c4c4c,
+      light_gray: 0x999999,
+      cyan: 0x4c7f99,
+      purple: 0x7f3fb2,
+      blue: 0x334cb2,
+      brown: 0x664c33,
+      green: 0x667f33,
+      red: 0x993333,
+      black: 0x191919,
     };
     this.missingTexture = this.createMissingTexture();
-    this.init();
+    this.resourceManager = ResourcePackManager.getInstance();
   }
 
   createMissingTexture() {
@@ -100,17 +120,9 @@ export class BlockRegistry {
     return tex;
   }
 
-  init() {
+  async init() {
     this.blockTextures = new Map();
-    const igneousOwnedBlocks = new Set();
-
-    const entries = Object.entries(textureModules).sort((a, b) => {
-      const aIsIgneous = a[0].includes('Igneous');
-      const bIsIgneous = b[0].includes('Igneous');
-      if (aIsIgneous && !bIsIgneous) return -1;
-      if (!aIsIgneous && bIsIgneous) return 1;
-      return 0;
-    });
+    await this.resourceManager.ready();
 
     const igneousFaceSuffixes = [
       '_side_overlay',
@@ -150,15 +162,17 @@ export class BlockRegistry {
       path_block: 'dirt_path',
       short_grass: 'grass',
       dripstone: 'dripstone_block',
-      cherry_leaves: 'flowering_azalea_leaves',
+      tall_grass_bottom: 'grass',
+      tall_grass_top: 'grass',
+      large_fern_bottom: 'fern',
+      large_fern_top: 'fern',
       nuke: 'tnt',
       chest: 'barrel',
     };
 
-    for (const [path, module] of Object.entries(textureModules)) {
-      const fileName = path.split('/').pop();
+    for (const fileName of this.resourceManager.manifest) {
       let baseName = fileName.replace('.png', '');
-      const url = module.default || module;
+      const url = this.resourceManager.getTextureUrl(fileName);
 
       // Handling breaking stages
       if (baseName.startsWith('destroy_stage_')) {
@@ -183,7 +197,12 @@ export class BlockRegistry {
 
       for (const suffix of igneousFaceSuffixes) {
         if (baseName.endsWith(suffix) && !compoundIds.has(baseName)) {
-          blockId = baseName.substring(0, baseName.length - suffix.length);
+          // Special case: grass_block needs its full name to match correctly
+          if (baseName.startsWith('grass_block_')) {
+             blockId = 'grass_block';
+          } else {
+             blockId = baseName.substring(0, baseName.length - suffix.length);
+          }
           faceKey = suffix.substring(1) + '.png'; // e.g. "top.png"
           break;
         }
@@ -265,37 +284,6 @@ export class BlockRegistry {
     }
   }
 
-  getMaterial(blockId) {
-    if (!this.materials.has(blockId)) {
-      const materialConfigs = this.blockConfigs.get(blockId);
-      if (!materialConfigs) return this.magentaFallback;
-
-      const textures = this.getBlockTextures(blockId);
-      const materials = [];
-
-      for (let i = 0; i < 6; i++) {
-        const tex = textures[i];
-        const isGlass = blockId === 'glass' || blockId.includes('stained_glass');
-        const mat = new THREE.MeshLambertMaterial({
-          map: tex,
-          transparent: isGlass || blockId.includes('leaves'),
-          opacity: isGlass ? 0.72 : 1.0,
-          alphaTest: blockId.includes('leaves') ? 0.35 : 0.0,
-          side: THREE.FrontSide,
-        });
-
-        // Grass block tinting disabled per request
-        if (blockId === 'grass_block' && (i === 2 || i === 3)) {
-          // mat.color.setHex(0x79c05a);
-        }
-
-        materials.push(mat);
-      }
-      this.materials.set(blockId, materials);
-    }
-    return this.materials.get(blockId);
-  }
-
   injectWindShader(material, options = {}) {
     if (!material) return;
     if (Array.isArray(material)) {
@@ -314,13 +302,15 @@ export class BlockRegistry {
       shader.uniforms.uWindParams = {
         value: new THREE.Vector3(speed, scale, frequency),
       };
+      shader.uniforms.uSwayFactor = { value: 1.0 }; // Default to enabled
 
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
           `#include <common>
                     uniform float uTime;
-                    uniform vec3 uWindParams;`
+                    uniform vec3 uWindParams;
+                    uniform float uSwayFactor;`
         )
         .replace(
           '#include <begin_vertex>',
@@ -329,7 +319,7 @@ export class BlockRegistry {
                     // Wind swaying logic
                     float t = uTime * uWindParams.x;
                     // Factor top-heaviness: displace more as Y increases
-                    float factor = max(0.0, transformed.y + 0.5); 
+                    float factor = max(0.0, transformed.y + 0.5) * uSwayFactor; 
                     float swayX = sin(t + (position.x + position.z) * uWindParams.z) * uWindParams.y * factor;
                     float swayZ = cos(t * 0.8 + (position.x - position.z) * uWindParams.z) * uWindParams.y * factor;
                     transformed.x += swayX;
@@ -429,6 +419,10 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     texture.magFilter = THREE.NearestFilter;
     texture.minFilter = THREE.NearestFilter;
     texture.colorSpace = THREE.SRGBColorSpace;
+    
+    // Support tiled textures for Greedy Meshed quads
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
 
     this.textureCache.set(src, texture);
     return texture;
@@ -606,6 +600,21 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
       id.includes('fungus') ||
       id.includes('sprouts')
     );
+  }
+
+  updateSwaying(enabled) {
+    const factor = enabled ? 1.0 : 0.0;
+    this.materialCache.forEach((mat) => {
+      if (Array.isArray(mat)) {
+        mat.forEach((m) => {
+          if (m?.userData?.shader?.uniforms?.uSwayFactor) {
+            m.userData.shader.uniforms.uSwayFactor.value = factor;
+          }
+        });
+      } else if (mat?.userData?.shader?.uniforms?.uSwayFactor) {
+        mat.userData.shader.uniforms.uSwayFactor.value = factor;
+      }
+    });
   }
 
   getMaterial(id) {
@@ -840,9 +849,11 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         side: isDeco ? THREE.DoubleSide : THREE.FrontSide,
       });
       if (isCutout) material.userData.alphaCutout = true;
-      console.warn(
-        `[ArloCraft] Missing texture for block: ${id}. Using Magenta Fallback.`
-      );
+      if (!this.VIRTUAL_IDS.has(id)) {
+        console.warn(
+          `[ArloCraft] Missing texture for block: ${id}. Using Magenta Fallback.`
+        );
+      }
     }
 
     // Post-creation enhancements
@@ -883,5 +894,11 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     this.configureTransparentMaterial(material);
     this.materialCache.set(id, material);
     return material;
+  }
+
+  isStep(id) {
+    if (!id) return false;
+    const reg = id.toLowerCase();
+    return reg.includes('slab') || reg.includes('stairs') || reg.includes('path');
   }
 }

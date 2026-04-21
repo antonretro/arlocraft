@@ -24,6 +24,7 @@ export class GameState {
     this.discoveredBlocks = new Set();
     this.discoveredRecipes = new Set();
     this.unlockedAchievements = new Set();
+    this.activeEffects = []; // { id, name, duration, level }
     this.stats = null; // Injected by Game
 
     this.achievementCheckTimer = setInterval(
@@ -32,11 +33,42 @@ export class GameState {
     );
   }
 
+  getToolDurability(id) {
+    if (id.includes('wood')) return 120;
+    if (id.includes('stone') || id.includes('cobble')) return 260;
+    if (id.includes('iron')) return 500;
+    if (id.includes('gold')) return 64;
+    if (id.includes('diamond')) return 3000;
+    if (id.includes('virus')) return 1500; // Special virus-tier
+    return 100;
+  }
+
   initStartingInventory() {
-    this.inventory[0] = { id: 'sword_wood', count: 1, kind: 'tool' };
-    this.inventory[1] = { id: 'pick_wood', count: 1, kind: 'tool' };
-    this.inventory[2] = { id: 'axe_wood', count: 1, kind: 'tool' };
-    this.inventory[3] = { id: 'oak_log', count: 16, kind: 'block' }; // Reduced from 64 for early challenge
+    this.inventory[0] = { 
+      id: 'sword_wood', 
+      count: 1, 
+      kind: 'tool', 
+      durability: this.getToolDurability('sword_wood'),
+      maxDurability: this.getToolDurability('sword_wood'),
+      enchantments: []
+    };
+    this.inventory[1] = { 
+      id: 'pick_wood', 
+      count: 1, 
+      kind: 'tool',
+      durability: this.getToolDurability('pick_wood'),
+      maxDurability: this.getToolDurability('pick_wood'),
+      enchantments: []
+    };
+    this.inventory[2] = { 
+      id: 'axe_wood', 
+      count: 1, 
+      kind: 'tool',
+      durability: this.getToolDurability('axe_wood'),
+      maxDurability: this.getToolDurability('axe_wood'),
+      enchantments: []
+    };
+    this.inventory[3] = { id: 'oak_log', count: 16, kind: 'block' }; 
     this.inventory[4] = { id: 'grass_block', count: 16, kind: 'block' };
 
     // Initial discoveries
@@ -295,7 +327,13 @@ export class GameState {
 
     const emptyIdx = this.inventory.findIndex((slot) => slot === null);
     if (emptyIdx >= 0) {
-      this.inventory[emptyIdx] = { id: itemId, count, kind };
+      const newItem = { id: itemId, count, kind };
+      if (kind === 'tool') {
+        newItem.durability = this.getToolDurability(itemId);
+        newItem.maxDurability = newItem.durability;
+        newItem.enchantments = [];
+      }
+      this.inventory[emptyIdx] = newItem;
       this.discoverBlock(itemId);
       window.dispatchEvent(new CustomEvent('inventory-changed'));
       return true;
@@ -326,5 +364,19 @@ export class GameState {
           : 'block';
       this.addItemToInventory(item.id, item.count, kind);
     });
+  }
+
+  // --- RPG Logic Helpers ---
+
+  applyDurabilityDamage(slotIndex, amount = 1) {
+    const item = this.inventory[slotIndex];
+    if (item && item.kind === 'tool' && item.durability !== undefined) {
+      item.durability = Math.max(0, item.durability - amount);
+      if (item.durability <= 0) {
+        this.inventory[slotIndex] = null;
+        window.dispatchEvent(new CustomEvent('item-broken', { detail: item }));
+      }
+      window.dispatchEvent(new CustomEvent('inventory-changed'));
+    }
   }
 }

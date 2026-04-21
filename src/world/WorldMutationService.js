@@ -75,7 +75,8 @@ export class WorldMutationService {
     }
 
     if (id === 'water' || id === 'lava') {
-      const initialDepth = options.fluidDepth !== undefined ? options.fluidDepth : 0;
+      const initialDepth =
+        options.fluidDepth !== undefined ? options.fluidDepth : 0;
       this.world.fluids?.scheduleSpread(gx, gy, gz, id, initialDepth);
     }
 
@@ -121,13 +122,19 @@ export class WorldMutationService {
 
     // Spawn breaking particles
     const blockConfig = this.world.game?.blockRegistry?.blocks?.get(id);
-    let particleColor = blockConfig?.color ? parseInt(blockConfig.color) : 0x888888;
-    
+    let particleColor = blockConfig?.color
+      ? parseInt(blockConfig.color)
+      : 0x888888;
+
     // Fallback for stained glass colors if not in config
     if (id.includes('stained_glass')) {
       const colorKey = id.split('_').pop();
       const registry = this.world.game?.blockRegistry;
-      if (registry && registry.stainedGlassColors && registry.stainedGlassColors[colorKey]) {
+      if (
+        registry &&
+        registry.stainedGlassColors &&
+        registry.stainedGlassColors[colorKey]
+      ) {
         particleColor = registry.stainedGlassColors[colorKey];
       }
     }

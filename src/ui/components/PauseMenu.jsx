@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getGame } from '../UIManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Play, 
@@ -16,9 +17,16 @@ import {
   Gamepad
 } from 'lucide-react';
 
-export const PauseMenu = ({ game, setIsPaused }) => {
+export const PauseMenu = ({ setIsPaused }) => {
+  const game = getGame();
   const [subScreen, setSubScreen] = useState('main'); // main, settings
   const [settingTab, setSettingTab] = useState('video'); // video, audio, controls, social
+  const [settings, setSettings] = useState(() => game?.settingsManager?.getAll() ?? {});
+
+  const updateSetting = (key, value) => {
+    game.settingsManager.set(key, value);
+    setSettings({ ...game.settingsManager.getAll() });
+  };
   
   const worldSummary = {
     mode: game.gameState?.mode || 'SURVIVAL',
@@ -53,8 +61,8 @@ export const PauseMenu = ({ game, setIsPaused }) => {
                       <User />
                   </div>
                   <div className="flex flex-col">
-                      <span className="text-sm font-bold uppercase tracking-widest">{game.settings?.skinUsername || 'Voyager'}</span>
-                      <span className="text-[10px] opacity-40 italic">Active Session</span>
+                      <span className="text-sm font-bold uppercase tracking-widest">{game.settings?.playerName || 'Voyager'}</span>
+                      <span className="text-[10px] opacity-40 italic">Active Mission</span>
                   </div>
               </div>
 
@@ -83,6 +91,30 @@ export const PauseMenu = ({ game, setIsPaused }) => {
                   <StatCard icon={<Activity />} label="Game Mode" value={worldSummary.mode} />
                   <StatCard icon={<Clock />} label="World Time" value={worldSummary.time} />
                   <StatCard icon={<MapIcon />} label="Current Day" value={`Day ${worldSummary.day}`} />
+              </div>
+
+              <div className="glass-card p-6 flex flex-col gap-4">
+                  <span className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em]">Simulation Mode</span>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                      {['SURVIVAL', 'CREATIVE', 'ADVENTURE', 'SPECTATOR'].map(m => (
+                        <button 
+                          key={m}
+                          onClick={() => {
+                            game.gameState.setMode(m);
+                            game.physics.setMode(m);
+                            game.settings.preferredMode = m;
+                            // Update local state if needed via worldSummary sync
+                            window.dispatchEvent(new CustomEvent('ui-refresh'));
+                          }}
+                          className={`px-3 py-2 rounded-xl text-[10px] font-bold transition-all border
+                            ${worldSummary.mode === m 
+                              ? 'bg-arlo-blue/20 border-arlo-blue text-arlo-blue shadow-[0_0_10px_rgba(0,195,227,0.2)]' 
+                              : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10 hover:text-white'}`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                  </div>
               </div>
 
               <div className="glass-card p-6 flex flex-col gap-4">
@@ -148,7 +180,7 @@ export const PauseMenu = ({ game, setIsPaused }) => {
                     <button onClick={() => setSubScreen('main')} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                       <ChevronLeft size={24} />
                     </button>
-                    <h2 className="text-xl font-bold tracking-tight">Mission Preferences</h2>
+                    <h2 className="text-xl font-bold tracking-tight">Voyage Configuration</h2>
                   </div>
                   <span className="text-[10px] font-bold opacity-30 uppercase tracking-[0.2em]">Build: {game.currentVersionId}</span>
                 </div>
@@ -158,48 +190,154 @@ export const PauseMenu = ({ game, setIsPaused }) => {
                   {settingTab === 'video' && (
                     <motion.div key="video" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-8">
                       <ToggleSetting 
+                        label="Diagnostic Engine HUD" 
+                        desc="Display real-time performance and world state data (F3)" 
+                        active={game.profiler?.visible}
+                        onToggle={() => {
+                          game.profiler?.toggle();
+                          // Force re-render of menu
+                          setSettings({ ...settings });
+                        }}
+                      />
+                      <ToggleSetting 
                         label="Atmospheric Shadows" 
                         desc="Dynamic block-level voxel shadowing" 
-                        active={game.settings.shadowsEnabled}
+                        active={settings.shadowsEnabled}
                         onToggle={() => {
-                          game.settings.shadowsEnabled = !game.settings.shadowsEnabled;
-                          game.renderer.toggleShadows(game.settings.shadowsEnabled);
-                          game.saveSettings();
+                          const val = !settings.shadowsEnabled;
+                          game.renderer.toggleShadows(val);
+                          updateSetting('shadowsEnabled', val);
+                        }}
+                      />
+                       <RangeSetting 
+                        label="Field of View" 
+                        value={settings.fov} 
+                        min={50} max={110} 
+                        onChange={(v) => {
+                          game.camera.instance.fov = v;
+                          game.camera.instance.updateProjectionMatrix();
+                          updateSetting('fov', v);
                         }}
                       />
                       <RangeSetting 
-                        label="Field of View" 
-                        value={game.settings.fov} 
-                        min={50} max={110} 
+                        label="Performance Governor"
+                        value={settings.fpsCap}
+                        min={30}
+                        max={240}
+                        step={30}
+                        onChange={(val) => {
+                          const cap = val > 200 ? 999 : val;
+                          updateSetting('fpsCap', cap);
+                        }}
+                        formatDisplay={(v) => v > 200 ? 'Uncapped' : `${v} FPS`}
+                      />
+                      <ToggleSetting 
+                        label="Auto Quality Adaptation" 
+                        desc="Dynamically scale resolution for optimal FPS" 
+                        active={settings.autoQuality}
+                        onToggle={() => {
+                          updateSetting('autoQuality', !settings.autoQuality);
+                        }}
+                      />
+                      <RangeSetting 
+                        label="Resolution Quality" 
+                        value={Math.round((settings.resolutionScale || 0.65) * 100)} 
+                        min={20} max={200} 
+                        disabled={settings.autoQuality}
                         onChange={(v) => {
-                          game.settings.fov = v;
-                          game.camera.instance.fov = v;
-                          game.camera.instance.updateProjectionMatrix();
-                          game.saveSettings();
+                          const scale = v / 100;
+                          game.renderer.setResolutionScale(scale);
+                          game.settings.autoQuality = false;
+                          updateSetting('resolutionScale', scale);
+                        }}
+                      />
+                      <RangeSetting 
+                        label="Render Distance" 
+                        value={settings.renderDistance || 4} 
+                        min={2} max={16} 
+                        disabled={settings.autoQuality}
+                        onChange={(v) => {
+                          game.world.setRenderDistance(v);
+                          game.settings.autoQuality = false;
+                          updateSetting('renderDistance', v);
+                        }}
+                      />
+                      <ToggleSetting 
+                        label="Foliage Swaying" 
+                        desc="Simulate atmospheric wind on vegetation" 
+                        active={settings.foliageSwaying}
+                        onToggle={() => {
+                          const val = !settings.foliageSwaying;
+                          game.blockRegistry.updateSwaying(val);
+                          updateSetting('foliageSwaying', val);
                         }}
                       />
                     </motion.div>
                   )}
-
+ 
                   {settingTab === 'audio' && (
                     <motion.div key="audio" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-8">
                       <RangeSetting 
                         label="Master Volume" 
-                        value={Math.round(game.settings.volume * 100)} 
+                        value={Math.round((settings.audioMaster || 0.8) * 100)} 
                         min={0} max={100} 
                         onChange={(v) => {
-                          game.settings.volume = v / 100;
-                          game.audio.applyFromSettings(game.settings);
-                          game.saveSettings();
+                          updateSetting('audioMaster', v / 100);
+                          game.audio.applyFromSettings(game.settingsManager.getAll());
                         }}
                       />
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <RangeSetting 
+                          label="SFX" 
+                          value={Math.round((settings.audioSfx || 1) * 100)} 
+                          min={0} max={100} 
+                          onChange={(v) => {
+                            updateSetting('audioSfx', v / 100);
+                            game.audio.applyFromSettings(game.settingsManager.getAll());
+                          }}
+                        />
+                        <RangeSetting 
+                          label="UI" 
+                          value={Math.round((settings.audioUi || 1) * 100)} 
+                          min={0} max={100} 
+                          onChange={(v) => {
+                            updateSetting('audioUi', v / 100);
+                            game.audio.applyFromSettings(game.settingsManager.getAll());
+                          }}
+                        />
+                        <RangeSetting 
+                          label="World" 
+                          value={Math.round((settings.audioWorld || 1) * 100)} 
+                          min={0} max={100} 
+                          onChange={(v) => {
+                            updateSetting('audioWorld', v / 100);
+                            game.audio.applyFromSettings(game.settingsManager.getAll());
+                          }}
+                        />
+                      </div>
                     </motion.div>
                   )}
 
                   {settingTab === 'controls' && (
-                    <motion.div key="controls" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-8 text-center text-white/40 py-12">
-                      <Gamepad size={48} className="mx-auto mb-4 opacity-20" />
-                      <p className="text-sm">Neural link sensitivity and remapping available in the next vanguard patch.</p>
+                    <motion.div key="controls" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-8">
+                       <RangeSetting 
+                        label="Mouse Sensitivity" 
+                        value={Math.round((settings.sensitivity || 0.00145) * 40000)} 
+                        min={10} max={200} 
+                        onChange={(v) => {
+                          const sens = v / 40000;
+                          updateSetting('sensitivity', sens);
+                        }}
+                        formatDisplay={(v) => `${v}%`}
+                      />
+                      <ToggleSetting 
+                        label="Invert Y Axis" 
+                        desc="Flip the vertical mouse movement" 
+                        active={settings.invertY}
+                        onToggle={() => {
+                          updateSetting('invertY', !settings.invertY);
+                        }}
+                      />
                     </motion.div>
                   )}
 
@@ -230,25 +368,31 @@ const TabButton = ({ id, label, icon, active, onClick }) => (
   </button>
 );
 
-const RangeSetting = ({ label, value, min, max, onChange }) => {
+const RangeSetting = ({ label, value, min, max, step = 1, onChange, disabled, formatDisplay }) => {
   const [val, setVal] = useState(value);
+  useEffect(() => setVal(value), [value]);
+
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <span className="text-sm font-bold opacity-70 tracking-wide">{label}</span>
-        <span className="text-xs font-mono text-arlo-blue">{val}</span>
+    <div className={`flex flex-col gap-2 transition-opacity duration-300 ${disabled ? 'opacity-30 pointer-events-none' : ''}`}>
+      <div className="flex justify-between items-center px-1">
+        <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{label}</span>
+        <span className="text-xs font-bold text-arlo-blue">
+          {formatDisplay ? formatDisplay(val) : `${val}${label.includes('Quality') || label.includes('Density') ? '%' : ''}`}
+        </span>
       </div>
       <input 
         type="range" 
         min={min} 
         max={max} 
-        value={val}
+        step={step}
+        value={val > 240 ? 240 : val}
+        disabled={disabled}
         onChange={(e) => {
           const v = parseInt(e.target.value);
           setVal(v);
           onChange(v);
         }}
-        className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-arlo-blue"
+        className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-arlo-blue outline-none"
       />
     </div>
   );

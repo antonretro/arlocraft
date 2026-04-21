@@ -10,24 +10,86 @@ export class CreeperModel extends BaseModel {
     // Head (8x8x8 pixels)
     const headGroup = new THREE.Group();
     headGroup.position.set(0, 18 * unit, 0);
-    this.head = this.createPart('head', 8 * unit, 8 * unit, 8 * unit, 0, 4 * unit, 0, {
-      u: 0, v: 0, w: 8, h: 8, d: 8
-    });
+    this.head = this.createPart(
+      'head',
+      8 * unit,
+      8 * unit,
+      8 * unit,
+      0,
+      4 * unit,
+      0,
+      {
+        u: 0,
+        v: 0,
+        w: 8,
+        h: 8,
+        d: 8,
+      }
+    );
     headGroup.add(this.head);
     this.parts['headGroup'] = headGroup;
     this.group.add(headGroup);
 
     // Body (8x12x4)
-    this.body = this.createPart('body', 8 * unit, 12 * unit, 4 * unit, 0, 12 * unit, 0, {
-      u: 16, v: 16, w: 8, h: 12, d: 4
-    });
+    this.body = this.createPart(
+      'body',
+      8 * unit,
+      12 * unit,
+      4 * unit,
+      0,
+      12 * unit,
+      0,
+      {
+        u: 16,
+        v: 16,
+        w: 8,
+        h: 12,
+        d: 4,
+      }
+    );
 
     // Legs (4x6x4) - 4 legs
     const legUV = { u: 0, v: 16, w: 4, h: 6, d: 4 };
-    this.legFR = this.createPart('legFR', 4 * unit, 6 * unit, 4 * unit, 2 * unit, 3 * unit, 4 * unit, legUV);
-    this.legFL = this.createPart('legFL', 4 * unit, 6 * unit, 4 * unit, -2 * unit, 3 * unit, 4 * unit, legUV);
-    this.legBR = this.createPart('legBR', 4 * unit, 6 * unit, 4 * unit, 2 * unit, 3 * unit, -4 * unit, legUV);
-    this.legBL = this.createPart('legBL', 4 * unit, 6 * unit, 4 * unit, -2 * unit, 3 * unit, -4 * unit, legUV);
+    this.legFR = this.createPart(
+      'legFR',
+      4 * unit,
+      6 * unit,
+      4 * unit,
+      2 * unit,
+      3 * unit,
+      4 * unit,
+      legUV
+    );
+    this.legFL = this.createPart(
+      'legFL',
+      4 * unit,
+      6 * unit,
+      4 * unit,
+      -2 * unit,
+      3 * unit,
+      4 * unit,
+      legUV
+    );
+    this.legBR = this.createPart(
+      'legBR',
+      4 * unit,
+      6 * unit,
+      4 * unit,
+      2 * unit,
+      3 * unit,
+      -4 * unit,
+      legUV
+    );
+    this.legBL = this.createPart(
+      'legBL',
+      4 * unit,
+      6 * unit,
+      4 * unit,
+      -2 * unit,
+      3 * unit,
+      -4 * unit,
+      legUV
+    );
 
     this.group.position.y = 0;
   }

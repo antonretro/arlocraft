@@ -77,6 +77,11 @@ export class ChunkManager {
     const cz = this.world.getChunkCoord(wz);
     const chunk = this.getChunk(cx, cy, cz);
     if (chunk) {
+      // Cooldown protection: don't re-dirty if we just meshed this chunk in the last 400ms
+      // This prevents "burst" meshing stutters.
+      const now = performance.now();
+      if (now - chunk.lastRebuildTime < 400 && chunk.meshes.size > 0) return;
+
       chunk.dirty = true;
       this.priorityDirtyChunkKeys.add(chunk.key);
     }
@@ -377,12 +382,14 @@ export class ChunkManager {
     chunks.sort((a, b) => a.dSq - b.dSq);
 
     const startTime = performance.now();
-    const frameBudgetMs = 3.5; // Strict budget for chunk meshing per frame
+    const frameBudgetMs = 2.5; // Optimized strict budget for chunk meshing per frame
     let rebuilt = 0;
 
     for (let i = 0; i < chunks.length; i++) {
       if (performance.now() - startTime > frameBudgetMs) break;
-      chunks[i].chunk.update();
+      const c = chunks[i].chunk;
+      c.update();
+      c.lastRebuildTime = performance.now();
       rebuilt += 1;
     }
 
@@ -403,7 +410,7 @@ export class ChunkManager {
       if (!chunk || chunk.destroyed || chunk.dirty) continue;
 
       let needsRebuild = false;
-      for (const mesh of chunk.instancedMeshes.values()) {
+      for (const mesh of chunk.meshes.values()) {
         if (!mesh) continue;
         const materials = Array.isArray(mesh.material)
           ? mesh.material

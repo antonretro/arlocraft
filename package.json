@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:pages": "npm run lint && vite build --base ./",
+    "build:pages": "npm run lint && vite build --base /arlocraft/",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.{js,json,css,md}\" \"*.{js,json,md}\"",

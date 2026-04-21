@@ -6,9 +6,10 @@
 @theme {
   --font-outfit: "Outfit", sans-serif;
   --font-pixel: "Press Start 2P", system-ui;
-  --color-arlo-blue: #00c3e3;
-  --color-arlo-dark: #0a0a0a;
-  --color-arlo-glass: rgba(255, 255, 255, 0.05);
+  --color-arlo-blue: #00e5ff;
+  --color-arlo-dark: #050505;
+  --color-arlo-glass: rgba(255, 255, 255, 0.03);
+  --color-accent-gold: #ffcc00;
 }
 
 :root {
@@ -24,24 +25,34 @@
 
   canvas {
     @apply absolute inset-0 z-0;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
   }
 }
 
 @layer components {
   .glass-card {
-    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl;
+    @apply bg-black/30 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .premium-text {
+    @apply font-outfit uppercase tracking-[0.25em] text-[10px] font-black text-white/90;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
   }
 
   .glass-btn {
-    @apply relative overflow-hidden px-6 py-3 rounded-xl transition-all duration-300 bg-white/5 border border-white/10 hover:bg-white/10 active:scale-95;
+    @apply relative overflow-hidden px-6 py-3 rounded-xl transition-all duration-500 bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/20 active:scale-95 text-sm font-semibold tracking-wide;
   }
 
   .glass-btn-blue {
-    @apply bg-blue-500/20 border-blue-400/30 hover:bg-blue-500/30 text-blue-200;
+    @apply bg-arlo-blue/10 border-arlo-blue/20 hover:bg-arlo-blue/20 text-arlo-blue;
+    box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.05);
   }
 
   .glass-btn-red {
-    @apply bg-red-500/20 border-red-400/30 hover:bg-red-500/30 text-red-200;
+    @apply bg-red-500/10 border-red-500/20 hover:bg-red-500/20 text-red-400;
+    box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.05);
   }
 
   .ni-title {
@@ -52,50 +63,64 @@
 
 /* Item Icons & Isometric Logic */
 .item-icon {
-  @apply relative w-full h-full bg-contain bg-center bg-no-repeat;
+  @apply relative w-full h-full bg-no-repeat;
+  background-position: center;
+  background-size: 100% 100%; /* Fix stretching on skew */
   image-rendering: pixelated;
 }
 
 .iso-icon {
   @apply relative w-full h-full;
-  transform: scale(0.82) translateY(-2px);
+  transform: scale(0.85) translateY(-2px);
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
 }
 
 .iso-face {
-  @apply absolute w-full h-full bg-cover;
+  @apply absolute w-full h-full;
+  background-size: 100% 100%;
   image-rendering: pixelated;
+  transform-origin: center;
 }
 
 .iso-face.top {
-  transform: rotate(-45deg) skew(15deg, 15deg) scale(0.707);
-  top: -24%;
-  filter: brightness(1.05);
+  /* Standard 30deg Isometric Top */
+  transform: rotate(-135deg) skew(-15deg, -15deg) scale(0.707);
+  top: -24%; 
+  left: 0;
+  filter: brightness(1.1);
+  z-index: 2;
 }
 
 .iso-face.left {
+  /* Standard 30deg Isometric Left */
   transform: skewY(15deg) scaleX(0.866);
   left: -25%;
-  top: 13%;
+  top: 11%;
   filter: brightness(0.85);
+  z-index: 1;
 }
 
 .iso-face.right {
+  /* Standard 30deg Isometric Right */
   transform: skewY(-15deg) scaleX(0.866);
   right: -25%;
-  top: 13%;
-  filter: brightness(0.65);
+  top: 11%;
+  filter: brightness(0.7);
+  z-index: 1;
 }
 
 .item-count {
-  @apply absolute -bottom-1 -right-1 text-[10px] font-bold text-white px-1.5 py-0.5 rounded-md bg-black/60 border border-white/5;
+  @apply absolute -bottom-1 -right-1 text-[10px] font-bold text-white px-1.5 py-0.5 rounded-md bg-black/70 border border-white/10;
   font-family: var(--font-pixel);
   text-shadow: 1px 1px 0 rgba(0,0,0,0.8);
   pointer-events: none;
   z-index: 10;
 }
 
+/* Vibrant grass tint for grey masked textures */
 .tint-grass-face {
-  filter: brightness(1.1) sepia(1.2) hue-rotate(48deg) saturate(2.2);
+  /* Refined filter for deep green vibrant biome look */
+  filter: brightness(1.1) sepia(0.6) hue-rotate(55deg) saturate(3.2) contrast(1.1);
 }
 
 .tint-grass {

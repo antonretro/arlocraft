@@ -5,23 +5,26 @@ export class SettingsManager {
       sensitivity: 0.00145,
       invertY: false,
       fov: 75,
-      qualityTierPref: 'low',
+      qualityTierPref: 'balanced',
       preferredMode: 'SURVIVAL',
       autoJump: true,
       autoQuality: true,
-      fpsCap: 60,
-      renderDistance: 2,
+      fpsCap: 120,
+      renderDistance: 3,
       selectedWorldSlot: 'slot-1',
       shadowsEnabled: false,
       fogDensityScale: 1.0,
       perfPanelVisible: false,
-      resolutionScale: 0.65,
+      resolutionScale: 0.75,
       graphicsAPI: 'webgl2',
       audioMuted: false,
       audioMaster: 0.82,
       audioSfx: 0.9,
       audioUi: 0.78,
       audioWorld: 0.85,
+      cloudOpacity: 0.85,
+      foliageSwaying: true,
+      playerName: 'Arlo',
     };
 
     this.settings = this.load();
@@ -49,8 +52,14 @@ export class SettingsManager {
         )
           ? parsed.qualityTierPref
           : defaults.qualityTierPref,
-        preferredMode:
-          parsed.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL',
+        preferredMode: [
+          'SURVIVAL',
+          'CREATIVE',
+          'ADVENTURE',
+          'SPECTATOR',
+        ].includes(parsed.preferredMode)
+          ? parsed.preferredMode
+          : defaults.preferredMode,
         autoJump:
           parsed.autoJump !== undefined
             ? Boolean(parsed.autoJump)
@@ -102,6 +111,13 @@ export class SettingsManager {
         audioWorld: Number.isFinite(parsed.audioWorld)
           ? Math.max(0, Math.min(1, parsed.audioWorld))
           : defaults.audioWorld,
+        cloudOpacity: Number.isFinite(parsed.cloudOpacity)
+          ? Math.max(0, Math.min(1, parsed.cloudOpacity))
+          : defaults.cloudOpacity,
+        foliageSwaying:
+          parsed.foliageSwaying !== undefined
+            ? Boolean(parsed.foliageSwaying)
+            : defaults.foliageSwaying,
       };
     } catch {
       return { ...defaults };

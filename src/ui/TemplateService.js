@@ -25,16 +25,16 @@ export class TemplateService {
    */
   init(fragments) {
     console.log('[ArloCraft] Hydrating modular UI architecture...');
-    
+
     // Core HUD
     if (fragments.hud) this.inject(fragments.hud);
-    
+
     // Screens (Title, World Select, etc.)
     if (fragments.screens) this.inject(fragments.screens);
-    
+
     // Overlays (Inventory, Chests, etc.)
     if (fragments.overlays) this.inject(fragments.overlays);
-    
+
     // System (Console, Help)
     if (fragments.system) this.inject(fragments.system);
 

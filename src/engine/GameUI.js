@@ -74,10 +74,10 @@ export class GameUI {
 
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, 64, 64);
-    
+
     // Minecraft Skin Head (Front): 8,8 to 16,16
     ctx.drawImage(skinImg, 8, 8, 8, 8, 0, 0, 64, 64);
-    
+
     // Minecraft Skin Overlay (Front): 40,8 to 48,16
     ctx.drawImage(skinImg, 40, 8, 8, 8, 0, 0, 64, 64);
   }
@@ -126,7 +126,7 @@ export class GameUI {
     const panel = this.get('settings-panel');
     if (!panel) return;
     panel.style.display = visible ? 'flex' : 'none';
-    
+
     // If opening settings from pause, hide pause overlay to prevent z-index issues
     if (visible && this.game.isPaused) {
       this.showPause(false);
@@ -167,13 +167,13 @@ export class GameUI {
             ? 'screen-world-create'
             : screen === 'multiplayer'
               ? 'screen-multiplayer'
-                : screen === 'loading'
-                  ? 'screen-loading'
-                  : screen === 'texture-packs'
-                    ? 'screen-texture-packs'
-                    : screen === 'settings'
-                      ? 'settings-panel'
-                      : 'screen-title';
+              : screen === 'loading'
+                ? 'screen-loading'
+                : screen === 'texture-packs'
+                  ? 'screen-texture-packs'
+                  : screen === 'settings'
+                    ? 'settings-panel'
+                    : 'screen-title';
 
     for (const id of screenIds) {
       const node = this.get(id);
@@ -268,7 +268,7 @@ export class GameUI {
       '\u{1F5FA}', // Map
       '\u{1F3D4}', // Mountains
       '\u{1F33F}', // Herb
-      '\u26A1',    // Bolt
+      '\u26A1', // Bolt
       '\u{1F30C}', // Milky Way
     ];
 
@@ -488,10 +488,12 @@ export class GameUI {
     if (btnPacksBack) btnPacksBack.addEventListener('click', packsBack);
 
     const btnApplySkin = this.get('btn-apply-skin');
-    if (btnApplySkin) btnApplySkin.addEventListener('click', () => this.setMenuScreen('title'));
+    if (btnApplySkin)
+      btnApplySkin.addEventListener('click', () => this.setMenuScreen('title'));
 
     const btnApplyPack = this.get('btn-apply-pack');
-    if (btnApplyPack) btnApplyPack.addEventListener('click', () => this.setMenuScreen('title'));
+    if (btnApplyPack)
+      btnApplyPack.addEventListener('click', () => this.setMenuScreen('title'));
   }
 
   switchSettingsTab(tabId) {

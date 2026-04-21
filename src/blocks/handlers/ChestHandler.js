@@ -22,7 +22,8 @@ function getChestInventory() {
 
   if (!worldState.chestInventories.has(_blockKey)) {
     // Determine loot table from block ID (e.g. "chest:common_village")
-    const fullId = _game.world.getBlockAt(..._game.world.keyToCoords(_blockKey)) || 'chest';
+    const fullId =
+      _game.world.getBlockAt(..._game.world.keyToCoords(_blockKey)) || 'chest';
     const tag = fullId.includes(':') ? fullId.split(':')[1] : 'common_village';
 
     const inv = new Array(27).fill(null);

@@ -4,6 +4,10 @@ import {
   computeFogDensity,
   ATMOSPHERIC_COLORS,
 } from '../rendering/RenderConfig.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 THREE.ColorManagement.enabled = true;
 
@@ -50,6 +54,7 @@ export class Renderer {
     this.setupLights();
     this.setupSky();
     this.setupClouds();
+    this.setupPostProcessing();
 
     window.addEventListener('resize', () => {
       if (this.instance) {
@@ -144,18 +149,19 @@ export class Renderer {
                 varying float vHeight;
                 void main() {
                     float h = vHeight;
-                    // Improved gradient: sharper transition near horizon
-                    float factor = clamp(pow(max(h, 0.0), exponent), 0.0, 1.0);
+                    // Improved gradient: use a sigmoidal mix for more natural sky transitions
+                    float factor = smoothstep(-0.05, 0.6, h); 
                     vec3 sky = mix(bottom, top, factor);
                     
-                    // Horizon glow band: Use linear/smoothstep for better performance
-                    float horizonBand = clamp(1.0 - abs(h) * 2.0, 0.0, 1.0);
+                    // Horizon glow band: Use smoother transitions
+                    float horizonBand = clamp(1.0 - abs(h) * 2.5, 0.0, 1.0);
                     horizonBand = smoothstep(0.0, 1.0, pow(horizonBand, 4.0)) * horizonStrength;
                     sky = mix(sky, horizon, horizonBand);
                     
-                    // Darken slightly below horizon
+                    // Darken slightly below horizon but keep it smooth
                     if (h < 0.0) {
-                        sky = mix(bottom, vec3(0.0), clamp(-h * 0.4, 0.0, 0.2));
+                        float depthFactor = clamp(-h * 2.0, 0.0, 0.4);
+                        sky = mix(bottom, vec3(0.02, 0.04, 0.08), depthFactor);
                     }
                     
                     gl_FragColor = vec4(sky, 1.0);
@@ -209,6 +215,27 @@ export class Renderer {
     });
     this.moonGlow = new THREE.Mesh(moonGlowGeo, moonGlowMat);
     this.scene.add(this.moonGlow);
+    this.scene.add(this.moonGlow);
+  }
+
+  setupPostProcessing() {
+    this._initPromise.then(() => {
+      this.composer = new EffectComposer(this.instance);
+      this.renderPass = new RenderPass(this.scene, this._lastCamera || new THREE.PerspectiveCamera());
+      this.composer.addPass(this.renderPass);
+
+      // World Class: Luminous Bloom for torches/sun
+      this.bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        0.22, // strength
+        0.4,  // radius
+        0.85  // threshold
+      );
+      this.composer.addPass(this.bloomPass);
+
+      this.outputPass = new OutputPass();
+      this.composer.addPass(this.outputPass);
+    });
   }
 
   setupClouds() {
@@ -219,7 +246,7 @@ export class Renderer {
     cloudsTexture.magFilter = THREE.LinearFilter;
     cloudsTexture.minFilter = THREE.LinearFilter;
 
-    const cloudGeo = new THREE.PlaneGeometry(1600, 1600, 1, 1);
+    const cloudGeo = new THREE.PlaneGeometry(8000, 8000, 1, 1);
     cloudGeo.rotateX(-Math.PI / 2);
 
     this.cloudMat = new THREE.ShaderMaterial({
@@ -317,10 +344,10 @@ export class Renderer {
       (this.fogDensityScale || 1.0);
 
     // Enforce visibility floor
-    const intensityFactor = 0.4 + clamped * 1.1; 
+    const intensityFactor = 0.4 + clamped * 1.1;
     this.sun.intensity = intensityFactor;
     this.sun.color.copy(sunCol);
-    
+
     this.hemiLight.intensity = 0.8 + clamped * 0.6;
     this.hemiLight.color.set(top);
     this.hemiLight.groundColor.set(0x6d6253);
@@ -355,9 +382,9 @@ export class Renderer {
 
   setDaylightLevel(daylight) {
     this.daylight = Math.max(0, Math.min(1, daylight));
-    
+
     // Synced with updateEnvironmentLighting logic
-    this.sun.intensity = 0.4 + this.daylight * 1.1; 
+    this.sun.intensity = 0.4 + this.daylight * 1.1;
     this.hemiLight.intensity = 0.8 + this.daylight * 0.6;
     if (this.ambientFill) {
       this.ambientFill.intensity = 0.35 + this.daylight * 0.2;
@@ -458,7 +485,12 @@ export class Renderer {
       this.cloudPlane.position.z = camera.position.z;
     }
 
-    this.instance.render(this.scene, camera);
+    if (this.composer && camera) {
+      if (this.renderPass.camera !== camera) this.renderPass.camera = camera;
+      this.composer.render();
+    } else {
+      this.instance.render(this.scene, camera);
+    }
   }
 
   setResolutionScale(scale) {
@@ -475,17 +507,22 @@ export class Renderer {
 
   applyFromSettings(settings) {
     if (!this.instance) return;
-    
+
     // Resolution Scaling
     if (settings.resolutionScale !== undefined) {
       this.setResolutionScale(settings.resolutionScale);
+    }
+
+    // Cloud Opacity
+    if (settings.cloudOpacity !== undefined && this.cloudMat) {
+      this.cloudMat.uniforms.cloudOpacity.value = settings.cloudOpacity;
     }
 
     // Shadow Management
     const shadows = Boolean(settings.shadowsEnabled);
     if (this.instance.shadowMap) {
       this.instance.shadowMap.enabled = shadows;
-      
+
       this.scene.traverse((obj) => {
         if (obj.isMesh && obj.material) {
           obj.material.needsUpdate = true;

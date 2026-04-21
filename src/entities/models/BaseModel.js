@@ -17,7 +17,7 @@ export class BaseModel {
 
   /**
    * Helper to create a textured box part.
-   * @param {string} name 
+   * @param {string} name
    * @param {number} width - World units
    * @param {number} height - World units
    * @param {number} depth - World units
@@ -48,34 +48,37 @@ export class BaseModel {
     const uvAttr = geometry.attributes.uv;
 
     // Helper to set UV for a face
-    // Faces: 0:px, 1:nx, 2:py, 3:ny, 4:pz, 5:nz (right, left, top, bottom, front, back)
+    // Three.js BoxGeometry faces: 0:px, 1:nx, 2:py, 3:ny, 4:pz, 5:nz
+    // (RIGHT, LEFT, TOP, BOTTOM, FRONT, BACK)
     const setFace = (faceIdx, uMin, vMin, uMax, vMax) => {
-      // Normalize
       const u0 = uMin / tw;
       const v0 = 1 - vMax / th;
       const u1 = uMax / tw;
       const v1 = 1 - vMin / th;
 
       const offset = faceIdx * 4;
+
+      // Standard MC-style winding for BoxGeometry:
+      // BL, BR, TL, TR
       uvAttr.setXY(offset + 0, u0, v1);
       uvAttr.setXY(offset + 1, u1, v1);
       uvAttr.setXY(offset + 2, u0, v0);
       uvAttr.setXY(offset + 3, u1, v0);
     };
 
-    // Standard MC layout
-    // Top: (u+d, v) to (u+d+w, v+d)
+    // Standard Minecraft Texture Atlas Layout for Cuboids
+    // py (Top)
     setFace(2, u + d, v, u + d + w, v + d);
-    // Bottom: (u+d+w, v) to (u+d+2w, v+d)
+    // ny (Bottom)
     setFace(3, u + d + w, v, u + d + 2 * w, v + d);
-    // Front: (u+d, v+d) to (u+d+w, v+d+h)
-    setFace(4, u + d, v + d, u + d + w, v + d + h);
-    // Right: (u, v+d) to (u+d, v+d+h)
+    // px (Right)
     setFace(0, u, v + d, u + d, v + d + h);
-    // Back: (u+d+w, v+d) to (u+d+w+w, v+d+h) -- wait, standard layout is (u+2d+w, v+d)
-    setFace(5, u + 2 * d + w, v + d, u + 2 * d + 2 * w, v + d + h);
-    // Left: (u+d+w, v+d) to (u+2d+w, v+d+h)
+    // nx (Left)
     setFace(1, u + d + w, v + d, u + 2 * d + w, v + d + h);
+    // pz (Front)
+    setFace(4, u + d, v + d, u + d + w, v + d + h);
+    // nz (Back)
+    setFace(5, u + 2 * d + w, v + d, u + 2 * d + 2 * w, v + d + h);
 
     uvAttr.needsUpdate = true;
   }

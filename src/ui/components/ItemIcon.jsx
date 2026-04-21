@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { iconService } from '../IconService';
 import { normalizeBlockVariantId } from '../../data/blockIds';
 
@@ -6,33 +6,51 @@ import { normalizeBlockVariantId } from '../../data/blockIds';
  * High-fidelity Item Icon component that renders 3D isometric blocks
  * or high-quality 2D sprites based on the item type.
  */
-export const ItemIcon = ({ item, className = "" }) => {
+export const ItemIcon = React.memo(({ item, className = "" }) => {
   if (!item) return null;
 
-  const normalizedId = normalizeBlockVariantId(item.id);
-  const block = iconService.blockById.get(normalizedId);
-  const textureKey = iconService.getDisplayTextureKey(normalizedId);
+  const normalizedId = useMemo(() => normalizeBlockVariantId(item.id), [item.id]);
   
-  const isDeco = Boolean(block?.deco);
-  const isBlockItem = 
-    (block && !block.deco) || 
-    normalizedId === 'wood' || 
-    normalizedId === 'leaves' || 
-    normalizedId.startsWith('wood_') || 
-    normalizedId.startsWith('leaves_') || 
-    normalizedId.includes('_stairs') || 
-    normalizedId.includes('_slab');
+  const { block, textureKey, isDeco, isBlockItem, shouldTintGrassFace, shouldTintFoliageIcon, shouldUseGrassSpriteTint } = useMemo(() => {
+    const b = iconService.blockById.get(normalizedId);
+    const tKey = iconService.getDisplayTextureKey(normalizedId);
+    const deco = Boolean(b?.deco);
+    const blockItem = 
+      (b && !b.deco) || 
+      normalizedId === 'wood' || 
+      normalizedId === 'leaves' || 
+      normalizedId.startsWith('wood_') || 
+      normalizedId.startsWith('leaves_') || 
+      normalizedId.includes('_stairs') || 
+      normalizedId.includes('_slab');
 
-  const shouldTintGrassFace = normalizedId === 'grass_block';
-  const shouldTintFoliageIcon = 
-    (isDeco && (textureKey === 'grass' || textureKey.includes('grass') || textureKey === 'fern')) || 
-    textureKey.includes('leaves');
+    return {
+      block: b,
+      textureKey: tKey,
+      isDeco: deco,
+      isBlockItem: blockItem,
+      shouldTintGrassFace: normalizedId === 'grass_block',
+      shouldTintFoliageIcon: (deco && (tKey === 'grass' || tKey.includes('grass') || tKey === 'fern')) || tKey.includes('leaves'),
+      shouldUseGrassSpriteTint: deco && (tKey === 'grass' || normalizedId === 'short_grass' || normalizedId === 'tall_grass')
+    };
+  }, [normalizedId]);
 
-  const shouldUseGrassSpriteTint = isDeco && (
-    textureKey === 'grass' || 
-    normalizedId === 'short_grass' || 
-    normalizedId === 'tall_grass'
-  );
+  const renderDurability = () => {
+    if (item.kind !== 'tool' || item.durability === undefined || item.maxDurability === undefined) return null;
+    if (item.durability === item.maxDurability) return null;
+
+    const percent = (item.durability / item.maxDurability) * 100;
+    const color = percent > 50 ? '#55ff55' : percent > 20 ? '#ffff55' : '#ff5555';
+    
+    return (
+      <div className="absolute bottom-1 left-1 right-1 h-1 bg-black/60 rounded-full overflow-hidden border border-black/20">
+        <div 
+          className="h-full transition-all duration-300" 
+          style={{ width: `${percent}%`, backgroundColor: color }} 
+        />
+      </div>
+    );
+  };
 
   // BLOCK ITEM: Render 3D Isometric View
   if (isBlockItem) {
@@ -49,6 +67,7 @@ export const ItemIcon = ({ item, className = "" }) => {
               <div className="iso-face left" style={{ backgroundImage: `url('${leftTex}')` }} />
               <div className="iso-face right" style={{ backgroundImage: `url('${rightTex}')` }} />
            </div>
+           {renderDurability()}
            {item.count > 1 && <span className="item-count">{item.count}</span>}
         </div>
       );
@@ -66,7 +85,8 @@ export const ItemIcon = ({ item, className = "" }) => {
       style={{ backgroundImage: icon ? `url('${icon}')` : 'none' }}
     >
       {!icon && <span className="text-[10px] font-bold">{normalizedId.slice(0, 2).toUpperCase()}</span>}
+      {renderDurability()}
       {item.count > 1 && <span className="item-count">{item.count}</span>}
     </div>
   );
-};
+});

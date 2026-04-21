@@ -1,0 +1,8 @@
+{
+  "name": "Redstone Torch",
+  "hardness": 0,
+  "transparent": true,
+  "deco": true,
+  "emissive": true,
+  "emissiveColor": "0xff0000"
+}

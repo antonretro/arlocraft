@@ -1,0 +1,7 @@
+{
+  "id": "potion_healing",
+  "name": "Healing Potion",
+  "category": "Consumables",
+  "renderType": "item",
+  "description": "Restores 10 health points instantly."
+}

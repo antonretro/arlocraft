@@ -170,40 +170,4 @@ canvas {
   z-index: 10;
 }
 
-.iso-icon {
-  width: 32px;
-  height: 32px;
-  position: relative;
-  transform-style: preserve-3d;
-  transform: rotateX(-35.264deg) rotateY(45deg);
-  margin-top: -2px;
-}
 
-.iso-face {
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  top: 6px;
-  left: 6px;
-  background-size: 100% 100%;
-  image-rendering: pixelated;
-  backface-visibility: hidden;
-}
-
-.iso-face.top {
-  transform: rotateX(90deg) translateZ(10px);
-  z-index: 3;
-  filter: brightness(1.1);
-}
-
-.iso-face.left {
-  transform: rotateY(-90deg) translateZ(10px);
-  z-index: 2;
-  filter: brightness(0.85);
-}
-
-.iso-face.right {
-  transform: rotateY(0deg) translateZ(10px);
-  z-index: 1;
-  filter: brightness(0.65);
-}

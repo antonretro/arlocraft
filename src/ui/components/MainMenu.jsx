@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getGame } from '../UIManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, 
@@ -18,11 +19,24 @@ import {
   Gamepad
 } from 'lucide-react';
 
-export const MainMenu = ({ game, setScreen }) => {
+export const MainMenu = ({ setScreen }) => {
+  const game = getGame();
   const [subScreen, setSubScreen] = useState('main'); // main, multiplayer, worlds, settings, skins
   const [settingTab, setSettingTab] = useState('video'); // video, audio, controls, social
   const [joinCode, setJoinCode] = useState('');
   const [status, setStatus] = useState({ type: 'idle', message: '' });
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newWorldData, setNewWorldData] = useState({ name: '', seed: '', mode: 'SURVIVAL' });
+  const [isRenaming, setIsRenaming] = useState(null); // slotId
+  const [renameValue, setRenameValue] = useState('');
+  const [skinSearchQuery, setSkinSearchQuery] = useState('');
+  const [localPlayerName, setLocalPlayerName] = useState(() => game?.settings?.playerName || 'Arlo');
+  const [settings, setSettings] = useState(() => game?.settingsManager?.getAll() ?? {});
+
+  const updateSetting = (key, value) => {
+    game.settingsManager.set(key, value);
+    setSettings({ ...game.settingsManager.getAll() });
+  };
 
   const handleJoin = async () => {
     if (!joinCode.trim()) {
@@ -62,7 +76,7 @@ export const MainMenu = ({ game, setScreen }) => {
         <span className="text-arlo-blue font-bold tracking-widest text-sm uppercase">The Voyage of Discovery</span>
         <h1 className="ni-title text-shadow-glow">ARLOCRAFT</h1>
         <p className="text-white/40 max-w-xs text-sm mt-4 leading-relaxed">
-          Embark on a modular journey through infinite voxel horizons. Built with the Arlo Vanguard Engine.
+          Embark on a modular journey through infinite voxel horizons. Built with THREE.JS.
         </p>
       </motion.div>
 
@@ -94,7 +108,7 @@ export const MainMenu = ({ game, setScreen }) => {
               />
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <IconButton onClick={() => setSubScreen('skins')} icon={<Palette/>} label="Skins" color="green" />
-                <IconButton onClick={() => window.alert('Resource Packs coming soon in Vanguard v1.2')} icon={<Library/>} label="Packs" color="orange" />
+                <IconButton onClick={() => window.alert('Resource Packs coming soon in Voyage v1.2')} icon={<Library/>} label="Packs" color="orange" />
               </div>
               <MenuButton 
                 onClick={() => setSubScreen('settings')}
@@ -132,31 +146,68 @@ export const MainMenu = ({ game, setScreen }) => {
                             game.loadWorldLocal(slotId);
                             game.startGame({ skipSeedApply: true, preserveCurrentMode: true });
                           } else {
-                            game.startGame();
+                            setShowCreateModal(true);
                           }
                         }}
-                        className="w-full flex flex-col gap-1 p-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl transition-all text-left"
+                        className={`w-full flex flex-col gap-1 p-4 border rounded-xl transition-all text-left
+                          ${summary ? 'bg-white/5 border-white/5 hover:bg-white/10' : 'bg-white/[0.02] border-dashed border-white/10 hover:border-arlo-blue/40'}`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-sm tracking-wide">{slotId.toUpperCase().replace('-', ' ')}</span>
+                          {isRenaming === slotId ? (
+                            <input 
+                              autoFocus
+                              className="bg-black/40 border border-arlo-blue/50 rounded px-2 py-0.5 text-sm outline-none"
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onBlur={() => {
+                                if (renameValue.trim()) game.worldSlots.setSlotName(slotId, renameValue.trim());
+                                setIsRenaming(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                   if (renameValue.trim()) game.worldSlots.setSlotName(slotId, renameValue.trim());
+                                   setIsRenaming(null);
+                                }
+                              }}
+                            />
+                          ) : (
+                            <span className="font-bold text-sm tracking-wide">{summary ? summary.name : 'Empty Slot'}</span>
+                          )}
                           {summary && <span className="text-[10px] text-arlo-blue font-bold px-2 py-0.5 bg-arlo-blue/10 rounded tracking-widest uppercase">{summary.mode}</span>}
                         </div>
                         <span className="text-[10px] opacity-40">
-                          {summary ? `Saves: ${new Date(summary.savedAt).toLocaleDateString()} • Seed: ${summary.seed}` : 'New Uncharted Territory'}
+                          {summary ? `Saves: ${new Date(summary.savedAt).toLocaleDateString()} • Seed: ${summary.seed}` : 'Forge a new horizon here'}
                         </span>
                       </button>
                       
-                      {summary && (
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (game.deleteWorldSlot(slotId)) setSubScreen('main'); // Refreshing by going back
-                          }}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/10 rounded-lg"
-                        >
-                          <Trash2 size={16}/>
-                        </button>
-                      )}
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {summary && (
+                          <>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRenameValue(summary.name);
+                                setIsRenaming(slotId);
+                              }}
+                              className="p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-lg"
+                            >
+                              <Palette size={14}/>
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm('Are you sure you want to delete this world?')) {
+                                  game.deleteWorldSlot(slotId);
+                                  setSubScreen('main');
+                                }
+                              }}
+                              className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg"
+                            >
+                              <Trash2 size={14}/>
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -164,8 +215,13 @@ export const MainMenu = ({ game, setScreen }) => {
 
               <button 
                 onClick={() => {
-                  game.randomizeSeed();
-                  game.startGame();
+                  const firstEmpty = game.worldSlots.getAll().find(s => !game.worldSlots.exists(s));
+                  if (firstEmpty) {
+                    game.selectedWorldSlot = firstEmpty;
+                    setShowCreateModal(true);
+                  } else {
+                    alert('All world slots are full! Delete one to forge anew.');
+                  }
                 }}
                 className="glass-btn glass-btn-blue flex items-center justify-center gap-3 mt-auto"
               >
@@ -187,40 +243,80 @@ export const MainMenu = ({ game, setScreen }) => {
                 <button onClick={() => setSubScreen('main')} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                   <ChevronRight className="rotate-180" />
                 </button>
-                <h2 className="text-xl font-bold">Skin Library</h2>
+                <h2 className="text-xl font-bold">Identity & Skin</h2>
               </div>
 
-              <div className="grid grid-cols-4 gap-3 overflow-y-auto max-h-72 p-2">
-                {[...game.skinSystem.classicSkins, ...game.skinSystem.randomSkins].map(skin => {
-                  const isActive = game.skinSystem.currentSkin === skin.id;
-                  return (
-                    <button
-                      key={skin.id}
-                      onClick={() => {
-                        game.skinSystem.applySkin(skin.id);
-                        if (skin.url) {
-                            game.skinLoader.loadSkinFromUrl(skin.url).then(({ materials }) => {
-                                game._applyLoadedSkin(materials, skin.url);
-                            }).catch(err => {
-                                console.error("[SkinLoader] Error applying skin:", err);
-                                // Fallback to default if load fails
-                                game.updatePlayerSkin('Steve');
-                            });
-                        } else if (skin.isProcedural) {
-                            // Handle procedural if needed
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Voyage Signature (Display Name)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Enter identity..."
+                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-arlo-blue/50 transition-colors text-sm"
+                      value={localPlayerName}
+                      onChange={(e) => {
+                        setLocalPlayerName(e.target.value);
+                        game.settingsManager.set('playerName', e.target.value);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Identity Recall (Skin Lookup)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Username (e.g. Grian, Notch)..."
+                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-arlo-blue/50 transition-colors text-sm"
+                      value={skinSearchQuery}
+                      onChange={(e) => setSkinSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && skinSearchQuery.trim()) {
+                           game.skinSystem.applySkinByUsername(skinSearchQuery);
+                           setSkinSearchQuery('');
                         }
                       }}
-                      className={`aspect-square p-2 rounded-xl border transition-all 
-                        ${isActive ? 'bg-arlo-blue/20 border-arlo-blue shadow-[0_0_15px_rgba(0,195,227,0.2)]' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                    />
+                    <button 
+                      onClick={() => {
+                        if (skinSearchQuery.trim()) {
+                          game.skinSystem.applySkinByUsername(skinSearchQuery);
+                          setSkinSearchQuery('');
+                        }
+                      }}
+                      className="glass-btn glass-btn-blue !px-4"
                     >
-                      <img 
-                        src={skin.faceUrl || skin.url || '/assets/skins/default_face.png'} 
-                        className="w-full h-full object-contain pixelated rounded-md"
-                        alt={skin.name}
-                      />
+                      Recall
                     </button>
-                  );
-                })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 overflow-hidden">
+                <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Standard Replicas</label>
+                <div className="grid grid-cols-5 gap-2 overflow-y-auto max-h-40 p-1 scrollbar-thin">
+                  {[...game.skinSystem.classicSkins, ...game.skinSystem.randomSkins].map(skin => {
+                    const isActive = game.skinSystem.currentSkin === skin.id;
+                    return (
+                      <button
+                        key={skin.id}
+                        onClick={() => {
+                          game.skinSystem.applySkin(skin.id);
+                        }}
+                        className={`aspect-square p-2 rounded-xl border transition-all 
+                          ${isActive ? 'bg-arlo-blue/20 border-arlo-blue' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                      >
+                        <img 
+                          src={skin.faceUrl || skin.url || '/assets/skins/default_face.png'} 
+                          className="w-full h-full object-contain pixelated rounded-md"
+                          alt={skin.name}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="mt-auto px-2">
                 <span className="text-[10px] font-bold opacity-30 uppercase tracking-widest">Active Voyager</span>
@@ -264,7 +360,7 @@ export const MainMenu = ({ game, setScreen }) => {
                         <button onClick={() => setSubScreen('main')} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                             <ChevronRight className="rotate-180" />
                         </button>
-                        <h2 className="text-xl font-bold tracking-tight">Vanguard Configuration</h2>
+                        <h2 className="text-xl font-bold tracking-tight">Voyage Configuration</h2>
                         </div>
                         <span className="text-[10px] font-bold opacity-30 uppercase tracking-[0.2em]">Build: {game.currentVersionId}</span>
                     </div>
@@ -276,32 +372,78 @@ export const MainMenu = ({ game, setScreen }) => {
                         <ToggleSetting 
                           label="Atmospheric Shadows" 
                           desc="Dynamic block-level voxel shadowing" 
-                          active={game.settings.shadowsEnabled}
+                          active={settings.shadowsEnabled}
                           onToggle={() => {
-                            game.settings.shadowsEnabled = !game.settings.shadowsEnabled;
-                            game.renderer.toggleShadows(game.settings.shadowsEnabled);
-                            game.saveSettings();
+                            const val = !settings.shadowsEnabled;
+                            game.renderer.toggleShadows(val);
+                            updateSetting('shadowsEnabled', val);
                           }}
                         />
                         <RangeSetting 
                           label="Field of View" 
-                          value={game.settings.fov} 
+                          value={settings.fov} 
                           min={50} max={110} 
                           onChange={(v) => {
-                            game.settings.fov = v;
                             game.camera.instance.fov = v;
                             game.camera.instance.updateProjectionMatrix();
-                            game.saveSettings();
+                            updateSetting('fov', v);
+                          }}
+                        />
+                         <ToggleSetting 
+                          label="Auto Quality Adaptation" 
+                          desc="Dynamically scale resolution for optimal FPS" 
+                          active={settings.autoQuality}
+                          onToggle={() => {
+                            updateSetting('autoQuality', !settings.autoQuality);
+                          }}
+                        />
+                        <RangeSetting 
+                          id="setting-fps"
+                          label="Performance Governor"
+                          value={settings.fpsCap}
+                          min={30}
+                          max={240}
+                          step={30}
+                          unit="FPS"
+                          onChange={(val) => {
+                            const cap = val > 200 ? 999 : val;
+                            updateSetting('fpsCap', cap);
+                          }}
+                          formatDisplay={(v) => v > 200 ? 'Uncapped' : `${v} FPS`}
+                        />
+                        <RangeSetting 
+                          label="Resolution Quality" 
+                          value={Math.round((settings.resolutionScale || 0.65) * 100)} 
+                          min={20} max={200} 
+                          disabled={settings.autoQuality}
+                          onChange={(v) => {
+                            const scale = v / 100;
+                            game.renderer.setResolutionScale(scale);
+                            game.settings.autoQuality = false; 
+                            updateSetting('resolutionScale', scale);
                           }}
                         />
                         <RangeSetting 
                           label="Render Distance" 
-                          value={game.settings.renderDistance || 8} 
+                          value={settings.renderDistance || 8} 
                           min={2} max={16} 
+                          disabled={settings.autoQuality}
                           onChange={(v) => {
-                            game.settings.renderDistance = v;
                             game.world.setRenderDistance(v);
-                            game.saveSettings();
+                            game.settings.autoQuality = false;
+                            updateSetting('renderDistance', v);
+                          }}
+                        />
+                         <RangeSetting 
+                          label="Cloud Density" 
+                          value={Math.round((settings.cloudOpacity || 0.85) * 100)} 
+                          min={0} max={100} 
+                          onChange={(v) => {
+                            const op = v / 100;
+                            if (game.renderer.cloudMat) {
+                                game.renderer.cloudMat.uniforms.cloudOpacity.value = op;
+                            }
+                            updateSetting('cloudOpacity', op);
                           }}
                         />
                       </motion.div>
@@ -325,7 +467,7 @@ export const MainMenu = ({ game, setScreen }) => {
                     {settingTab === 'controls' && (
                       <motion.div key="controls" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-8 text-center text-white/40 py-12">
                         <Gamepad size={48} className="mx-auto mb-4 opacity-20" />
-                        <p className="text-sm">Neural link sensitivity and remapping available in the next vanguard patch.</p>
+                        <p className="text-sm">Neural link sensitivity and remapping available in the next arlo patch.</p>
                       </motion.div>
                     )}
 
@@ -407,7 +549,108 @@ export const MainMenu = ({ game, setScreen }) => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Modal extracted to solve wait-mode child conflicts */}
+        <AnimatePresence>
+          {showCreateModal && (
+            <motion.div 
+              key="create-modal-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-6"
+            >
+              <motion.div 
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                className="glass-card max-w-sm w-full p-8 flex flex-col gap-6 border-arlo-blue/20"
+              >
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-xl font-bold text-arlo-blue tracking-tight">Forge New World</h3>
+                  <p className="text-[10px] opacity-40 uppercase tracking-widest font-bold">Slot: {game.selectedWorldSlot?.toUpperCase()}</p>
+                </div>
+
+                <div className="flex flex-col gap-5">
+                   <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">World Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="Arlo's Odyssey..."
+                        className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-arlo-blue/50 transition-colors"
+                        value={newWorldData.name}
+                        onChange={(e) => setNewWorldData({...newWorldData, name: e.target.value})}
+                      />
+                   </div>
+                   <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">World Seed (Optional)</label>
+                      <input 
+                        type="text" 
+                        placeholder="Random"
+                        className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-arlo-blue/50 transition-colors"
+                        value={newWorldData.seed}
+                        onChange={(e) => setNewWorldData({...newWorldData, seed: e.target.value})}
+                      />
+                   </div>
+                   <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Simulation Mode</label>
+                      <div className="grid grid-cols-2 gap-2">
+                         {['SURVIVAL', 'CREATIVE', 'ADVENTURE', 'SPECTATOR'].map(m => (
+                           <button
+                             key={m}
+                             onClick={() => setNewWorldData({...newWorldData, mode: m})}
+                             className={`px-3 py-2 rounded-lg text-[10px] font-bold transition-all border
+                               ${newWorldData.mode === m 
+                                 ? 'bg-arlo-blue/20 border-arlo-blue text-arlo-blue shadow-[0_0_10px_rgba(0,195,227,0.2)]' 
+                                 : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'}`}
+                           >
+                             {m}
+                           </button>
+                         ))}
+                      </div>
+                   </div>
+                </div>
+
+                <div className="flex gap-3 mt-4">
+                  <button 
+                    onClick={() => setShowCreateModal(false)}
+                    className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-bold text-sm transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (newWorldData.name.trim()) {
+                        game.worldSlots.setSlotName(game.selectedWorldSlot, newWorldData.name.trim());
+                      }
+                      if (newWorldData.seed.trim()) {
+                         game.world.setSeed(newWorldData.seed.trim());
+                      } else {
+                         game.randomizeSeed();
+                      }
+                      
+                      game.selectedStartMode = newWorldData.mode;
+                      game.startGame({ skipSeedApply: true });
+                      setScreen('ingame');
+                      setShowCreateModal(false);
+                    }}
+                    className="flex-1 glass-btn glass-btn-blue !px-4"
+                  >
+                    Forge
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
       </div>
+
+      {/* Version Footer */}
+      <div className="absolute bottom-8 left-8 flex flex-col gap-0.5 opacity-20 hover:opacity-100 transition-opacity pointer-events-none">
+          <span className="text-[10px] font-bold tracking-[0.3em] uppercase">ArloCraft {game.currentVersionId}</span>
+          <span className="text-[8px] font-medium opacity-60 uppercase tracking-widest">© 2026 Anton Retro • All Rights Reserved</span>
+      </div>
+
     </div>
   );
 };

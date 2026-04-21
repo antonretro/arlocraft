@@ -60,17 +60,22 @@ export class World {
     // Raycasting scratch vector
     this.tmpRayDir = new THREE.Vector3();
 
-    // Initialization
-    this.init();
+    // Raycasting scratch vector
+    this.tmpRayDir = new THREE.Vector3();
   }
 
-  init() {
-    this.registry.init();
+  async init() {
+    await this.registry.init();
     this.chunkManager = new ChunkManager(this);
     this.chunkGenerator = new ChunkGenerator(this);
     this.explosions = new ExplosionSystem(this);
     this.chunks = this.chunkManager.chunks;
     return this;
+  }
+
+  setSeed(seedValue) {
+    this.terrain.setSeed(seedValue);
+    this.chunkManager?.clearAll();
   }
 
   update(playerPos, delta) {
@@ -84,10 +89,11 @@ export class World {
 
     // 2. Visuals & Animations
     this.visuals.update(time);
-    this.registry.updateShaderMaterials(time);
+    // NOTE: shader material time (sway/water) is updated once per frame in Game.js animate()
 
     // 3. Systems
     this.explosions.update(delta);
+    this.redstone?.tick();
   }
 
   // --- Core API Proxies (Backward Compatibility) ---
@@ -173,8 +179,6 @@ export class World {
   }
 
   getGroundYBelow(x, y, z) {
-    // High-performance ground query for Physics
-    // Prioritize actual block data over noise-calculated terrain height
     const radius = 0.28;
     const searchPoints = [
       [x, z],
@@ -185,42 +189,32 @@ export class World {
     ];
 
     let maxGroundY = -256;
-    const startY = Math.floor(y + 0.5);
+    const startY = Math.floor(y + 0.1); // Slightly lower than feet to avoid snapping up
+    const searchDepthLimit = 32; // Don't search too far down per frame
 
     for (const [px, pz] of searchPoints) {
       const gx = Math.floor(px);
       const gz = Math.floor(pz);
-
-      const cx = this.getChunkCoord(gx);
-      const cz = this.getChunkCoord(gz);
       const terrainY = this.terrain.getColumnHeight(px, pz);
 
-      // Search from player's feet downwards
-      for (let gy = startY; gy > -128; gy--) {
-        const cy = this.getChunkCoord(gy);
-        const chunk = this.chunkManager.getChunk(cx, cy, cz);
-        const isChunkReady = chunk && !chunk.destroyed;
-
-        const key = this.coords.getKey(gx, gy, gz);
-        const id = this.state.blockMap.get(key);
-
+      // 1. Scan from player's feet downwards (Searching blockMap first)
+      // startY is slightly into the current block to catch the floor we are standing on.
+      const scanLimit = Math.max(-64, Math.floor(terrainY));
+      for (let gy = startY; gy >= scanLimit; gy--) {
+        const id = this.getBlockAt(gx, gy, gz);
         if (id && this.blocks.isSolid(id)) {
-          const blockTopY = gy + 0.5;
-          if (blockTopY > maxGroundY) maxGroundY = blockTopY;
-          break;
-        }
-
-        // Safety fallback: only if chunk isn't ready or we reach the edge of the world
-        if (gy <= terrainY) {
-          if (!isChunkReady) {
-            if (terrainY > maxGroundY) maxGroundY = terrainY;
-            break;
-          } else if (gy < terrainY - 32) {
-            // Beyond reasonable digging depth and no blocks found in a loaded chunk
+          const blockTopY = gy + 1;
+          // IMPORTANT: If we are at or slightly above this block, it's our ground.
+          // The 0.6 tolerance allows for smooth step-up/jumping buffer.
+          if (blockTopY <= y + 0.1 || (this.blocks.isStep(id) && blockTopY <= y + 0.6)) {
+            if (blockTopY > maxGroundY) maxGroundY = blockTopY;
             break;
           }
         }
       }
+
+      // 2. Terrain noise fallback (if no placed blocks were higher)
+      if (terrainY > maxGroundY) maxGroundY = terrainY;
     }
     return maxGroundY;
   }
@@ -358,7 +352,19 @@ export class World {
     this.explosions.spawnPickupEffect?.(x, y, z, id, pos);
   }
   computeMineDuration(id, item, mode) {
-    return this.blocks.computeMineDuration(id, item, mode);
+    let base = this.blocks.computeMineDuration(id, item, mode);
+    
+    // Apply Efficiency Enchantment
+    const effMultiplier = this.game.engine?.enchantmentSystem?.getMiningSpeedMultiplier(item) || 1;
+    base /= effMultiplier;
+
+    // Apply Haste/Fatigue Potion Effects
+    if (this.game.gameState.activeEffects) {
+        const hasteEffect = this.game.gameState.activeEffects.find(e => e.id === 'haste');
+        if (hasteEffect) base *= Math.pow(0.8, hasteEffect.level);
+    }
+
+    return Math.max(0.05, base);
   }
 
   // Raycasting
@@ -382,12 +388,13 @@ export class World {
     const deltaX = Math.abs(1 / dx),
       deltaY = Math.abs(1 / dy),
       deltaZ = Math.abs(1 / dz);
-    let bx = Math.floor(origin.x + 0.5),
-      by = Math.floor(origin.y + 0.5),
-      bz = Math.floor(origin.z + 0.5);
-    let maxX = deltaX * (dx > 0 ? bx + 0.5 - origin.x : origin.x - (bx - 0.5));
-    let maxY = deltaY * (dy > 0 ? by + 0.5 - origin.y : origin.y - (by - 0.5));
-    let maxZ = deltaZ * (dz > 0 ? bz + 0.5 - origin.z : origin.z - (bz - 0.5));
+    let bx = Math.floor(origin.x),
+      by = Math.floor(origin.y),
+      bz = Math.floor(origin.z);
+
+    let maxX = deltaX * (dx > 0 ? bx + 1 - origin.x : origin.x - bx);
+    let maxY = deltaY * (dy > 0 ? by + 1 - origin.y : origin.y - by);
+    let maxZ = deltaZ * (dz > 0 ? bz + 1 - origin.z : origin.z - bz);
     let prevX = bx,
       prevY = by,
       prevZ = bz,
@@ -470,6 +477,17 @@ export class World {
 
     this.spawnBreakParticles(x, y, z, id);
     this.spawnPickupEffect(x, y, z, dropId, this.game?.getPlayerPosition?.());
+    
+    // Apply Durability Damage to Active Tool
+    const selectedSlot = this.game.gameState.selectedSlot;
+    const item = this.game.gameState.inventory[selectedSlot];
+    if (item && item.kind === 'tool') {
+        const shouldDamage = this.game.engine?.enchantmentSystem?.shouldConsumeDurability(item) ?? true;
+        if (shouldDamage) {
+            this.game.gameState.applyDurabilityDamage(selectedSlot, 1);
+        }
+    }
+
     window.dispatchEvent(
       new CustomEvent('block-mined', { detail: { id: dropId, x, y, z } })
     );
@@ -665,7 +683,12 @@ export class World {
       else finalId += ':y'; // Default vertical
     }
 
-    if (blockId.includes('_stairs') || blockId.includes('glazed_terracotta')) {
+    if (
+      blockId.includes('_stairs') ||
+      blockId.includes('glazed_terracotta') ||
+      blockId === 'repeater' ||
+      blockId === 'comparator'
+    ) {
       const yaw =
         ((camera.rotation.y % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
       const pi = Math.PI;
@@ -673,6 +696,30 @@ export class World {
       else if (yaw < (3 * pi) / 4) finalId += '_e';
       else if (yaw < (5 * pi) / 4) finalId += '_n';
       else finalId += '_w';
+    }
+
+    // 6-Way Orientation for Machines
+    if (
+      blockId === 'observer' ||
+      blockId === 'piston' ||
+      blockId === 'sticky_piston'
+    ) {
+      const pitch = camera.rotation.x;
+      const yaw =
+        ((camera.rotation.y % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      const pi = Math.PI;
+
+      if (pitch > pi / 4)
+        finalId += '_u'; // Facing Up
+      else if (pitch < -pi / 4)
+        finalId += '_d'; // Facing Down
+      else {
+        // Horizontal orientation
+        if (yaw >= (7 * pi) / 4 || yaw < pi / 4) finalId += '_s';
+        else if (yaw < (3 * pi) / 4) finalId += '_e';
+        else if (yaw < (5 * pi) / 4) finalId += '_n';
+        else finalId += '_w';
+      }
     }
     const cx = this.getChunkCoord(px);
     const cy = this.getChunkCoord(py);
@@ -887,7 +934,18 @@ export class World {
     }
 
     if (blockId === 'crafting_table') {
-      window.dispatchEvent(new CustomEvent('interact-crafting-table'));
+      window.dispatchEvent(new CustomEvent('inventory-toggle', { 
+        detail: true,
+        mode: 'WORKSHOP' 
+      }));
+      return true;
+    }
+
+    if (blockId === 'barrel') {
+      window.dispatchEvent(new CustomEvent('inventory-toggle', { 
+        detail: true,
+        mode: 'BARREL' 
+      }));
       return true;
     }
 
@@ -909,7 +967,11 @@ export class World {
         return true;
       }
     }
-    const isChest = blockId === 'starter_chest' || blockId === 'chest' || blockId.startsWith('chest:');
+    const isChest =
+      blockId === 'starter_chest' ||
+      blockId === 'chest' ||
+      blockId === 'barrel' ||
+      blockId.startsWith('chest:');
     if (isChest) {
       const chestKey = this.getKey(cell.x, cell.y, cell.z);
       if (!this.state.openedChestKeys.has(chestKey)) {
@@ -918,11 +980,12 @@ export class World {
         // Determine loot table: prioritize block ID tag, then fallback to context
         let tableId = 'common_village';
         if (blockId.includes(':')) {
-           tableId = blockId.split(':').pop();
+          tableId = blockId.split(':').pop();
         } else {
-           const biomeId = this.getBiomeIdAt(cell.x, cell.z);
-           if (biomeId === 'desert') tableId = 'desert_loot';
-           if (this.getColumnHeight(cell.x, cell.z) > 100) tableId = 'castle_loot';
+          const biomeId = this.getBiomeIdAt(cell.x, cell.z);
+          if (biomeId === 'desert') tableId = 'desert_loot';
+          if (this.getColumnHeight(cell.x, cell.z) > 100)
+            tableId = 'castle_loot';
         }
 
         const loot = rollLoot(tableId, 4);
@@ -930,7 +993,10 @@ export class World {
 
         window.dispatchEvent(
           new CustomEvent('action-prompt', {
-            detail: { type: 'LOOT DISCOVERED: ' + tableId.toUpperCase().replace('_', ' ') },
+            detail: {
+              type:
+                'LOOT DISCOVERED: ' + tableId.toUpperCase().replace('_', ' '),
+            },
           })
         );
         window.dispatchEvent(new CustomEvent('action-success'));
@@ -976,12 +1042,49 @@ export class World {
       return true;
     }
 
+    // --- Lever & Button Interaction ---
+    if (blockId === 'lever' || blockId === 'stone_button') {
+      const key = this.getKey(cell.x, cell.y, cell.z);
+      const isActive = this.state.blockData.get(key + ':active') || false;
+      this.state.blockData.set(key + ':active', !isActive);
+
+      // Trigger redstone pulse
+      this.redstone?.onBlockChanged(cell.x, cell.y, cell.z, 'update');
+
+      // Sound effect
+      const soundId = blockId === 'lever' ? 'ui-lever' : 'ui-click';
+      this.game.audio?.play(soundId);
+
+      window.dispatchEvent(new CustomEvent('action-success'));
+      return true;
+    }
+
+    // --- Advanced Redstone Interaction ---
+    if (blockId.startsWith('repeater')) {
+      const key = this.getKey(cell.x, cell.y, cell.z);
+      let delay = this.state.blockData.get(key + ':delay') || 1;
+      delay = (delay % 4) + 1; // Cycle 1 -> 2 -> 3 -> 4 -> 1
+      this.state.blockData.set(key + ':delay', delay);
+      this.game.audio?.play('ui-click');
+      window.dispatchEvent(new CustomEvent('action-success'));
+      return true;
+    }
+
+    if (blockId.startsWith('comparator')) {
+      const key = this.getKey(cell.x, cell.y, cell.z);
+      let mode = this.state.blockData.get(key + ':mode') || 'compare';
+      mode = mode === 'compare' ? 'subtract' : 'compare';
+      this.state.blockData.set(key + ':mode', mode);
+      this.game.audio?.play('ui-click');
+      window.dispatchEvent(new CustomEvent('action-success'));
+      return true;
+    }
+
     return null;
   }
 
   getAreaInfluence(position) {
-    if (!this.corruptionEnabled)
-      return { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+    if (!this.corruptionEnabled) return { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
     if (!position) return { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
     const px = Math.round(position.x),
       py = Math.round(position.y),

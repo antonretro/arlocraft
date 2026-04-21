@@ -16,6 +16,7 @@ import { initReactUI } from '../ui/UIManager.jsx';
 import { SkinSystem } from './SkinSystem.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
 import { ParticleSystem } from './ParticleSystem.js';
+import { ScriptSystem } from './ScriptSystem.js';
 import { SettingsManager } from './SettingsManager.js';
 import { SaveSystem } from './SaveSystem.js';
 import { WorldSlotManager } from './WorldSlotManager.js';
@@ -30,8 +31,9 @@ import { HUDCore } from '../ui/HUDCore.js';
 import { HelpPanel } from '../ui/HelpPanel.js';
 import { TouchControls } from '../ui/TouchControls.js';
 import { MiniMap } from '../ui/Minimap.js';
+import { ResourcePackManager } from '../world/ResourcePackManager.js';
 
-const LOCAL_APP_VERSION = 'v1.0';
+const LOCAL_APP_VERSION = 'v1.1-RELEASE';
 const GITHUB_REPO_OWNER = 'antonretro';
 const GITHUB_REPO_NAME = 'ArloCraft';
 
@@ -46,7 +48,8 @@ export class Game {
     this.skinSystem = new SkinSystem();
     this.skinLoader = new SkinLoader();
     this.minimap = new MiniMap(this);
-    
+    this.resourceManager = ResourcePackManager.getInstance();
+
     // Initialize UI Services First
     this.hud = new HUDCore(this);
     this.helpPanel = new HelpPanel(this);
@@ -56,13 +59,29 @@ export class Game {
 
     // Legacy Bridge (minimal stubs for other services)
     this.ui = {
-      setMenuScreen: (screen) => window.dispatchEvent(new CustomEvent('ui-set-screen', { detail: screen })),
+      setMenuScreen: (screen) =>
+        window.dispatchEvent(
+          new CustomEvent('ui-set-screen', { detail: screen })
+        ),
       setStatus: (msg, error) => console.log(`[UI Status] ${msg}`),
-      showHUD: (visible) => window.dispatchEvent(new CustomEvent('ui-set-hud', { detail: visible })),
+      showHUD: (visible) =>
+        window.dispatchEvent(
+          new CustomEvent('ui-set-hud', { detail: visible })
+        ),
       renderWorldList: () => {},
-      showTitle: (visible) => window.dispatchEvent(new CustomEvent('ui-set-screen', { detail: visible ? 'title' : 'ingame' })),
-      showSettings: (visible) => window.dispatchEvent(new CustomEvent('ui-set-screen', { detail: visible ? 'settings' : 'title' })),
-      isSettingsOpen: () => false // Handled in React state now
+      showTitle: (visible) =>
+        window.dispatchEvent(
+          new CustomEvent('ui-set-screen', {
+            detail: visible ? 'title' : 'ingame',
+          })
+        ),
+      showSettings: (visible) =>
+        window.dispatchEvent(
+          new CustomEvent('ui-set-screen', {
+            detail: visible ? 'settings' : 'title',
+          })
+        ),
+      isSettingsOpen: () => false, // Handled in React state now
     };
     this.updateChecker = new UpdateChecker('antonretro', 'arlocraft');
 
@@ -124,19 +143,16 @@ export class Game {
     this.notifications = new NotificationSystem();
     this.multiplayer = new MultiplayerManager(this);
     this.particles = new ParticleSystem(this);
+    this.scripts = new ScriptSystem(this);
     this.survival = new SurvivalSystem(this.gameState, this.hud);
-    this.dayNight = new DayNightSystem(
-      this.renderer,
-      this.world,
-      {}
-    );
+    this.dayNight = new DayNightSystem(this.renderer, this.world, {});
     this.audio = new AudioSystem();
     this.audio.applyFromSettings(this.settings);
     this.audio.installAutoUnlock(document);
 
     this.renderer.applyFromSettings(this.settings);
 
-    this.currentVersionId = 'v1.1';
+    this.currentVersionId = 'v1.1-STABLE';
     this.features = { ...FEATURES };
 
     this.profiler = new DebugProfiler(this);
@@ -145,11 +161,7 @@ export class Game {
     this.setupSkinListeners();
 
     this.setMenuMode(this.selectedStartMode, false);
-    this.world.setRenderDistance(
-      this.getEffectiveRenderDistanceForTier(
-        this.settings.qualityTierPref ?? this.qualityTier
-      )
-    );
+    // Deferred: Render distance is now set after world.init() in this.init()
 
     // Final polish for startup presentation
     this.ui.setMenuScreen('title');
@@ -198,6 +210,22 @@ export class Game {
       darkMaterial
     );
     armR.position.set(0.52, 1.0, 0);
+    group.add(armR);
+
+    // --- Blob Shadow ---
+    const shadowGeo = new THREE.CircleGeometry(0.45, 16);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.3,
+      depthWrite: false,
+    });
+    const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.005; // Tight to the feet
+    group.add(shadow);
+
+    this.playerModel = group;
     group.add(armR);
 
     const headGroup = new THREE.Group();
@@ -299,6 +327,24 @@ export class Game {
       if (e.key === 'F3') {
         e.preventDefault();
         this.toggleDebugOverlay();
+      }
+    });
+
+    window.addEventListener('skin-changed', (event) => {
+      const { skinId, data } = event.detail;
+      console.log(`[ArloCraft] Identity Update: ${skinId}`);
+
+      if (skinId.startsWith('custom_')) {
+        const username = skinId.replace('custom_', '');
+        this.updatePlayerSkin(username);
+      } else {
+        // Handle standard replicas directly if they have a URL
+        const url = this.skinSystem.getSkinUrl(skinId) || data;
+        if (url) {
+          this.skinLoader.loadSkinFromUrl(url).then(({ materials }) => {
+            this._applyLoadedSkin(materials, url);
+          }).catch(console.error);
+        }
       }
     });
   }
@@ -595,6 +641,8 @@ export class Game {
     this.gameState.setPaused(true);
     this.cancelMining();
     this.showPause(true);
+    this.world.visuals.updateHover(0, 0, 0, false);
+    this.world.visuals.updatePlacement(0, 0, 0, false);
     this.helpPanel.setState('paused');
     this.touchControls?.show(false);
     if (document.pointerLockElement) document.exitPointerLock();
@@ -684,6 +732,14 @@ export class Game {
     this.showSettings(false);
     this.showTitle(true);
     this.ui.showHUD(false);
+    
+    // Recovery: strictly hide all selector visuals
+    if (this.world?.visuals) {
+      this.world.visuals.updateHover(0, 0, 0, false);
+      this.world.visuals.updatePlacement(0, 0, 0, false);
+    }
+    this.cancelMining();
+    
     this.helpPanel.setState('title');
     this.audio.play('ui-back');
   }
@@ -706,10 +762,17 @@ export class Game {
     if (input) input.value = String(seed);
     this.audio.play('ui-click');
   }
-
   async init() {
     console.log('[ArloCraft] Starting engine init...');
+    await this.resourceManager.ready();
+    await this.world.init();
     await this.physics.init();
+
+    this.world.setRenderDistance(
+      this.getEffectiveRenderDistanceForTier(
+        this.settings.qualityTierPref ?? this.qualityTier
+      )
+    );
 
     this.applyQualityTier(this.settings.qualityTierPref ?? 'low');
     this.camera.instance.fov = this.settings.fov ?? 75;
@@ -824,8 +887,7 @@ export class Game {
   updateCameraFromPlayer(positionOverride = null) {
     if (!this.physics?.playerBody) return;
     const pos = positionOverride ?? this.physics.playerBody.translation();
-    const eyeHeight = this.physics?.eyeHeight ?? this.camera?.eyeHeight ?? 1.32;
-    const feetOffset = this.physics?.feetOffset ?? 0.3;
+    const eyeHeight = this.physics?.eyeHeight ?? 1.62;
 
     const cy = Math.cos(this.viewPitch);
     this._camHead.set(pos.x, pos.y + eyeHeight, pos.z);
@@ -853,9 +915,11 @@ export class Game {
       this.camera.instance.lookAt(this._camDesired);
     } else {
       this.playerVisual.visible = true;
-      this.playerVisual.position.set(pos.x, pos.y - feetOffset, pos.z);
+      this.playerVisual.position.set(pos.x, pos.y, pos.z);
       const isFront = cameraMode === 'THIRD_PERSON_FRONT';
-      this.playerVisual.rotation.y = this.viewYaw + Math.PI;
+      
+      // Face AWAY from camera in BACK mode, TOWARD camera in FRONT mode
+      this.playerVisual.rotation.y = isFront ? this.viewYaw : this.viewYaw + Math.PI;
 
       const distance = isFront ? 3.8 : -4.2;
       const yOff = isFront ? 0.3 : 1.1;
@@ -871,34 +935,35 @@ export class Game {
 
     // --- Multiplayer Sync ---
     if (this.multiplayer && this.multiplayer.connections.size > 0) {
-      // Throttled position broadcast (e.g. every frame for now, or every 2-3 frames)
       this.multiplayer.broadcastPosition(
         this.physics.playerBody.translation(),
         { yaw: this.viewYaw, pitch: this.viewPitch }
       );
     }
 
-    // --- Shadow Update ---
+    // --- Dynamic Shadow Update ---
     if (this.playerShadow) {
-      const floorY = this.world.getColumnHeight(pos.x, pos.z);
+      const floorY = this.world.getGroundYAt(pos.x, pos.z);
       const dist = pos.y - floorY;
 
-      if (dist > 15) {
-        this.playerShadow.visible = false;
-      } else {
-        this.playerShadow.visible = true;
-        this.playerShadow.position.set(pos.x, floorY + 0.05, pos.z);
-        this.playerShadow.material.opacity = Math.max(0, 0.35 - dist * 0.04);
-        const s = Math.max(0.2, 1.0 - dist * 0.05);
-        this.playerShadow.scale.set(s, s, s);
-      }
+      this.playerShadow.visible = dist < 5.0 && this.playerVisual.visible;
+      // Fade and scale based on actual height above ground
+      const s = THREE.MathUtils.lerp(1.0, 0.4, Math.min(1, dist / 4));
+      this.playerShadow.scale.set(s, s, s);
+      this.playerShadow.material.opacity = THREE.MathUtils.lerp(
+        0.3,
+        0.05,
+        Math.min(1, dist / 4)
+      );
+
+      // Keep shadow on the ground floor relative to player feet (pos.y)
+      this.playerShadow.position.y = floorY - pos.y + 0.01;
     }
   }
 
   setAreaInfluence(influence) {
     this.areaInfluence = influence || { virus: 0, arlo: 0 };
   }
-
 
   updateZoneMeter(influence) {
     const v = influence?.virus ?? 0;
@@ -1224,8 +1289,20 @@ export class Game {
       this._camHead,
       this._camLook
     );
+
     if (hit) {
       this.world.visuals.updateHover(hit.cell.x, hit.cell.y, hit.cell.z, true);
+      
+      // Track target block changes for HUD
+      const targetId = hit.id;
+      if (this._lastTargetId !== targetId) {
+        this._lastTargetId = targetId;
+        const block = this.world.blockRegistry.blocks.get(targetId);
+        const name = block?.name || targetId;
+        window.dispatchEvent(new CustomEvent('target-block-changed', { 
+            detail: { id: String(targetId), name: String(name) } 
+        }));
+      }
 
       // Placement Ghost Logic
       const item = this.gameState.inventory[this.gameState.selectedSlot];
@@ -1238,6 +1315,10 @@ export class Game {
         this.world.visuals.updatePlacement(0, 0, 0, false);
       }
     } else {
+      if (this._lastTargetId !== null) {
+        this._lastTargetId = null;
+        window.dispatchEvent(new CustomEvent('target-block-changed', { detail: null }));
+      }
       this.world.visuals.updateHover(0, 0, 0, false);
       this.world.visuals.updatePlacement(0, 0, 0, false);
     }
@@ -1302,9 +1383,14 @@ export class Game {
       this.touchControls?.tick();
       const physicsStart = performance.now();
       this.profiler.begin('physics');
+      // 3D Audio Listener Sync
+      if (this.audio) {
+        this.audio.updateListener(this.camera.instance.position, this.camera.instance.quaternion);
+      }
+
       this.physics.update(delta, this.input, this.viewYaw);
       this.profiler.end('physics');
-      playerPos = this.getPlayerPosition();
+      playerPos = this.physics.position;
       this.entities.update(delta);
       this.particles.update(delta);
       const worldStart = performance.now();
@@ -1364,14 +1450,16 @@ export class Game {
     const isGrounded = this.physics.isGrounded() && !inWater;
 
     if (isGrounded && speed > 0.1) {
-      // Unify bobCycle increment here. Multiplier tuned for better rhythm.
-      this.bobCycle = (this.bobCycle || 0) + delta * 8.0;
+      // Unify bobCycle increment here. Multiplier restored to stable level.
+      const multiplier = this.physics.isSprinting ? 12.0 : 8.5;
+      this.bobCycle = (this.bobCycle || 0) + delta * multiplier;
     } else if (inWater) {
       this.bobCycle = (this.bobCycle || 0) + delta * 3.5;
     } else {
       this.bobCycle = THREE.MathUtils.lerp(this.bobCycle || 0, 0, delta * 3.5);
     }
 
+    this.updateCameraFromPlayer();
     this.camera.instance.rotation.order = 'YXZ';
     this.camera.instance.rotation.set(this.viewPitch, this.viewYaw, 0);
 
@@ -1437,7 +1525,7 @@ export class Game {
 
     if (this.minimap) this.minimap.update(delta, playerPos, this.viewYaw);
     this.screenShake = Math.max(0, this.screenShake - delta * 0.22);
-    
+
     this.profiler.begin('render');
     this.renderer.render(this.camera.instance);
     this.profiler.end('render');
@@ -1529,16 +1617,21 @@ export class Game {
       if (!this.skinLoader) throw new Error('skinLoader not initialized');
       const { materials } = await this.skinLoader.loadSkin(username);
       this._applyLoadedSkin(materials);
-      // Update HUD avatar via crafatar for online username or canvas data for local skins
-      const h = document.getElementById('arlo-face-image');
-      if (h) {
-        const resolvedName = username || 'steve';
-        if (materials.head?.[4]?.map?.image) {
-          h.src = materials.head[4].map.image.toDataURL();
-        } else {
-          h.src = `https://minotar.net/avatar/${resolvedName}/64`;
-        }
+      
+      const resolvedName = username || 'Steve';
+      let avatarUrl = '';
+      if (materials.head?.[4]?.map?.image) {
+        avatarUrl = materials.head[4].map.image.toDataURL();
+      } else {
+        avatarUrl = `https://minotar.net/avatar/${resolvedName}/64`;
       }
+
+      window.dispatchEvent(
+        new CustomEvent('skin-updated', {
+          detail: { username: resolvedName, avatarUrl }
+        })
+      );
+
       this.settings.skinUsername = username;
       this.saveSettings();
     } catch (e) {
@@ -1552,7 +1645,9 @@ export class Game {
       for (const part of parts) {
         if (materials[part]) {
           this.playerParts[part].material = materials[part];
-          const matArray = Array.isArray(materials[part]) ? materials[part] : [materials[part]];
+          const matArray = Array.isArray(materials[part])
+            ? materials[part]
+            : [materials[part]];
           matArray.forEach((m) => {
             m.needsUpdate = true;
           });

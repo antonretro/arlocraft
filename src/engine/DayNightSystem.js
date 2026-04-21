@@ -120,7 +120,7 @@ export class DayNightSystem {
 
   getTimeString() {
     // 0 = 6:00 AM, 0.25 = 12:00 PM, 0.5 = 6:00 PM, 0.75 = 12:00 AM
-    const totalMinutes = (this.timeOfDay + 0.25) % 1 * 1440;
+    const totalMinutes = ((this.timeOfDay + 0.25) % 1) * 1440;
     const hours = Math.floor(totalMinutes / 60);
     const minutes = Math.floor(totalMinutes % 60);
     const ampm = hours >= 12 ? 'PM' : 'AM';

@@ -26,7 +26,7 @@ export class EnderPearl extends ThrowableEntity {
       // Move player slightly above impact to avoid getting stuck
       this.game.physics.position.set(point.x, point.y + 1.8, point.z);
       this.game.audio?.play('tp');
-      this.game.notifications?.add('Swoooop!', 'success');
+      this.game.notifications?.show('Ender Pearl', 'Swoooop!', 'success');
     }
   }
 }

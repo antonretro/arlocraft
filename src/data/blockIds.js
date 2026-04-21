@@ -1,10 +1,10 @@
-import enUs from '../Igneous 1.19.4/assets/minecraft/lang/en_us.json';
+import enUs from './en_us.json';
 
 export function normalizeBlockVariantId(id) {
   const raw = String(id ?? '').trim();
   if (!raw) return '';
 
-  const base = raw.split(':')[0];
+  const base = raw.includes(':') ? raw.split(':')[1] : raw;
   const dirMatch = base.match(/^(.*)_[nswe]$/);
   if (dirMatch) return dirMatch[1];
 

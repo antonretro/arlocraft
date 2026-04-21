@@ -16,6 +16,8 @@ const FOOD_VALUES = {
   cooked_fish: 6,
 };
 
+import { PotionSystem } from './PotionSystem.js';
+
 export { FOOD_VALUES };
 
 export class SurvivalSystem {
@@ -23,6 +25,7 @@ export class SurvivalSystem {
     this.gameState = gameState;
     this.hud = hud;
     this.timers = { hunger: 0, regen: 0, starve: 0 };
+    this.potionSystem = new PotionSystem(gameState);
   }
 
   tryEatFood(selectedSlot) {
@@ -48,6 +51,8 @@ export class SurvivalSystem {
   update(delta) {
     if (this.gameState.mode !== 'SURVIVAL') return;
 
+    this.potionSystem.update(delta);
+    
     this.timers.hunger += delta;
     if (this.timers.hunger >= 10) {
       this.timers.hunger = 0;

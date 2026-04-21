@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 /**
  * MainMenuPanorama
- * Renders a Cinematic 360-degree rotating panorama background 
+ * Renders a Cinematic 360-degree rotating panorama background
  * for the title screen using a simplified voxel scene.
  */
 export class MainMenuPanorama {
@@ -22,8 +22,13 @@ export class MainMenuPanorama {
     this.scene.background = new THREE.Color(0x0a1018);
     this.scene.fog = new THREE.FogExp2(0x0a1018, 0.05);
 
-    this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-    
+    this.camera = new THREE.PerspectiveCamera(
+      70,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -49,28 +54,24 @@ export class MainMenuPanorama {
     const colors = [0x1e293b, 0x00c3e3, 0x0f172a, 0x334155];
 
     for (let i = 0; i < 200; i++) {
-      const material = new THREE.MeshStandardMaterial({ 
+      const material = new THREE.MeshStandardMaterial({
         color: colors[Math.floor(Math.random() * colors.length)],
         roughness: 0.7,
-        metalness: 0.2
+        metalness: 0.2,
       });
-      
+
       const mesh = new THREE.Mesh(geometry, material);
-      
+
       const dist = 10 + Math.random() * 20;
       const angle = Math.random() * Math.PI * 2;
       const height = (Math.random() - 0.5) * 15;
 
-      mesh.position.set(
-        Math.cos(angle) * dist,
-        height,
-        Math.sin(angle) * dist
-      );
-      
+      mesh.position.set(Math.cos(angle) * dist, height, Math.sin(angle) * dist);
+
       mesh.rotation.set(Math.random(), Math.random(), Math.random());
       const scale = 0.5 + Math.random() * 2;
       mesh.scale.set(scale, scale, scale);
-      
+
       this.scene.add(mesh);
     }
   }

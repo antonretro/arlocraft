@@ -216,8 +216,9 @@ export class Chunk {
     this.group.frustumCulled = true;
     this.world.scene.add(this.group);
 
-    this.instancedMeshes = new Map(); // id -> InstancedMesh
+    this.meshes = new Map(); // id -> Mesh or InstancedMesh
     this.dirty = false;
+    this.lastRebuildTime = 0;
     this.destroyed = false;
     this.generating = false;
     this.touchedGenerationChunks = new Map();
@@ -285,14 +286,6 @@ export class Chunk {
     this.world.addBlock(x, y, z, finalId, owner.key, false, options);
   }
 
-  addGeneratedBlock(x, y, z, id) {
-    this.applyGeneratedBlock(x, y, z, id);
-  }
-
-  addGeneratedStructureBlock(x, y, z, id) {
-    this.applyGeneratedBlock(x, y, z, id, { allowCorruption: true });
-  }
-
   addGeneratedPlant(x, y, z, id) {
     const blockData = this.world.getBlockData(id);
     const pairId = blockData?.pairId;
@@ -300,17 +293,47 @@ export class Chunk {
     if (pairId && Number.isFinite(pairOffsetY) && pairOffsetY !== 0) {
       const pairKey = this.world.getKey(x, y + pairOffsetY, z);
       const pairExistingId = this.world.state.blockMap.get(pairKey);
-      // Height fix: Allow overwriting non-solid blocks (like air or other deco)
-      // to ensure tall grass top always spawns correctly.
       if (pairExistingId && this.world.isBlockSolid(pairExistingId))
         return false;
       this.addGeneratedBlock(x, y, z, id);
       this.addGeneratedBlock(x, y + pairOffsetY, z, pairId);
       return true;
     }
-
     this.addGeneratedBlock(x, y, z, id);
     return true;
+  }
+
+  placeGroundLife(x, surfaceY, z, biome) {
+    const choices = this.world.terrain.BIOME_GROUND_LIFE?.[biome.id];
+    if (!choices || choices.length === 0) return;
+
+    const supportId = this.world.state.blockMap.get(
+      this.world.getKey(x, surfaceY, z)
+    );
+    if (
+      !supportId ||
+      supportId === 'water' ||
+      supportId === 'path_block' ||
+      supportId === 'cobblestone'
+    )
+      return;
+
+    const roll = this.world.hash2D(x * 53 + 17, z * 61 - 29);
+    if (roll > 0.5) return;
+
+    const pick = Math.floor(
+      this.world.hash2D(x - 919, z + 771) * choices.length
+    );
+    const plantId = choices[pick];
+    this.addGeneratedPlant(x, surfaceY + 1, z, plantId);
+  }
+
+  addGeneratedBlock(x, y, z, id) {
+    this.applyGeneratedBlock(x, y, z, id);
+  }
+
+  addGeneratedStructureBlock(x, y, z, id) {
+    this.applyGeneratedBlock(x, y, z, id, { allowCorruption: true });
   }
 
   selectUndergroundBlock(wx, y, wz, biome) {
@@ -363,197 +386,133 @@ export class Chunk {
     if (h2 < 0.19) return 'granite';
     if (h3 < 0.05 && y < 15) return 'gravel';
     if (h3 < 0.025 && y < 5) return 'tuff';
-    // Clay pockets near sea level
     if (y > -4 && y < 3 && h1 < 0.06) return 'clay';
 
     return 'stone';
   }
 
-  // ... existing terrain gen methods ...
   generateTerrainColumn(wx, wz) {
     const cs = this.world.chunkSize;
     const startY = this.cy * cs;
     const endY = (this.cy + 1) * cs - 1;
 
-    const terrainHeight = this.world.getColumnHeight(wx, wz);
+    const terrainHeight = Math.floor(this.world.getColumnHeight(wx, wz));
+    const biome = this.world.getBiomeAt(wx, wz);
     const inForcedSpawnZone =
       this.world.shouldForceSpawnZone(wx, wz) ||
       this.world.shouldPlaceStructureChunk(this.cx, this.cz) ||
       this.world.shouldPlaceVillageChunk(this.cx, this.cz);
-    const biome = this.world.getBiomeAt(wx, wz);
-    const waterLevel = this.world.seaLevel;
-    let surfaceId = terrainHeight <= waterLevel ? 'sand' : biome.surfaceBlock;
-    const hasRoad =
-      !inForcedSpawnZone &&
-      terrainHeight > waterLevel &&
-      this.world.isPathAt(wx, wz);
-    const hasHighway =
-      !inForcedSpawnZone &&
-      terrainHeight > waterLevel &&
-      this.world.isHighwayAt(wx, wz);
-    if (hasHighway) {
-      surfaceId = 'cobblestone';
-    } else if (hasRoad) {
-      surfaceId = 'path_block';
-    }
-    // Snow caps on very tall peaks
-    if (
-      !inForcedSpawnZone &&
-      terrainHeight > 58 &&
-      surfaceId !== 'path_block'
-    ) {
-      surfaceId = 'snow_block';
-    }
-    if (terrainHeight >= startY && terrainHeight <= endY) {
-      this.addGeneratedBlock(wx, terrainHeight, wz, surfaceId);
-    }
+    
+    const waterLevel = Math.floor(this.world.seaLevel + (biome.waterLevelOffset ?? 0));
+    const terrainHash = this.world.hash2D(wx, wz);
 
-    const nx = this.world.getColumnHeight(wx + 1, wz);
-    const px = this.world.getColumnHeight(wx - 1, wz);
-    const nz = this.world.getColumnHeight(wx, wz + 1);
-    const pz = this.world.getColumnHeight(wx, wz - 1);
-    const minNeighbor = Math.min(nx, px, nz, pz);
-    const exposedDepth = Math.max(0, terrainHeight - minNeighbor);
-
-    // Top 3 layers always filled with biome filler (dirt/stone etc.)
-    for (let d = 1; d <= 3; d++) {
-      const y = terrainHeight - d;
-      if (y < this.world.minTerrainY) break;
-      this.addGeneratedBlock(wx, y, wz, biome.fillerBlock);
-    }
-    // Fill all the way down to minTerrainY so the world isn't hollow
-    const totalDepth = terrainHeight - this.world.minTerrainY;
-    for (let d = 4; d <= totalDepth; d++) {
-      const y = terrainHeight - d;
-      if (y < this.world.minTerrainY) break;
-      if (this.world.shouldCarveCave(wx, y, wz, terrainHeight)) continue;
-      this.addGeneratedBlock(
-        wx,
-        y,
-        wz,
-        this.selectUndergroundBlock(wx, y, wz, biome)
-      );
-    }
-
-    if (!inForcedSpawnZone) {
-      for (let y = terrainHeight + 1; y <= waterLevel; y++) {
-        this.addGeneratedBlock(wx, y, wz, 'water');
+    // Vertical scan to ensure all blocks in this chunk's Y-range are populated
+    for (let y = startY; y <= endY; y++) {
+      if (y < terrainHeight - 3) {
+        // Underground Fill
+        if (this.world.shouldCarveCave(wx, y, wz, terrainHeight)) continue;
+        this.addGeneratedBlock(wx, y, wz, this.selectUndergroundBlock(wx, y, wz, biome));
+      } else if (y < terrainHeight) {
+        // Dirt/Filler Fill
+        this.addGeneratedBlock(wx, y, wz, biome.fillerBlock);
+      } else if (y === terrainHeight) {
+        // Surface Block
+        let surfaceId = terrainHeight < waterLevel ? 'sand' : biome.surfaceBlock;
+        if (!inForcedSpawnZone && terrainHeight > 58 && surfaceId !== 'path_block') surfaceId = 'snow_block';
+        this.addGeneratedBlock(wx, y, wz, surfaceId);
+        
+        // Vegetation Pass (Runs only if surface is in this chunk)
+        if (!inForcedSpawnZone) {
+          this._generateVegetation(wx, wz, terrainHeight, biome, waterLevel);
+        }
+      } else if (y <= waterLevel) {
+        // Water Fill (if above terrain but below water level)
+        if (!inForcedSpawnZone) this.addGeneratedBlock(wx, y, wz, 'water');
       }
+    }
 
-      // --- UNDERWATER DECO: Kelp & Coral ---
-      if (
-        terrainHeight < waterLevel &&
-        (surfaceId === 'sand' || surfaceId === 'gravel')
-      ) {
-        const uwHash = this.world.hash2D(wx + 31, wz - 57);
-        if (uwHash < 0.08) {
-          // Kelp (stacks 1-3 high)
-          const kelpHeight =
-            1 + Math.floor(this.world.hash2D(wx + 11, wz + 89) * 3);
-          for (
-            let k = 1;
-            k <= kelpHeight && terrainHeight + k < waterLevel;
-            k++
-          ) {
-            this.addGeneratedBlock(wx, terrainHeight + k, wz, 'kelp');
+    // Dungeon pass (Special check for underground chunks)
+    if (startY <= 0 && endY >= -32) {
+       this._generateUndergroundDungeon(wx, wz, terrainHeight);
+    }
+  }
+
+  _generateUndergroundDungeon(wx, wz, th) {
+     if (th <= 20) return;
+     const dungeonRoll = this.world.hash3D(Math.floor(wx / 16), 0, Math.floor(wz / 16));
+     if (dungeonRoll > 0.994 && wx % 16 === 8 && wz % 16 === 8) {
+       const dy = -15 - Math.floor(this.world.hash2D(wx, wz) * 40);
+       const struct = STRUCTURES.dungeon_chamber;
+       const blocks = struct.blueprints(wx, dy, wz);
+       for (const b of blocks) this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
+       this.world.registerLandmark(wx, dy, 'Ancient Dungeon');
+     }
+  }
+
+  _generateVegetation(wx, wz, th, biome, wl) {
+    if (this.world.shouldPlaceTree(wx, wz, th, biome)) {
+      this.placeTree(wx, th + 1, wz, biome);
+      return; // Tree placed, skip other ground deco
+    }
+
+    // Ground life & special features
+    if (th > wl) {
+      if (this.world.shouldPlaceVirus(wx, wz, th)) {
+        this.addGeneratedBlock(wx, th + 1, wz, 'virus');
+      } else if (this.world.shouldPlaceArlo(wx, wz, th)) {
+        this.addGeneratedBlock(wx, th + 1, wz, 'arlo');
+      } else {
+        const decoHash = this.world.hash2D(wx * 22, wz * 33);
+        if (decoHash < 0.72) this.placeGroundLife(wx, th, wz, biome);
+        
+        if (biome.id === 'desert') {
+          const cactusRoll = this.world.hash2D(wx - 211, wz + 419);
+          if (cactusRoll > 0.985) {
+            const cactusHeight = 2 + Math.floor(this.world.hash2D(wx + 13, wz - 17) * 3);
+            for (let ch = 1; ch <= cactusHeight; ch++) this.addGeneratedBlock(wx, th + ch, wz, 'cactus');
           }
-        } else if (uwHash < 0.11) {
-          this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'tube_coral_block');
-        } else if (uwHash < 0.135) {
-          this.addGeneratedBlock(
-            wx,
-            terrainHeight + 1,
-            wz,
-            'brain_coral_block'
-          );
-        } else if (uwHash < 0.155) {
-          this.addGeneratedBlock(
-            wx,
-            terrainHeight + 1,
-            wz,
-            'bubble_coral_block'
-          );
-        } else if (uwHash < 0.17) {
-          this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'horn_coral_block');
-        } else if (uwHash < 0.185) {
-          this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'sea_pickle');
+        }
+      }
+    }
+  }
+
+  placeRandomStructure(x, y, z, biome) {
+    const allKeys = Object.keys(STRUCTURES).filter(
+      (k) => !EXCLUDED_FROM_RANDOM_POOL.has(k)
+    );
+    const virusRoll = this.world.hash2D(x + 811, z - 204);
+    let keys = allKeys;
+    if (!this.world.corruptionEnabled) {
+      keys = allKeys.filter((k) => k !== 'virus_tower' && k !== 'corruption_altar');
+    }
+
+    const roll = this.world.hash2D(x - 17, z + 23);
+    const pick = Math.floor(roll * keys.length);
+    const structKey = keys[pick];
+    const struct = STRUCTURES[structKey];
+
+    if (!struct || !this.isLandSuitable(x, z, struct.radius || 4)) return;
+
+    const blocks = struct.blueprints(x, y, z);
+    if (!blocks) return;
+
+    // Clear area for non-additive structures
+    if (struct.clearArea) {
+      const r = struct.radius || 4;
+      for (let bx = x - r; bx <= x + r; bx++) {
+        for (let bz = z - r; bz <= z + r; bz++) {
+          for (let by = y + 1; by <= y + 6; by++) {
+            this.addGeneratedStructureBlock(bx, by, bz, 'air');
+          }
         }
       }
     }
 
-    if (this.world.shouldPlaceVirus(wx, wz, terrainHeight)) {
-      this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'virus');
-    } else if (this.world.shouldPlaceArlo(wx, wz, terrainHeight)) {
-      this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'arlo');
+    for (const b of blocks) {
+      this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
     }
-
-    if (!inForcedSpawnZone && terrainHeight > waterLevel) {
-      const tntRoll = this.world.hash2D(wx + 777, wz - 313);
-      if (tntRoll > 0.9989) {
-        this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'tnt');
-      }
-      const nukeRoll = this.world.hash2D(wx - 1441, wz + 918);
-      if (nukeRoll > 0.99972) {
-        this.addGeneratedBlock(wx, terrainHeight + 1, wz, 'nuke');
-      }
-    }
-
-    const isHighAltitude = terrainHeight > 46;
-
-    if (
-      !inForcedSpawnZone &&
-      !isHighAltitude &&
-      this.world.shouldPlaceTree(wx, wz, terrainHeight, biome)
-    ) {
-      this.placeTree(wx, terrainHeight + 1, wz, biome);
-    }
-
-    // --- DECO & GROUND LIFE ---
-    if (
-      !inForcedSpawnZone &&
-      !isHighAltitude &&
-      terrainHeight > waterLevel &&
-      this.world.state.blockMap.get(
-        this.world.getKey(wx, terrainHeight, wz)
-      ) !== 'water'
-    ) {
-      const decoHash = this.world.hash2D(wx * 22, wz * 33);
-      if (decoHash < 0.72) {
-        this.placeGroundLife(wx, terrainHeight, wz, biome);
-      }
-    }
-
-    // --- CACTUS GENERATION (Desert only) ---
-    if (
-      !inForcedSpawnZone &&
-      biome.id === 'desert' &&
-      terrainHeight > waterLevel
-    ) {
-      const cactusRoll = this.world.hash2D(wx - 211, wz + 419);
-      if (cactusRoll > 0.985) {
-        const cactusHeight =
-          2 + Math.floor(this.world.hash2D(wx + 13, wz - 17) * 3);
-        for (let ch = 1; ch <= cactusHeight; ch++) {
-          this.addGeneratedBlock(wx, terrainHeight + ch, wz, 'cactus');
-        }
-      }
-    }
-
-    // --- DUNGEON GENERATION (Underground) ---
-    if (terrainHeight > 20) {
-      const dungeonRoll = this.world.hash3D(
-        Math.floor(wx / 16),
-        0,
-        Math.floor(wz / 16)
-      );
-      if (dungeonRoll > 0.994 && wx % 16 === 8 && wz % 16 === 8) {
-        const dy = -15 - Math.floor(this.world.hash2D(wx, wz) * 40);
-        const struct = STRUCTURES.dungeon_chamber;
-        const blocks = struct.blueprints(wx, dy, wz);
-        for (const b of blocks)
-          this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
-        this.world.registerLandmark(wx, dy, 'Ancient Dungeon');
-      }
+    if (struct.name) {
+      this.world.registerLandmark(x, z, struct.name);
     }
   }
 
@@ -639,6 +598,7 @@ export class Chunk {
       return;
 
     const blocks = struct.blueprints(x, y, z);
+    if (!blocks || blocks.length === 0) return;
 
     // ─── VOLUME CLEARING PASS ───
     const sw = struct.width || 7;
@@ -659,8 +619,6 @@ export class Chunk {
             existing?.includes('grass') ||
             existing?.includes('flower');
 
-          // Only clear if its solid terrain or if we're in the core of the structure
-          // This prevents "shaving" trees that are just outside the structure's blueprint
           if (
             existing &&
             existing !== 'air' &&
@@ -702,7 +660,7 @@ export class Chunk {
     if (biome.id === 'highlands')
       return hash > 0.65 ? 'redwood' : hash > 0.3 ? 'pine' : 'dark_oak';
     if (biome.id === 'alpine' || biome.id === 'tundra')
-      return hash > 0.5 ? 'pine' : 'spruce';
+      return hash > 0.5 ? 'pine' : 'pine';
     if (biome.id === 'jungle') return hash > 0.5 ? 'jungle' : 'palm';
     return 'oak';
   }
@@ -968,7 +926,7 @@ export class Chunk {
               if (this.world.state.changedBlocks.get(key) === null) continue;
               const override = this.world.state.changedBlocks.get(key);
               const finalId = override ?? id;
-              const owner = this.noteTouchedGenerationChunk(x, z);
+              const owner = this.noteTouchedGenerationChunk(x, y, z);
               this.world.addBlock(x, y, z, finalId, owner.key);
             }
 
@@ -1156,7 +1114,7 @@ export class Chunk {
 
     for (const hut of placed)
       this.placePathBetween(centerX, centerZ, hut.x, hut.z);
-    
+
     // Town center lamp post: recalculate ground height after clearing pass
     const centerGroundY = this.world.getColumnHeight(centerX, centerZ) + 1;
     this.placeLampPost(centerX, centerGroundY, centerZ);
@@ -1218,7 +1176,7 @@ export class Chunk {
 
   destroy() {
     this.destroyed = true;
-    for (const mesh of this.instancedMeshes.values()) {
+    for (const mesh of this.meshes.values()) {
       this.group.remove(mesh);
       if (mesh.userData?.ownedMaterial) {
         if (Array.isArray(mesh.material)) {
@@ -1231,7 +1189,7 @@ export class Chunk {
       }
       if (typeof mesh.dispose === 'function') mesh.dispose();
     }
-    this.instancedMeshes.clear();
+    this.meshes.clear();
     if (this.group?.parent) this.group.parent.remove(this.group);
   }
 }

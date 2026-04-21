@@ -33,8 +33,6 @@ const GROUND_LIFE_IDS = [
   'dead_bush',
   'sea_pickle',
   'kelp',
-  'tube_coral_block',
-  'brain_coral_block',
 ];
 
 const VIRTUAL_ID_SKIP = ['potato', 'carrot', 'beetroot', 'wheat'];
@@ -90,6 +88,8 @@ const TERRAIN_IDS = [
   'deepslate_lapis_ore',
   'deepslate_iron_ore',
   'deepslate_copper_ore',
+  'tube_coral_block',
+  'brain_coral_block',
 ];
 
 function getPairOffset(block) {

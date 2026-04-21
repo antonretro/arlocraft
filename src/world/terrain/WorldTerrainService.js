@@ -147,7 +147,7 @@ export class WorldTerrainService {
 
   getWaterSurfaceYAt(x, z) {
     const biome = this.getBiomeAt(x, z);
-    const waterLevel = this.world.seaLevel + (biome.waterLevelOffset ?? 0);
+    const waterLevel = this.world.seaLevel;
     const terrainHeight = this.getTerrainHeight(x, z);
     if (terrainHeight >= waterLevel) return null;
     return waterLevel + 0.5;

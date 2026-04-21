@@ -54,9 +54,15 @@ export class ParticleSystem {
   /**
    * Spawn a burst of particles.
    */
-  spawnBurst(pos, typeName = 'EXPLOSION', count = 12, spread = 0.5, colorOverride = null) {
+  spawnBurst(
+    pos,
+    typeName = 'EXPLOSION',
+    count = 12,
+    spread = 0.5,
+    colorOverride = null
+  ) {
     const config = this.types[typeName] || this.types.EXPLOSION;
-    
+
     // Respect the global particle cap
     const currentCount = this.particles.length;
     const remaining = Math.max(0, this.maxParticles - currentCount);
@@ -72,7 +78,9 @@ export class ParticleSystem {
         (Math.random() - 0.5) * spread * 10
       );
 
-      const particleConfig = colorOverride ? { ...config, color: colorOverride } : config;
+      const particleConfig = colorOverride
+        ? { ...config, color: colorOverride }
+        : config;
       particle.init(pos, vel, particleConfig);
       this.particles.push(particle);
     }

@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 const CLAMP01 = (value, fallback = 1) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -58,9 +60,63 @@ export class AudioSystem {
     this.uiGain = ui;
     this.worldGain = world;
     this.compressor = compressor;
+    this.compressor = compressor;
     this.noiseBuffer = this.createNoiseBuffer();
     this.applyMixNow();
+    
+    // 3D Audio: Initialise listener at origin
+    if (this.context.listener) {
+      this.updateListener(new THREE.Vector3(0,0,0), new THREE.Quaternion());
+    }
+    
     return ctx;
+  }
+
+  updateListener(position, quaternion) {
+    const ctx = this.ensureContext();
+    if (!ctx || !ctx.listener) return;
+
+    const t = ctx.currentTime;
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(quaternion);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion);
+
+    if (ctx.listener.positionX) {
+      // Modern Web Audio API
+      ctx.listener.positionX.setTargetAtTime(position.x, t, 0.01);
+      ctx.listener.positionY.setTargetAtTime(position.y, t, 0.01);
+      ctx.listener.positionZ.setTargetAtTime(position.z, t, 0.01);
+      ctx.listener.forwardX.setTargetAtTime(forward.x, t, 0.01);
+      ctx.listener.forwardY.setTargetAtTime(forward.y, t, 0.01);
+      ctx.listener.forwardZ.setTargetAtTime(forward.z, t, 0.01);
+      ctx.listener.upX.setTargetAtTime(up.x, t, 0.01);
+      ctx.listener.upY.setTargetAtTime(up.y, t, 0.01);
+      ctx.listener.upZ.setTargetAtTime(up.z, t, 0.01);
+    } else {
+      // Legacy Fallback
+      ctx.listener.setPosition(position.x, position.y, position.z);
+      ctx.listener.setOrientation(forward.x, forward.y, forward.z, up.x, up.y, up.z);
+    }
+  }
+
+  createPanner(position) {
+    const ctx = this.ensureContext();
+    if (!ctx || !position) return null;
+    
+    const panner = ctx.createPanner();
+    panner.panningModel = 'HRTF';
+    panner.distanceModel = 'exponential';
+    panner.refDistance = 1;
+    panner.maxDistance = 10000;
+    panner.rolloffFactor = 1.5;
+    
+    if (panner.positionX) {
+        panner.positionX.value = position.x;
+        panner.positionY.value = position.y;
+        panner.positionZ.value = position.z;
+    } else {
+        panner.setPosition(position.x, position.y, position.z);
+    }
+    return panner;
   }
 
   createNoiseBuffer() {
@@ -142,7 +198,6 @@ export class AudioSystem {
     if (type === 'world') return this.worldGain;
     return this.sfxGain;
   }
-
   playOsc({
     type = 'triangle',
     freq = 440,
@@ -152,6 +207,7 @@ export class AudioSystem {
     detune = 0,
     start = 0,
     bus = 'sfx',
+    position = null,
   }) {
     const ctx = this.ensureContext();
     if (!ctx) return;
@@ -164,6 +220,15 @@ export class AudioSystem {
     );
     if (!env) return;
     osc.type = type;
+
+    // Spatialise if position provided
+    let lastNode = env;
+    const panner = position ? this.createPanner(position) : null;
+    if (panner) {
+        env.connect(panner);
+        lastNode = panner;
+    }
+
     const t0 = ctx.currentTime + start;
     osc.frequency.setValueAtTime(Math.max(30, freq), t0);
     if (Number.isFinite(freqEnd)) {
@@ -174,12 +239,13 @@ export class AudioSystem {
     }
     osc.detune.value = detune;
     osc.connect(env);
-    env.connect(this.getBus(bus));
+    lastNode.connect(this.getBus(bus));
     osc.start(t0);
     osc.stop(t0 + duration + 0.02);
     osc.onended = () => {
       osc.disconnect();
       env.disconnect();
+      if (panner) panner.disconnect();
     };
   }
 
@@ -191,6 +257,7 @@ export class AudioSystem {
     q = 0.8,
     start = 0,
     bus = 'sfx',
+    position = null,
   }) {
     const ctx = this.ensureContext();
     if (!ctx || !this.noiseBuffer) return;
@@ -212,35 +279,49 @@ export class AudioSystem {
       start
     );
     if (!env) return;
+
+    // Spatialise if position provided
+    let lastNode = env;
+    const panner = position ? this.createPanner(position) : null;
+    if (panner) {
+        env.connect(panner);
+        lastNode = panner;
+    }
+
     src.connect(filter);
     filter.connect(env);
-    env.connect(this.getBus(bus));
+    lastNode.connect(this.getBus(bus));
     src.start(t0);
     src.stop(t0 + duration + 0.01);
     src.onended = () => {
       src.disconnect();
       filter.disconnect();
       env.disconnect();
+      if (panner) panner.disconnect();
     };
   }
 
   play(eventName, detail = {}) {
     if (!this.enabled) return;
     if (!this.canPlay(eventName)) return;
-    
+
     // Resume context if suspended (common after autoplay block)
-    if (this.context && this.context.state === 'suspended' && this.userInteracted) {
+    if (
+      this.context &&
+      this.context.state === 'suspended' &&
+      this.userInteracted
+    ) {
       this.context.resume().catch(() => {});
     }
-    
+
     this.ensureContext();
     if (!this.context) return;
 
     switch (eventName) {
       case 'block-mined': {
-        const id = String(detail?.id ?? '');
-        const stoneLike =
-          id.includes('stone') || id.includes('ore') || id.includes('brick');
+        const id = String(detail?.id || '');
+        const pos = detail?.position;
+        const stoneLike = id.includes('stone') || id.includes('ore') || id.includes('brick');
         const base = stoneLike ? 160 : 220;
         this.playNoise({
           duration: 0.045,
@@ -248,6 +329,7 @@ export class AudioSystem {
           cutoffStart: stoneLike ? 2400 : 4200,
           cutoffEnd: 900,
           bus: 'world',
+          position: pos,
         });
         this.playOsc({
           type: 'triangle',
@@ -256,6 +338,7 @@ export class AudioSystem {
           duration: 0.04,
           gain: 0.075,
           bus: 'world',
+          position: pos,
         });
         break;
       }

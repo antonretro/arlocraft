@@ -14,7 +14,9 @@ function getEntityTextureUrl(textureKey) {
   return `${RESOURCE_PACK_URL}${textureKey}.png`;
 }
 
-console.log(`[ArloCraft] Entity Manager using static resource pack: ${RESOURCE_PACK_URL}`);
+console.log(
+  `[ArloCraft] Entity Manager using static resource pack: ${RESOURCE_PACK_URL}`
+);
 
 function createTextureFromCanvas(canvas) {
   const texture = new THREE.CanvasTexture(canvas);
@@ -78,7 +80,7 @@ export class EntityManager {
 
     const model = new HumanoidModel();
     const group = model.group;
-    
+
     this.game.renderer.scene.add(group);
     this.remotePlayers.set(peerId, { group, model });
 
@@ -104,27 +106,32 @@ export class EntityManager {
     if (!netPlayer) return;
 
     const lerpSpeed = 0.15; // Smooth movement interpolation
-    netPlayer.group.position.lerp(new THREE.Vector3(pos.x, pos.y, pos.z), lerpSpeed);
-    
+    netPlayer.group.position.lerp(
+      new THREE.Vector3(pos.x, pos.y, pos.z),
+      lerpSpeed
+    );
+
     // Smoothly rotate body toward movement direction
     netPlayer.group.rotation.y = THREE.MathUtils.lerpAngle(
-        netPlayer.group.rotation.y,
-        rot.yaw + Math.PI,
-        lerpSpeed
+      netPlayer.group.rotation.y,
+      rot.yaw + Math.PI,
+      lerpSpeed
     );
-    
+
     // Update head rotation separately
     if (netPlayer.model && netPlayer.model.parts.headGroup) {
-        netPlayer.model.parts.headGroup.rotation.x = rot.pitch;
+      netPlayer.model.parts.headGroup.rotation.x = rot.pitch;
     }
 
     // Pass velocity to the model for walking animations
     if (netPlayer.model) {
-        // Estimate velocity from position delta or just use a fixed "walking" status if moving
-        const velocity = new THREE.Vector3(pos.x, 0, pos.z).sub(new THREE.Vector3(netPlayer.lastX || pos.x, 0, netPlayer.lastZ || pos.z));
-        netPlayer.model.update(0.016, velocity.divideScalar(0.016));
-        netPlayer.lastX = pos.x;
-        netPlayer.lastZ = pos.z;
+      // Estimate velocity from position delta or just use a fixed "walking" status if moving
+      const velocity = new THREE.Vector3(pos.x, 0, pos.z).sub(
+        new THREE.Vector3(netPlayer.lastX || pos.x, 0, netPlayer.lastZ || pos.z)
+      );
+      netPlayer.model.update(0.016, velocity.divideScalar(0.016));
+      netPlayer.lastX = pos.x;
+      netPlayer.lastZ = pos.z;
     }
   }
 
@@ -227,7 +234,9 @@ export class EntityManager {
           resolve(tex);
         };
         img.onerror = (e) => {
-          console.error(`[ArloCraft] FATAL: Image load failed for URL: "${url}"`);
+          console.error(
+            `[ArloCraft] FATAL: Image load failed for URL: "${url}"`
+          );
           this.failedTextureUrls.add(url);
           reject(e);
         };
