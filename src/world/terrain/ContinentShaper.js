@@ -133,3 +133,25 @@ export function getColumnHeight(router, noise, x, z, seed) {
   }
   return raw;
 }
+
+export function isPathAt(noise, x, z) {
+  const trunk = Math.abs(
+    noise.simplex2D(x * 0.02 + 1307, z * 0.02 - 811)
+  );
+  const branch = Math.abs(
+    noise.simplex2D(x * 0.04 - 547, z * 0.04 + 199)
+  );
+  // Width increased: thresholds 0.03/0.02 -> 0.06/0.04
+  return trunk < 0.06 || branch < 0.04;
+}
+
+export function isHighwayAt(noise, x, z) {
+  const corridorA = Math.abs(
+    noise.simplex2D(x * 0.008 + 2143, z * 0.008 - 937)
+  );
+  const corridorB = Math.abs(
+    noise.simplex2D(x * 0.007 - 1841, z * 0.007 + 221)
+  );
+  // Width increased: thresholds 0.015/0.018 -> 0.035/0.038
+  return corridorA < 0.035 || corridorB < 0.038;
+}

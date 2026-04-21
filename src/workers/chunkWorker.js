@@ -8,6 +8,8 @@ import {
   SPAWN_FLAT_RADIUS,
   SEA_LEVEL,
   MIN_TERRAIN_Y,
+  isPathAt,
+  isHighwayAt,
 } from '../world/terrain/ContinentShaper.js';
 import {
   getCaveCell,
@@ -94,25 +96,6 @@ function shouldPlaceArlo(wx, wz, height, corruptionEnabled) {
   return hash2D(wx + 613, wz - 271, currentSeed) > 0.985;
 }
 
-function isPathAt(x, z) {
-  const trunk = Math.abs(
-    workerNoise.simplex2D(x * 0.02 + 1307, z * 0.02 - 811)
-  );
-  const branch = Math.abs(
-    workerNoise.simplex2D(x * 0.04 - 547, z * 0.04 + 199)
-  );
-  return trunk < 0.03 || branch < 0.02;
-}
-
-function isHighwayAt(x, z) {
-  const corridorA = Math.abs(
-    workerNoise.simplex2D(x * 0.008 + 2143, z * 0.008 - 937)
-  );
-  const corridorB = Math.abs(
-    workerNoise.simplex2D(x * 0.007 - 1841, z * 0.007 + 221)
-  );
-  return corridorA < 0.015 || corridorB < 0.018;
-}
 
 // -- WORLD CLASS: RUIN STRUCTURE GENERATOR --
 function addRuinStructure(planMap, changedMap, x, y, z, seed) {
@@ -203,9 +186,9 @@ const api = {
         let surfaceId =
           terrainHeight <= waterLevel ? 'sand' : biome.surfaceBlock;
         const hasRoad =
-          !inSpawnZone && terrainHeight > waterLevel && isPathAt(wx, wz);
+          !inSpawnZone && terrainHeight > waterLevel && isPathAt(workerNoise, wx, wz);
         const hasHighway =
-          !inSpawnZone && terrainHeight > waterLevel && isHighwayAt(wx, wz);
+          !inSpawnZone && terrainHeight > waterLevel && isHighwayAt(workerNoise, wx, wz);
         if (hasHighway) {
           surfaceId = 'cobblestone';
         } else if (hasRoad) {

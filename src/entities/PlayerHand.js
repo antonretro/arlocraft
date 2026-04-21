@@ -55,7 +55,7 @@ const TOOL_MAP = {
   hoe: 'wooden_hoe',
 
   // Items & Food
-  tomato: 'apple',
+  tomato: 'sweet_berries',
   blueberry: 'sweet_berries',
   strawberry: 'sweet_berries',
   carrot: 'carrot',
@@ -319,6 +319,19 @@ export class PlayerHand {
 
     group.userData.ownedGeometry = true;
     group.userData.ownedMaterial = true;
+
+    // Apply pending tint if set
+    if (group.userData.pendingTint) {
+      const tint = group.userData.pendingTint;
+      group.traverse((c) => {
+        if (c.material) {
+          if (Array.isArray(c.material))
+            c.material.forEach((m) => m.color?.set(tint));
+          else c.material.color?.set(tint);
+        }
+      });
+    }
+
     return group;
   }
 
@@ -430,10 +443,11 @@ export class PlayerHand {
                             nid === 'sugar_cane' || nid === 'vine';
 
           if (needsTint) {
+            mesh.userData.pendingTint = GRASS_PREVIEW_TINT;
             mesh.traverse((child) => {
               if (child.material) {
                 if (Array.isArray(child.material)) {
-                  child.material.forEach(m => m.color?.set(GRASS_PREVIEW_TINT));
+                  child.material.forEach((m) => m.color?.set(GRASS_PREVIEW_TINT));
                 } else {
                   child.material.color?.set(GRASS_PREVIEW_TINT);
                 }

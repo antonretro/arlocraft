@@ -21,10 +21,13 @@ function getSharedChunkGeometries(world, warnIfMissing = false) {
 
 function isPlantRenderType(blockData) {
   const renderType = blockData?.renderType;
+  const id = String(blockData?.id || '').toLowerCase();
   return (
     renderType === 'plant' ||
     renderType === 'paired_plant' ||
-    blockData?.deco === true
+    blockData?.deco === true ||
+    id.includes('mushroom') ||
+    id.includes('flower')
   );
 }
 
@@ -96,6 +99,13 @@ export function resolveChunkGeometry(world, id, blockData) {
   if (hasFaceSuffix(id, ':px')) return geo.face_px ?? geo.solid ?? null;
   if (hasFaceSuffix(id, ':nz')) return geo.face_nz ?? geo.solid ?? null;
   if (hasFaceSuffix(id, ':pz')) return geo.face_pz ?? geo.solid ?? null;
+
+  if (blockData?.renderType === 'slab' || id.includes('_slab')) {
+    return geo.slab ?? geo.solid ?? null;
+  }
+  if (blockData?.renderType === 'stairs' || id.includes('_stairs')) {
+    return geo.stair ?? geo.solid ?? null;
+  }
 
   return geo.solid ?? null;
 }

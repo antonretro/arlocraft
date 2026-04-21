@@ -61,7 +61,10 @@ export class IconService {
       copper: 'copper_block',
       gold: 'gold_block',
       lapis: 'lapis_block',
-      diamond: 'diamond_block',
+      diamond: 'diamond',
+      stick: 'stick',
+      tomato: 'sweet_berries',
+      musket: 'musket',
       emerald: 'emerald_block',
       redstone: 'redstone_block',
       path_block: 'dirt_path',
@@ -159,11 +162,14 @@ export class IconService {
       grass_tall: 'grass',
       flower_rose: 'poppy',
       flower_dandelion: 'dandelion',
-      tall_grass_bottom: 'tall_grass_bottom',
-      tall_grass_top: 'tall_grass_top',
       large_fern_bottom: 'large_fern_bottom',
       large_fern_top: 'large_fern_top',
+      tomato: 'sweet_berries',
     };
+    
+    // Add direct block aliases for mushrooms
+    this.blockTextures['mushroom_brown'] = this.blockTextures['brown_mushroom'];
+    this.blockTextures['mushroom_red'] = this.blockTextures['red_mushroom'];
   }
 
   resolveAsset(path) {
@@ -234,10 +240,18 @@ export class IconService {
       FIXED_COLOR_FOLIAGE_IDS.has(lowId) || FIXED_COLOR_FOLIAGE_IDS.has(lowTex);
     
     // Check if it's a foliage type (leaves, tall grass, ferns, etc.)
-    const isFoliage = lowId.includes('grass') || lowId.includes('fern') || 
-                      lowId.includes('leaves') || lowId === 'active_vine' || 
-                      lowId === 'sugar_cane' || lowId === 'vine' ||
-                      lowTex.includes('grass') || lowTex.includes('leaves');
+    const isFoliage = (
+      lowId.includes('grass') || 
+      lowId.includes('sprouts') ||
+      lowId.includes('tomato') ||
+      lowId.includes('fern') || 
+      lowId.includes('leaves') || 
+      lowId === 'active_vine' || 
+      lowId === 'sugar_cane' || 
+      lowId === 'vine' ||
+      lowTex.includes('grass') || 
+      lowTex.includes('leaves')
+    );
 
     const shouldTintFoliageIcon = isFoliage && !hasFixedFoliageColor;
     
@@ -535,9 +549,9 @@ export class IconService {
     const palette = {
       stone: '#7bc8ff',
       dirt: '#f0a56d',
-      grass: '#76f59f',
+      grass: '#3fb34f',
       wood: '#ffc176',
-      leaves: '#8de86b',
+      leaves: '#1d8333',
       sand: '#ffe384',
       water: '#7bd2ff',
       iron: '#b8c8ff',

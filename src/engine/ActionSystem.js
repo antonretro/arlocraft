@@ -16,6 +16,12 @@ export class ActionSystem {
     this._camHead = new THREE.Vector3();
     this._camLook = new THREE.Vector3();
     this.smeltTimer = 0;
+
+    // Performance Caching
+    this._tempV1 = new THREE.Vector3();
+    this._tempV2 = new THREE.Vector3();
+    this._lastCamPos = new THREE.Vector3();
+    this._lastCamDir = new THREE.Vector3();
   }
 
   update(delta) {
@@ -124,10 +130,9 @@ export class ActionSystem {
 
   throwProjectile(selected) {
     const pos = this.game.camera.instance.position.clone();
-    const dir = new THREE.Vector3();
-    this.game.camera.instance.getWorldDirection(dir);
+    this.game.camera.instance.getWorldDirection(this._tempV1);
 
-    this.game.entities.spawnProjectile(selected.id, null, pos, dir);
+    this.game.entities.spawnProjectile(selected.id, null, pos, this._tempV1);
     this.game.audio?.play('throw');
 
     if (this.gameState.mode !== 'CREATIVE') {
@@ -173,8 +178,21 @@ export class ActionSystem {
   }
 
   updateSelection() {
+    // Optimization: Only update selection if camera moved or look direction changed significantly
+    const cam = this.game.camera.instance;
+    const curPos = cam.position;
+    cam.getWorldDirection(this._tempV1);
+    
+    const posChanged = curPos.distanceToSquared(this._lastCamPos) > 0.0001;
+    const dirChanged = this._tempV1.distanceToSquared(this._lastCamDir) > 0.0001;
+    
+    if (!posChanged && !dirChanged && this._lastTargetId !== null) return;
+    
+    this._lastCamPos.copy(curPos);
+    this._lastCamDir.copy(this._tempV1);
+
     const hit = this.game.world.raycastBlocks?.(
-      this.game.camera.instance,
+      cam,
       6,
       false,
       this._camHead,

@@ -427,6 +427,12 @@ export class EntityManager {
     }
 
     const playerPos = this.game.camera.instance.position;
+    const camera = this.game.camera.instance;
+    const frustum = new THREE.Frustum();
+    const projScreenMatrix = new THREE.Matrix4();
+    projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    frustum.setFromProjectionMatrix(projScreenMatrix);
+
     this.entities.forEach((entity) => {
       const pos = entity.mesh.position;
       
@@ -448,18 +454,20 @@ export class EntityManager {
 
       if (entity.dead) {
         if (entity.mesh) {
-          if (entity.mesh.geometry) entity.mesh.geometry.dispose();
-          if (entity.mesh.material) {
-            if (Array.isArray(entity.mesh.material)) {
-              entity.mesh.material.forEach((m) => m.dispose());
-            } else {
-              entity.mesh.material.dispose();
-            }
-          }
-          this.game.renderer.scene.remove(entity.mesh);
+            // Clean cleanup
+            this.game.renderer.scene.remove(entity.mesh);
         }
         return;
       }
+
+      // 3. PROXIMITY & FRUSTUM CULLING (Optimization)
+      // Skip logic/animation if too far or not visible
+      const cullRangeSq = 72 * 72;
+      const isVisible = frustum.containsPoint(pos);
+      if (farDistanceSq > cullRangeSq || !isVisible) {
+          return; // Skip update for this frame
+      }
+
       entity.update(delta);
     });
     this.entities = this.entities.filter((entity) => !entity.dead);
@@ -477,35 +485,30 @@ export class EntityManager {
   }
 
   reset() {
-    this.entities.forEach((entity) => {
-      if (entity.mesh) {
-        if (entity.mesh.geometry) entity.mesh.geometry.dispose();
-        if (entity.mesh.material) {
-          if (Array.isArray(entity.mesh.material)) {
-            entity.mesh.material.forEach((m) => m.dispose());
-          } else {
-            entity.mesh.material.dispose();
-          }
-        }
-        this.game.renderer.scene.remove(entity.mesh);
-      }
-    });
-
-    this.projectiles.forEach((p) => {
-      if (p.mesh) {
-        if (p.mesh.geometry) p.mesh.geometry.dispose();
-        if (p.mesh.material) p.mesh.material.dispose();
-        this.game.renderer.scene.remove(p.mesh);
-      }
-    });
-
-    this.remotePlayers.forEach((p) => {
-      if (p.group) this.game.renderer.scene.remove(p.group);
-    });
-
+    for (const entity of this.entities) {
+      if (entity.dispose) entity.dispose();
+      this.game.renderer.scene.remove(entity.mesh);
+    }
     this.entities = [];
+
+    for (const proj of this.projectiles) {
+      if (proj.dispose) proj.dispose();
+      this.game.renderer.scene.remove(proj.mesh);
+    }
     this.projectiles = [];
+
+    // Clear remote players
+    for (const [id, data] of this.remotePlayers) {
+      if (data.model?.dispose) data.model.dispose();
+      this.game.renderer.scene.remove(data.group);
+    }
     this.remotePlayers.clear();
+
+    // Clear caches
+    this.loadedTextureCache.forEach((tex) => tex.dispose());
+    this.loadedTextureCache.clear();
+    this.billboardTextureCache.forEach((tex) => tex.dispose());
+    this.billboardTextureCache.clear();
   }
 
   interactNearbyEntity(position, maxDist) {

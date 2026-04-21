@@ -265,11 +265,11 @@ export class VoxelGeometryBuilder {
     }
     
     // UV Cropping for short blocks (Paths/Farmland)
-    // We want to crop the BOTTOM of the texture sheet so the TOP (rim) remains aligned.
+    // We crop the TOP of the texture sheet to remove the border line and align the rim.
     const uMax = width;
     const isSide = axis !== 1;
-    const vMin = (isSide && isShort) ? shift : 0;
-    const vMax = height;
+    const vMin = 0;
+    const vMax = (isSide && isShort) ? (height - shift) : height;
 
     this.uvsArr[this.uvPtr++] = 0; this.uvsArr[this.uvPtr++] = vMin;
     this.uvsArr[this.uvPtr++] = uMax; this.uvsArr[this.uvPtr++] = vMin;

@@ -120,32 +120,35 @@ export class WorldMutationService {
 
     this.world.chunkManager.updateNeighborsDirty(x, y, z);
 
-    // Spawn breaking particles
-    const blockConfig = this.world.game?.blockRegistry?.blocks?.get(id);
-    let particleColor = blockConfig?.color
-      ? parseInt(blockConfig.color)
-      : 0x888888;
+    // Spawn breaking particles (Skip for liquids and air/void)
+    const isLiquid = id === 'water' || id.includes('water_') || id === 'lava' || id.includes('lava_');
+    if (!isLiquid && id !== 'air') {
+      const blockConfig = this.world.game?.blockRegistry?.blocks?.get(id);
+      let particleColor = blockConfig?.color
+        ? parseInt(blockConfig.color)
+        : 0x888888;
 
-    // Fallback for stained glass colors if not in config
-    if (id.includes('stained_glass')) {
-      const colorKey = id.split('_').pop();
-      const registry = this.world.game?.blockRegistry;
-      if (
-        registry &&
-        registry.stainedGlassColors &&
-        registry.stainedGlassColors[colorKey]
-      ) {
-        particleColor = registry.stainedGlassColors[colorKey];
+      // Fallback for stained glass colors if not in config
+      if (id.includes('stained_glass')) {
+        const colorKey = id.split('_').pop();
+        const registry = this.world.game?.blockRegistry;
+        if (
+          registry &&
+          registry.stainedGlassColors &&
+          registry.stainedGlassColors[colorKey]
+        ) {
+          particleColor = registry.stainedGlassColors[colorKey];
+        }
       }
-    }
 
-    this.world.game?.particles?.spawnBurst(
-      new THREE.Vector3(x, y, z),
-      'DEBRIS',
-      8,
-      0.15,
-      particleColor
-    );
+      this.world.game?.particles?.spawnBurst(
+        new THREE.Vector3(x, y, z),
+        'DEBRIS',
+        8,
+        0.15,
+        particleColor
+      );
+    }
 
     if (id === 'virus' || id === 'arlo') {
       const radius = this.world.config.virus?.influenceRadiusBlocks ?? 3;

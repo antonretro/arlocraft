@@ -39,7 +39,13 @@ export const village_farm = {
       for (let dx = x0; dx <= x1; dx++) {
         for (let dz = z0; dz <= z1; dz++) {
           blocks.push({ x: ox + dx, y: oy, z: oz + dz, id: 'farmland' });
-          blocks.push({ x: ox + dx, y: oy + 1, z: oz + dz, id: crop });
+          const stage = Math.floor(Math.abs(Math.sin(ox + dx * 7 + oz + dz * 13)) * 8);
+          let cropId = crop;
+          if (cropId.includes('wheat')) cropId = `wheat_stage${Math.min(7, stage)}`;
+          else if (cropId.includes('carrot')) cropId = `carrot_stage${Math.min(3, Math.floor(stage / 2))}`;
+          else if (cropId.includes('potato')) cropId = `potato_stage${Math.min(3, Math.floor(stage / 2))}`;
+          
+          blocks.push({ x: ox + dx, y: oy + 1, z: oz + dz, id: cropId });
         }
       }
     }

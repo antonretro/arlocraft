@@ -251,7 +251,36 @@ function mergeBlocks() {
       scriptModule,
       readmeContent
     );
-    if (block) merged.set(block.id, block);
+    if (block) {
+      merged.set(block.id, block);
+
+      // --- AUTO-GEN VARIANT LOGIC ---
+      // For Construction blocks (like Concrete, Wool, Planks), auto-generate slabs and stairs
+      const isConstruction = block.category === 'Construction';
+      const isFullBlock = block.renderType === 'cube' || !block.renderType;
+      
+      if (isConstruction && isFullBlock && !block.id.includes('_slab') && !block.id.includes('_stairs')) {
+        // Slab variant
+        const slabId = `${block.id}_slab`;
+        merged.set(slabId, {
+          ...block,
+          id: slabId,
+          name: `${block.name} Slab`,
+          renderType: 'slab',
+          slab: true
+        });
+
+        // Stairs variant
+        const stairId = `${block.id}_stairs`;
+        merged.set(stairId, {
+          ...block,
+          id: stairId,
+          name: `${block.name} Stairs`,
+          renderType: 'stairs',
+          stairs: true
+        });
+      }
+    }
   }
 
   return Array.from(merged.values()).sort((left, right) =>

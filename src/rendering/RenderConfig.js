@@ -27,9 +27,9 @@ export const FOG_SETTINGS = {
 
 export const ATMOSPHERIC_COLORS = {
   DAY: {
-    top: 0x0256cc,
-    bottom: 0x86cefb,
-    sun: 0xfffbe8,
+    top: 0x0044ff,    // Deeper Arlo Blue
+    bottom: 0x66ccff, // Vibrant daylight
+    sun: 0xffffff,
   },
   NIGHT: {
     top: 0x080f1e, // Slightly bluer

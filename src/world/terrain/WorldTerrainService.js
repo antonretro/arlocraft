@@ -6,6 +6,8 @@ import {
   getContinentMask,
   getRawTerrainHeight,
   getColumnHeight as shapeColumnHeight,
+  isPathAt,
+  isHighwayAt,
 } from './ContinentShaper.js';
 
 export class WorldTerrainService {
@@ -400,14 +402,21 @@ export class WorldTerrainService {
 
   shouldPlaceVillageChunk(cx, cz) {
     if (Math.abs(cx) <= 1 && Math.abs(cz) <= 1) return false;
-    if (this.hash2D(cx * 31 + 71, cz * 31 - 19) < 0.992) return false;
-    const wx =
-      cx * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
-    const wz =
-      cz * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
+    
+    // Check for road affinity
+    const wx = cx * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
+    const wz = cz * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
+    const onHighway = isHighwayAt(this.noise, wx, wz);
+    const onPath = isPathAt(this.noise, wx, wz);
+    
+    // Boost chance if on a road (0.992 -> 0.85 approx 20x boost)
+    const threshold = (onHighway || onPath) ? 0.82 : 0.992;
+    
+    if (this.hash2D(cx * 31 + 71, cz * 31 - 19) < threshold) return false;
+    
     const biome = this.getBiomeAt(wx, wz);
     return (
-      biome.id === 'plains' || biome.id === 'forest' || biome.id === 'meadow'
+      biome.id === 'plains' || biome.id === 'forest' || biome.id === 'meadow' || biome.id === 'desert'
     );
   }
 

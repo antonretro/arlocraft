@@ -63,8 +63,8 @@ export class DayNightSystem {
   }
 
   update(delta, getPlayerPosition) {
-    // DISABLING DAY/NIGHT CYCLE FOR TESTING AS REQUESTED
-    this.timeOfDay = 0.5; // Always noon
+    // Re-enabled Day/Night cycle for the stunning dynamic sky
+    this.timeOfDay = (this.timeOfDay + delta / this.dayDurationSeconds) % 1.0;
     const angle = this.timeOfDay * Math.PI * 2 - Math.PI / 2;
     const sunHeight = Math.sin(angle);
     const sunDistance = 110;
@@ -105,16 +105,15 @@ export class DayNightSystem {
         : 0;
       this.moonPlane.visible = this.moonPlane.material.opacity > 0.01;
     }
-    if (this.features.dynamicLighting) {
-      const pos = getPlayerPosition?.();
-      let depthBlend = 0;
-      if (pos) {
-        const surfaceY = this.world.getColumnHeight(pos.x, pos.z);
-        const relativeDepth = surfaceY - pos.y;
-        depthBlend = Math.max(0, Math.min(1, relativeDepth / 16));
-      }
-      this.renderer.updateEnvironmentLighting(daylight, pos, depthBlend);
+    // Force dynamic lighting update to ensure renderer sync (fog, atmosphere, sun)
+    const pos = getPlayerPosition?.();
+    let depthBlend = 0;
+    if (pos) {
+      const surfaceY = this.world.getColumnHeight(pos.x, pos.z);
+      const relativeDepth = surfaceY - pos.y;
+      depthBlend = Math.max(0, Math.min(1, relativeDepth / 16));
     }
+    this.renderer.updateEnvironmentLighting(daylight, pos, depthBlend);
 
     // Day counter
     if (this._lastTime > 0.8 && this.timeOfDay < 0.2) {

@@ -14,6 +14,11 @@ export class Physics {
     this.moveDir = new THREE.Vector3();
     this.up = new THREE.Vector3(0, 1, 0);
 
+    // Scratch buffers to prevent per-update allocations
+    this._tempV1 = new THREE.Vector3();
+    this._tempV2 = new THREE.Vector3();
+    this._tempAABB = new THREE.Box3();
+
     this.gravity = -24;
     this.walkSpeed = 6.2;
     this.sprintSpeed = 8.4;
@@ -776,46 +781,11 @@ export class Physics {
         !Number.isFinite(this.position.y) ||
         !Number.isFinite(this.position.z)
       ) {
-        console.warn('[ArloCraft] Physics NaN detected! Rescuing player...');
         this.position.copy(this.lastSafePosition);
         this.velocity.set(0, 0, 0);
-      }
-    }
-
-    const safeGrounded =
-      this.mode === 'SURVIVAL' &&
-      (this.isGrounded() || inWater) &&
-      this.position.y > this.world.deepMinY + 3;
-    if (safeGrounded) {
-      this.lastSafePosition.copy(this.position);
-    }
-
-    const voidY = this.world.deepMinY - 35;
-    if (this.position.y < voidY) {
-      this.voidFallTimer += delta;
-      if (this.voidFallTimer > 0.55) {
-        const rescue = this.world.getSafeSpawnPoint(
-          this.position.x,
-          this.position.z
-        );
-        this.tmpRescuePos.set(rescue.x, rescue.y, rescue.z);
-        if (this.lastSafePosition.y > this.world.deepMinY + 2) {
-          this.tmpRescuePos.lerp(this.lastSafePosition, 0.55);
-        }
-        const safeRescue = this.resolveSafeSpawn(
-          this.tmpRescuePos.x,
-          this.tmpRescuePos.y,
-          this.tmpRescuePos.z,
-          24,
-          { preferGround: true }
-        );
-        this.position.set(safeRescue.x, safeRescue.y, safeRescue.z);
-        this.velocity.set(0, 0, 0);
+      } else if (grounded) {
         this.lastSafePosition.copy(this.position);
-        this.voidFallTimer = 0;
       }
-    } else {
-      this.voidFallTimer = 0;
     }
   }
 }

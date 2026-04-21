@@ -113,6 +113,9 @@ export class Renderer {
     this.sun.shadow.camera.near = 0.5;
     this.sun.shadow.camera.far = 500;
     this.sun.shadow.bias = -0.0005;
+    this.instance.shadowMap.enabled = true;
+    this.instance.shadowMap.type = THREE.PCFShadowMap;
+    this.instance.shadowMap.autoUpdate = true;
     this.scene.add(this.sun);
   }
 
@@ -120,17 +123,19 @@ export class Renderer {
     const skyGeo = new THREE.SphereGeometry(450, 64, 32);
     const skyMat = new THREE.ShaderMaterial({
       uniforms: {
-        top: { value: new THREE.Color(0x0a3fc8) },
-        bottom: { value: new THREE.Color(0x7ec8f0) },
+        top: { value: new THREE.Color(0x0044ff) },
+        bottom: { value: new THREE.Color(0x66ccff) },
         horizon: { value: new THREE.Color(0xffd090) },
-        horizonStrength: { value: 0.0 },
-        offset: { value: 0 },
-        exponent: { value: 2.2 },
+        sunPos: { value: new THREE.Vector3(0, 1, 0) },
+        horizonStrength: { value: 0.12 },
+        uTime: { value: 0 },
       },
       vertexShader: `
                 varying float vHeight;
+                varying vec3 vWorldPos;
                 void main() {
                     vHeight = normalize(position).y;
+                    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                 }
             `,
@@ -138,16 +143,24 @@ export class Renderer {
                 uniform vec3 top;
                 uniform vec3 bottom;
                 uniform vec3 horizon;
+                uniform vec3 sunPos;
                 uniform float horizonStrength;
-                uniform float offset;
-                uniform float exponent;
+                uniform float uTime;
                 varying float vHeight;
+                varying vec3 vWorldPos;
+                
                 void main() {
                     float h = vHeight;
                     // Improved gradient: use a sigmoidal mix for more natural sky transitions
-                    float factor = smoothstep(-0.05, 0.6, h); 
+                    float factor = smoothstep(-0.05, 0.65, h); 
                     vec3 sky = mix(bottom, top, factor);
                     
+                    // Atmospheric Scattering / Sun Glow
+                    vec3 normWorld = normalize(vWorldPos);
+                    float sunDot = max(0.0, dot(normWorld, normalize(sunPos)));
+                    float sunGlow = pow(sunDot, 64.0) * 0.45 + pow(sunDot, 8.0) * 0.15;
+                    sky += horizon * sunGlow * horizonStrength;
+
                     // Horizon glow band: Use smoother transitions
                     float horizonBand = clamp(1.0 - abs(h) * 2.5, 0.0, 1.0);
                     horizonBand = smoothstep(0.0, 1.0, pow(horizonBand, 4.0)) * horizonStrength;
@@ -182,11 +195,34 @@ export class Renderer {
       'position',
       new THREE.Float32BufferAttribute(starsPos, 3)
     );
-    const starsMat = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: 1.4,
+    const starsMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        opacity: { value: 0 },
+      },
+      vertexShader: `
+                uniform float uTime;
+                varying float vTwinkle;
+                void main() {
+                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                    gl_PointSize = 1.4 * (300.0 / -mvPosition.z);
+                    gl_Position = projectionMatrix * mvPosition;
+                    
+                    // Per-star twinkle phase
+                    vTwinkle = sin(uTime * 3.0 + position.x * 10.0 + position.z * 10.0) * 0.5 + 0.5;
+                }
+            `,
+      fragmentShader: `
+                uniform float opacity;
+                varying float vTwinkle;
+                void main() {
+                    float strength = 1.0 - distance(gl_PointCoord, vec2(0.5));
+                    strength = pow(strength, 3.0);
+                    gl_FragColor = vec4(vec3(1.0), opacity * vTwinkle * strength);
+                }
+            `,
       transparent: true,
-      opacity: 0,
+      depthWrite: false,
     });
     this.stars = new THREE.Points(starsGeo, starsMat);
     this.scene.add(this.stars);
@@ -235,49 +271,87 @@ export class Renderer {
   }
 
   setupClouds() {
-    this.cloudMeshes = [];
+    this.cloudLayers = [];
     const loader = new THREE.TextureLoader();
     const cloudsTexture = loader.load('assets/New Textures/clouds.png');
     cloudsTexture.wrapS = cloudsTexture.wrapT = THREE.RepeatWrapping;
     cloudsTexture.magFilter = THREE.LinearFilter;
     cloudsTexture.minFilter = THREE.LinearFilter;
 
-    const cloudGeo = new THREE.PlaneGeometry(8000, 8000, 1, 1);
-    cloudGeo.rotateX(-Math.PI / 2);
-
-    this.cloudMat = new THREE.ShaderMaterial({
+    // Layer 1: Low-altitude fluffy clouds
+    const cloudGeo1 = new THREE.PlaneGeometry(8000, 8000, 1, 1);
+    cloudGeo1.rotateX(-Math.PI / 2);
+    const cloudMat1 = new THREE.ShaderMaterial({
       uniforms: {
         map: { value: cloudsTexture },
-        offset: { value: new THREE.Vector2(0, 0) },
-        cloudOpacity: { value: 0.85 },
+        uOffset: { value: new THREE.Vector2(0, 0) },
+        cloudOpacity: { value: 0.65 },
       },
       vertexShader: `
-                varying vec2 vUv;
-                uniform vec2 offset;
-                void main() {
-                    vUv = uv + offset;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                }
-            `,
+        varying vec2 vUv;
+        uniform vec2 uOffset;
+        void main() {
+          vUv = (uv * 8.0) + uOffset;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
       fragmentShader: `
-                varying vec2 vUv;
-                uniform sampler2D map;
-                uniform float cloudOpacity;
-
-                void main() {
-                    vec4 tex = texture2D(map, vUv);
-                    gl_FragColor = vec4(tex.rgb, tex.a * cloudOpacity);
-                    if (gl_FragColor.a < 0.01) discard;
-                }
-            `,
+        varying vec2 vUv;
+        uniform sampler2D map;
+        uniform float cloudOpacity;
+        void main() {
+          vec4 tex = texture2D(map, vUv);
+          if (tex.a < 0.1) discard;
+          gl_FragColor = vec4(tex.rgb, tex.a * cloudOpacity);
+        }
+      `,
       transparent: true,
       depthWrite: false,
-      side: THREE.DoubleSide,
     });
+    this.cloudPlane1 = new THREE.Mesh(cloudGeo1, cloudMat1);
+    this.cloudPlane1.position.y = 210;
+    this.scene.add(this.cloudPlane1);
 
-    this.cloudPlane = new THREE.Mesh(cloudGeo, this.cloudMat);
-    this.cloudPlane.position.y = CLOUD_SETTINGS.yMin;
-    this.scene.add(this.cloudPlane);
+    // Layer 2: High-altitude wispy clouds (Parallax)
+    const cloudGeo2 = new THREE.PlaneGeometry(8000, 8000, 1, 1);
+    cloudGeo2.rotateX(-Math.PI / 2);
+    const cloudMat2 = new THREE.ShaderMaterial({
+      uniforms: {
+        map: { value: cloudsTexture },
+        uOffset: { value: new THREE.Vector2(0.5, 0.5) },
+        cloudOpacity: { value: 0.35 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        uniform vec2 uOffset;
+        void main() {
+          vUv = (uv * 16.0) + uOffset;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform sampler2D map;
+        uniform float cloudOpacity;
+        void main() {
+          vec4 tex = texture2D(map, vUv);
+          if (tex.a < 0.1) discard;
+          gl_FragColor = vec4(tex.rgb, tex.a * cloudOpacity);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+    });
+    this.cloudPlane2 = new THREE.Mesh(cloudGeo2, cloudMat2);
+    this.cloudPlane2.position.y = 260;
+    this.scene.add(this.cloudPlane2);
+
+    this.cloudLayer1 = { mesh: this.cloudPlane1, mat: cloudMat1, speed: 0.0018 };
+    this.cloudLayer2 = { mesh: this.cloudPlane2, mat: cloudMat2, speed: 0.0006 };
+    
+    // Compatibility aliases for settings/qualityTier logic
+    this.cloudPlane = this.cloudPlane1;
+    this.cloudMat = cloudMat1;
   }
 
   updateEnvironmentLighting(
@@ -285,7 +359,22 @@ export class Renderer {
     playerPos = null,
     forcedDepthBlend = null
   ) {
+    // 1. MUST Update sun tracking position first so it follows player regardless of daylight change
+    if (playerPos) {
+      const sx = Math.floor(playerPos.x / 4) * 4;
+      const sz = Math.floor(playerPos.z / 4) * 4;
+      this.sun.position.set(sx + 20, 100, sz + 20);
+      this.sun.target.position.set(sx, 0, sz);
+      this.sun.target.updateMatrixWorld();
+    }
+
+    // Only update shadow map if daylight actually moves
+    if (Math.abs(this.daylight - daylight) > 0.001) {
+      this.instance.shadowMap.needsUpdate = true;
+    }
+    
     this.daylight = daylight;
+    
     const clamped = Math.max(0, Math.min(1, daylight));
 
     // Atmosphere logic
@@ -313,9 +402,12 @@ export class Renderer {
       top.lerp(caveTint, depthBlend);
     }
 
-    if (this.skyDome) {
-      this.skyDome.material.uniforms.top.value.copy(top);
-      this.skyDome.material.uniforms.bottom.value.copy(bottom);
+    if (this.skyDome?.material?.uniforms) {
+      const uniforms = this.skyDome.material.uniforms;
+      if (uniforms.top) uniforms.top.value.copy(top);
+      if (uniforms.bottom) uniforms.bottom.value.copy(bottom);
+      if (uniforms.sunPos) uniforms.sunPos.value.copy(this.sun.position);
+      
       const horizonGlowColor =
         state === 'DUSK'
           ? new THREE.Color(0xff4400)
@@ -324,12 +416,12 @@ export class Renderer {
             : new THREE.Color(0xffd0a0);
       const horizonStr =
         state === 'DAWN' || state === 'DUSK'
-          ? 0.85
+          ? 0.95
           : state === 'DAY'
-            ? 0.12
-            : 0.05; // Small horizon bleed even at night
-      this.skyDome.material.uniforms.horizon.value.copy(horizonGlowColor);
-      this.skyDome.material.uniforms.horizonStrength.value = horizonStr;
+            ? 0.22
+            : 0.08; 
+      if (uniforms.horizon) uniforms.horizon.value.copy(horizonGlowColor);
+      if (uniforms.horizonStrength) uniforms.horizonStrength.value = horizonStr;
     }
     this.scene.background.copy(bottom);
 
@@ -362,10 +454,15 @@ export class Renderer {
       this.sun.target.updateMatrixWorld();
     }
 
-    // Stars & Moon
+    // Stars & Moon Visibility
     if (this.stars) {
-      this.stars.material.opacity = Math.max(0, (0.35 - daylight) * 2.5);
-      this.stars.visible = this.stars.material.opacity > 0.01;
+      const starOp = Math.max(0, (0.35 - daylight) * 2.5);
+      if (this.stars.material.uniforms && this.stars.material.uniforms.opacity) {
+        this.stars.material.uniforms.opacity.value = starOp;
+      } else {
+        this.stars.material.opacity = starOp;
+      }
+      this.stars.visible = starOp > 0.01;
     }
     if (this.moonMesh && this.moonGlow) {
       const moonOp = Math.max(0, (0.32 - daylight) * 1.8);
@@ -395,9 +492,9 @@ export class Renderer {
     const skyTop = dayTop.clone().lerp(nightTop, 1 - this.daylight);
     const skyBottom = dayBottom.clone().lerp(nightBottom, 1 - this.daylight);
 
-    if (this.skyDome) {
-      this.skyDome.material.uniforms.top.value.copy(skyTop);
-      this.skyDome.material.uniforms.bottom.value.copy(skyBottom);
+    if (this.skyDome?.material?.uniforms) {
+      if (this.skyDome.material.uniforms.top) this.skyDome.material.uniforms.top.value.copy(skyTop);
+      if (this.skyDome.material.uniforms.bottom) this.skyDome.material.uniforms.bottom.value.copy(skyBottom);
     }
 
     this.scene.fog.color.copy(skyBottom);
@@ -406,8 +503,13 @@ export class Renderer {
       (this.fogDensityScale || 1.0);
 
     if (this.stars) {
-      this.stars.material.opacity = Math.max(0, (0.45 - this.daylight) * 1.5);
-      this.stars.visible = this.stars.material.opacity > 0.05;
+      const starOp = Math.max(0, (0.45 - this.daylight) * 1.5);
+      if (this.stars.material.uniforms && this.stars.material.uniforms.opacity) {
+        this.stars.material.uniforms.opacity.value = starOp;
+      } else {
+        this.stars.material.opacity = starOp;
+      }
+      this.stars.visible = starOp > 0.05;
     }
 
     if (this.moonMesh && this.moonGlow) {
@@ -463,22 +565,42 @@ export class Renderer {
     }
 
     const now = performance.now();
+    const timeSec = now / 1000;
     const delta = Math.max(
       0,
       Math.min(0.05, (now - this.lastCloudUpdateMs) / 1000)
     );
     this.lastCloudUpdateMs = now;
 
-    // Scroll cloud noise plane
-    if (this.cloudMat) {
-      this.cloudMat.uniforms.offset.value.x += delta * 0.0015; // Even slower for "huge cloud" feel
-      this.cloudMat.uniforms.offset.value.y += delta * 0.0008;
+    // Time synchronization for shaders: with absolute safety checks
+    try {
+      if (this.skyDome?.material?.uniforms?.uTime) {
+        this.skyDome.material.uniforms.uTime.value = timeSec;
+      }
+      if (this.stars?.material?.uniforms?.uTime) {
+        this.stars.material.uniforms.uTime.value = timeSec;
+      }
+    } catch (e) {
+      // Shaders not ready yet
     }
 
-    // Follow camera so the cloud plane never falls out of view
-    if (this.cloudPlane) {
-      this.cloudPlane.position.x = camera.position.x;
-      this.cloudPlane.position.z = camera.position.z;
+    // Scroll cloud layers with Parallax: using ultra-safe access
+    if (this.cloudLayer1?.mat?.uniforms?.uOffset) {
+      this.cloudLayer1.mat.uniforms.uOffset.value.x += delta * (this.cloudLayer1.speed || 0.001);
+      
+      if (this.cloudLayer1.mesh) {
+        this.cloudLayer1.mesh.position.x = camera.position.x;
+        this.cloudLayer1.mesh.position.z = camera.position.z;
+      }
+    }
+    
+    if (this.cloudLayer2?.mat?.uniforms?.uOffset) {
+      this.cloudLayer2.mat.uniforms.uOffset.value.x += delta * (this.cloudLayer2.speed || 0.0005);
+      
+      if (this.cloudLayer2.mesh) {
+        this.cloudLayer2.mesh.position.x = camera.position.x;
+        this.cloudLayer2.mesh.position.z = camera.position.z;
+      }
     }
 
     if (this.postProcessingEnabled && this.composer && camera) {
@@ -535,8 +657,16 @@ export class Renderer {
     }
 
     // Cloud Opacity
-    if (settings.cloudOpacity !== undefined && this.cloudMat) {
-      this.cloudMat.uniforms.cloudOpacity.value = settings.cloudOpacity;
+    if (settings.cloudOpacity !== undefined) {
+      if (this.cloudMat?.uniforms?.cloudOpacity) {
+        this.cloudMat.uniforms.cloudOpacity.value = settings.cloudOpacity;
+      }
+      if (this.cloudLayer1?.mat?.uniforms?.cloudOpacity) {
+        this.cloudLayer1.mat.uniforms.cloudOpacity.value = settings.cloudOpacity;
+      }
+      if (this.cloudLayer2?.mat?.uniforms?.cloudOpacity) {
+        this.cloudLayer2.mat.uniforms.cloudOpacity.value = settings.cloudOpacity;
+      }
     }
 
     // Shadow Management

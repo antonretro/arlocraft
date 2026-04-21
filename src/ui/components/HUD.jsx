@@ -3,6 +3,7 @@ import { getGame } from '../UIManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, Utensils, Zap } from 'lucide-react';
 import { ItemIcon } from './ItemIcon';
+import { MiniMap } from './MiniMap';
 
 export const HUD = () => {
   const game = getGame();
@@ -76,6 +77,11 @@ export const HUD = () => {
 
   return (
     <div className="w-full h-full p-4 md:p-8 flex flex-col justify-end items-center gap-4 md:gap-6 pointer-events-none">
+
+      {/* Top Right: MiniMap */}
+      <div className="absolute top-4 right-4 md:top-8 md:right-8 z-20">
+        <MiniMap />
+      </div>
 
       {/* Top Left: Status Readout */}
       <div className="absolute top-4 left-4 md:top-8 md:left-8 flex items-center gap-4 glass-card p-3 md:p-4 border-white/5">
@@ -177,20 +183,27 @@ const PlayerAvatar = () => {
       }
     };
     window.addEventListener('skin-updated', handleUpdate);
-    
     setAvatar(defaultAvatar);
-
     return () => window.removeEventListener('skin-updated', handleUpdate);
   }, []);
 
+  // Standard MC Skin: Head is at 8,8 for 8x8 pixels in a 64x64 skin
+  // background-size: 800% (64/8 * 100)
+  // background-position: -8px -8px (relative to current size)
+  // To keep it responsive, we use percentages: 
+  // x: 8 / (64-8) = 14.28%
+  // y: 8 / (64-8) = 14.28%
+  
   return (
     <div className="relative w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden border border-white/20 bg-white/5 flex-shrink-0 shadow-lg shadow-black/20">
-        <img 
-            src={avatar || defaultAvatar} 
-            className="w-full h-full object-cover" 
-            style={{ imageRendering: 'pixelated' }}
-            onError={(e) => { e.currentTarget.src = defaultAvatar; }}
-            alt="ArloAvatar"
+        <div 
+            className="w-full h-full"
+            style={{ 
+                backgroundImage: `url(${avatar || defaultAvatar})`,
+                backgroundSize: '800%',
+                backgroundPosition: '14.28% 14.28%',
+                imageRendering: 'pixelated'
+            }}
         />
         <div className="absolute inset-0 border border-white/10 rounded-lg pointer-events-none" />
     </div>

@@ -316,12 +316,18 @@ export class BlockRegistry {
           '#include <begin_vertex>',
           `
                     #include <begin_vertex>
-                    // Wind swaying logic
+                    // Wind swaying logic: optimized for greedy-meshed chunks
                     float t = uTime * uWindParams.x;
-                    // Factor top-heaviness: displace more as Y increases
-                    float factor = max(0.0, transformed.y + 0.5) * uSwayFactor; 
-                    float swayX = sin(t + (position.x + position.z) * uWindParams.z) * uWindParams.y * factor;
-                    float swayZ = cos(t * 0.8 + (position.x - position.z) * uWindParams.z) * uWindParams.y * factor;
+                    
+                    // Clamped height factor: prevents large meshes from exploding
+                    // We use a small, normalized sway that doesn't scale out of control
+                    float factor = clamp(transformed.y + 0.5, 0.0, 1.2) * uSwayFactor; 
+                    
+                    // Complex phase to prevent 'rigid' swaying of large chunks
+                    float phase = (position.x + position.y + position.z) * uWindParams.z;
+                    float swayX = sin(t + phase) * uWindParams.y * 0.5 * factor;
+                    float swayZ = cos(t * 0.8 + phase) * uWindParams.y * 0.5 * factor;
+                    
                     transformed.x += swayX;
                     transformed.z += swayZ;
                     `
@@ -419,6 +425,10 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     texture.magFilter = THREE.NearestFilter;
     texture.minFilter = THREE.NearestFilter;
     texture.colorSpace = THREE.SRGBColorSpace;
+    
+    // Support Anisotropic Filtering for crisp distance rendering
+    const maxAnisotropy = this.game?.renderer?.instance?.capabilities?.getMaxAnisotropy?.() || 1;
+    texture.anisotropy = Math.min(16, maxAnisotropy);
     
     // Support tiled textures for Greedy Meshed quads
     texture.wrapS = THREE.RepeatWrapping;
@@ -598,7 +608,8 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
       id.includes('vine') ||
       id.includes('roots') ||
       id.includes('fungus') ||
-      id.includes('sprouts')
+      id.includes('sprouts') ||
+      id.includes('tomato')
     );
   }
 
@@ -633,11 +644,27 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     if (targetId === 'water' || targetId === 'lava') {
       const isLava = targetId === 'lava';
       const fluidColor = isLava ? 0xff4500 : 0x3ea1ff;
+      const stillUrl = this.resourceManager.getTextureUrl('water_still');
+      const flowUrl = this.resourceManager.getTextureUrl('water_flow');
+      const texStill = stillUrl ? this.loadTexture(stillUrl) : null;
+      const texFlow = flowUrl ? this.loadTexture(flowUrl) : null;
+
+      if (texStill) {
+        texStill.wrapS = texStill.wrapT = THREE.RepeatWrapping;
+        texStill.magFilter = texStill.minFilter = THREE.NearestFilter;
+      }
+      if (texFlow) {
+        texFlow.wrapS = texFlow.wrapT = THREE.RepeatWrapping;
+        texFlow.magFilter = texFlow.minFilter = THREE.NearestFilter;
+      }
+
       const material = new THREE.ShaderMaterial({
         uniforms: {
           uTime: { value: 0 },
           uWaterColor: { value: new THREE.Color(fluidColor) },
           uOpacity: { value: isLava ? 1.0 : 0.72 },
+          uStillTex: { value: texStill },
+          uFlowTex: { value: texFlow },
         },
         vertexShader: `
                     varying vec2 vUv;
@@ -668,10 +695,16 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
                     uniform float uTime;
                     uniform vec3 uWaterColor;
                     uniform float uOpacity;
+                    uniform sampler2D uStillTex;
+                    uniform sampler2D uFlowTex;
                     varying vec2 vUv;
                     varying vec3 vWorldPos;
 
                     void main() {
+                        // Scrolling UVs for the base texture
+                        vec2 scrollUv = vUv + vec2(uTime * 0.05, uTime * 0.02);
+                        vec4 texColor = texture2D(uStillTex, scrollUv * 2.0);
+                        
                         // Advanced Ripple Engine: Layered scrolling noise
                         float t = uTime * 0.65;
                         float rippleA = sin((vWorldPos.x * 2.8) + (t * 1.5)) * 0.5 + 0.5;
@@ -682,10 +715,13 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
                         
                         // Specular highlight for surface shimmer
                         float highlight = smoothstep(0.72, 0.98, noise);
-                        vec3 color = mix(uWaterColor * 0.8, uWaterColor * 1.25, noise);
-                        color += vec3(highlight) * 0.42;
+                        
+                        // Blend texture with the fluid color and noise
+                        vec3 baseColor = mix(uWaterColor * 0.85, texColor.rgb * uWaterColor * 1.5, 0.6);
+                        vec3 finalColor = mix(baseColor, baseColor * 1.25, noise);
+                        finalColor += vec3(highlight) * 0.42;
 
-                        gl_FragColor = vec4(color, uOpacity);
+                        gl_FragColor = vec4(finalColor, uOpacity * texColor.a);
                     }
                 `,
         transparent: !isLava,
@@ -808,7 +844,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         opacity: 1,
         alphaTest: isCutout ? 0.5 : 0,
         depthWrite: true,
-        side: isDeco ? THREE.DoubleSide : THREE.FrontSide,
+        side: (isDeco || id.includes('leaves')) ? THREE.DoubleSide : THREE.FrontSide,
       };
 
       const mats = [
@@ -925,14 +961,73 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
       this.injectWindShader(material);
     }
 
+    if (id === 'sea_lantern') {
+      this.injectAnimationShader(material, 5, 4.0);
+    } else if (id === 'magma') {
+      this.injectAnimationShader(material, 3, 2.0);
+    }
+
     this.configureTransparentMaterial(material);
     this.materialCache.set(id, material);
     return material;
+  }
+
+  injectAnimationShader(material, frameCount, frameSpeed = 4.0) {
+    if (!material) return;
+    if (Array.isArray(material)) {
+      for (const m of material) this.injectAnimationShader(m, frameCount, frameSpeed);
+      return;
+    }
+    if (material.userData.animationInjected) return;
+    material.userData.animationInjected = true;
+    material.userData.isAnimated = true;
+
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uTimeAnimation = { value: 0 };
+      shader.uniforms.uFrameCount = { value: frameCount };
+      shader.uniforms.uFrameSpeed = { value: frameSpeed };
+
+      shader.vertexShader = `
+                uniform float uTimeAnimation;
+                uniform float uFrameCount;
+                uniform float uFrameSpeed;
+                ${shader.vertexShader}
+            `.replace(
+        '#include <uv_vertex>',
+        `
+                #include <uv_vertex>
+                float frame = floor(mod(uTimeAnimation * uFrameSpeed, uFrameCount));
+                // Horizontal (X-axis) spritesheet animation
+                vUv.x = (vUv.x / uFrameCount) + (frame / uFrameCount);
+                `
+      );
+
+      // Store a reference to the uniforms for polling updates
+      material.userData.shader = shader;
+    };
   }
 
   isStep(id) {
     if (!id) return false;
     const reg = id.toLowerCase();
     return reg.includes('slab') || reg.includes('stairs') || reg.includes('path');
+  }
+
+  updateShaderMaterials(time) {
+    for (const mat of this.materialCache.values()) {
+      const mats = Array.isArray(mat) ? mat : [mat];
+      for (const m of mats) {
+        if (m.userData.isWaterShader && m.uniforms) {
+          m.uniforms.uTime.value = time;
+        }
+        if (m.userData.animationInjected && m.userData.shader) {
+          m.userData.shader.uniforms.uTimeAnimation.value = time;
+        }
+        if (m.userData.flicker && m.userData.flickerBaseColor) {
+           const flicker = 0.88 + Math.sin(time * 12.0) * 0.12;
+           m.emissive.copy(m.userData.flickerBaseColor).multiplyScalar(flicker);
+        }
+      }
+    }
   }
 }

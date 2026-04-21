@@ -63,26 +63,29 @@ export class ParticleSystem {
   ) {
     const config = this.types[typeName] || this.types.EXPLOSION;
 
-    // Respect the global particle cap
-    const currentCount = this.particles.length;
-    const remaining = Math.max(0, this.maxParticles - currentCount);
-    const actualCount = Math.min(count, remaining);
+    for (let i = 0; i < count; i++) {
+        let particle;
+        
+        // Adaptive Throttling: If we're at max particles, steal the oldest one
+        if (this.particles.length >= this.maxParticles) {
+            particle = this.particles.shift(); // Remove from front (oldest)
+            particle.hide();
+        } else {
+            particle = this.getFromPool();
+        }
 
-    for (let i = 0; i < actualCount; i++) {
-      const particle = this.getFromPool();
+        const vel = new THREE.Vector3(
+            (Math.random() - 0.5) * spread * 10,
+            (Math.random() - 0.2) * spread * 10,
+            (Math.random() - 0.5) * spread * 10
+        );
 
-      // Randomize trajectory
-      const vel = new THREE.Vector3(
-        (Math.random() - 0.5) * spread * 10,
-        (Math.random() - 0.2) * spread * 10,
-        (Math.random() - 0.5) * spread * 10
-      );
-
-      const particleConfig = colorOverride
-        ? { ...config, color: colorOverride }
-        : config;
-      particle.init(pos, vel, particleConfig);
-      this.particles.push(particle);
+        const particleConfig = colorOverride
+            ? { ...config, color: colorOverride }
+            : config;
+            
+        particle.init(pos, vel, particleConfig);
+        this.particles.push(particle);
     }
   }
 
@@ -102,6 +105,13 @@ export class ParticleSystem {
         this.particles.splice(i, 1);
       }
     }
+  }
+
+  clear() {
+    for (const p of this.particles) p.dispose();
+    this.particles = [];
+    for (const p of this.pool) p.dispose();
+    this.pool = [];
   }
 }
 
@@ -166,5 +176,11 @@ class Particle {
 
   hide() {
     this.mesh.visible = false;
+  }
+
+  dispose() {
+    if (this.mesh.parent) this.mesh.parent.remove(this.mesh);
+    if (this.material) this.material.dispose();
+    // Geometry is shared and managed by ParticleSystem
   }
 }

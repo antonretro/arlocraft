@@ -1018,14 +1018,18 @@ export class Chunk {
       }
     }
     this.registerRoadLandmark(startX, startZ);
+    const onRoad = this.world.isHighwayAt(centerX, centerZ) || this.world.isPathAt(centerX, centerZ);
+    const structChance = onRoad ? 0.90 : 0.975; // More structures along roads
+
     if (
-      this.world.shouldPlaceStructureChunk(this.cx, this.cz) &&
+      this.world.hash2D(this.cx + 123, this.cz - 456) > structChance &&
       this.isLandSuitable(centerX, centerZ)
     ) {
       const sy = this.world.getColumnHeight(centerX, centerZ) + 1;
       const biome = this.world.getBiomeAt(centerX, centerZ);
       this.placeRandomStructure(centerX, sy, centerZ, biome);
     }
+    
     if (
       this.world.shouldPlaceVillageChunk(this.cx, this.cz) &&
       this.isLandSuitable(centerX, centerZ, 8)
@@ -1209,6 +1213,9 @@ export class Chunk {
         } else if (typeof mesh.material?.dispose === 'function') {
           mesh.material.dispose();
         }
+      }
+      if (mesh.geometry && typeof mesh.geometry.dispose === 'function') {
+        mesh.geometry.dispose();
       }
       if (typeof mesh.dispose === 'function') mesh.dispose();
     }

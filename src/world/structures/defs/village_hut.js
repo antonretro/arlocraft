@@ -127,11 +127,12 @@ export const village_hut = {
       for (let dx = -1 + l; dx <= W - l; dx++) {
         for (let dz = -1 + l; dz <= D - l; dz++) {
           const isRidge = l === roofLayers - 1;
+          const blockId = isRidge ? 'oak_log' : 'oak_stairs';
           blocks.push({
             x: ox + dx,
             y: rY,
             z: oz + dz,
-            id: isRidge ? 'oak_log' : l === 0 ? 'cobblestone' : 'oak_planks',
+            id: blockId,
           });
         }
       }

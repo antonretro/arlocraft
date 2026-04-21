@@ -130,6 +130,7 @@ export class Game {
 
     this.world.clearWorld();
     this.resetEntities();
+    this.particles?.clear();
     this.gameState.hp = 20;
     this.gameState.hunger = 20;
     this.gameState.inventory = Array(36).fill(null);
