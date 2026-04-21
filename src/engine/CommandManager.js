@@ -122,5 +122,21 @@ export class CommandManager {
         this.game.gameState.applyEffect({ id, duration: seconds, level });
         this.game.chat?.addMessage('SYSTEM', `Applied ${id} ${level} for ${seconds}s`, 'system');
     });
+    
+    this.register('morph', 'Morph into an entity: /morph [id|clear]', (args) => {
+        const id = args[0]?.toLowerCase();
+        if (!id) throw new Error('Usage: /morph [id|clear]');
+        
+        if (id === 'clear' || id === 'none' || id === 'reset') {
+            this.game.gameState.morphId = null;
+            this.game.chat?.addMessage('SYSTEM', 'Cleared morph.', 'system');
+        } else {
+            this.game.gameState.morphId = id;
+            this.game.chat?.addMessage('SYSTEM', `Morphed into ${id}`, 'system');
+        }
+        
+        // Trigger player mesh update
+        window.dispatchEvent(new CustomEvent('player-morph-changed', { detail: this.game.gameState.morphId }));
+    });
   }
 }

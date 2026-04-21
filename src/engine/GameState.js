@@ -12,6 +12,7 @@ export class GameState {
     this.selectedSlot = 0;
     this.offhand = null;
     this.armor = new Array(4).fill(null); // 0: Helmet, 1: Chest, 2: Legs, 3: Boots
+    this.morphId = null; // Current mob morph ID (e.g. 'cow')
 
     // UI State
     this.isInventoryOpen = false;

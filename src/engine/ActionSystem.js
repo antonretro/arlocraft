@@ -121,6 +121,26 @@ export class ActionSystem {
     if (this.game.world.interactBlock(this.game.camera.instance)) return;
 
     const selectedSlot = this.gameState.selectedSlot;
+    
+    // Spawn Egg Logic
+    const blockData = this.game.world.getBlockData(selected.id);
+    if (blockData?.spawnMobId) {
+      const hit = this.game.world.raycastBlocks(this.game.camera.instance, 5);
+      if (hit) {
+        const spawnX = hit.cell.x + hit.normal.x;
+        const spawnY = hit.cell.y + hit.normal.y;
+        const spawnZ = hit.cell.z + hit.normal.z;
+        this.game.entities.spawn(blockData.spawnMobId, spawnX, spawnY, spawnZ);
+        
+        if (this.gameState.mode !== 'CREATIVE') {
+          selected.count--;
+          if (selected.count <= 0) this.gameState.inventory[selectedSlot] = null;
+          window.dispatchEvent(new CustomEvent('inventory-changed'));
+        }
+        return;
+      }
+    }
+
     const placed = this.game.world.placeBlock(this.game.camera.instance, selectedSlot);
     if (!placed) return;
     if (this.gameState.mode === 'CREATIVE') return;

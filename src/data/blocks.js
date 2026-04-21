@@ -207,10 +207,21 @@ function normalizeBlock(folderId, raw, scriptModule, readmeContent) {
 
   merged.id =
     typeof merged.id === 'string' && merged.id.trim() ? merged.id.trim() : folderId;
-  merged.textureId =
-    typeof merged.textureId === 'string' && merged.textureId.trim()
-      ? merged.textureId.trim()
-      : merged.id;
+  
+  // Handle naming mismatch for Minecraft-style blocks (e.g. concrete_black -> black_concrete)
+  let tid = merged.textureId || merged.id;
+  if (typeof tid === 'string') {
+    const swapTypes = ['concrete', 'terracotta', 'wool', 'glazed_terracotta', 'concrete_powder', 'stained_glass', 'candle'];
+    for (const type of swapTypes) {
+      if (tid.startsWith(type + '_')) {
+        const color = tid.replace(type + '_', '');
+        tid = color + '_' + type;
+        break;
+      }
+    }
+  }
+
+  merged.textureId = tid;
   merged.name =
     typeof merged.name === 'string' && merged.name.trim()
       ? merged.name.trim()
@@ -305,6 +316,22 @@ function mergeBlocks() {
       }
     }
   }
+
+  // Auto-generate spawn eggs for every mob
+  MOBS.forEach(mob => {
+    const eggId = `spawn_egg_${mob.id}`;
+    if (!merged.has(eggId)) {
+        merged.set(eggId, {
+            id: eggId,
+            name: `${mob.name} Spawn Egg`,
+            category: 'Tools',
+            renderType: 'flat',
+            textureId: 'spawn_egg',
+            spawnMobId: mob.id,
+            description: `Right-click to spawn a ${mob.name}.`
+        });
+    }
+  });
 
   return Array.from(merged.values()).sort((left, right) =>
     left.id.localeCompare(right.id)

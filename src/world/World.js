@@ -551,6 +551,13 @@ export class World {
       return false;
     }
     if (mode === 'CREATIVE') {
+      const now = performance.now();
+      const cooldown = 200; // 200ms
+      if (this._lastCreativeMine && now - this._lastCreativeMine < cooldown) {
+          return false;
+      }
+      this._lastCreativeMine = now;
+      
       const broken = this.breakBlockAt(hit.cell.x, hit.cell.y, hit.cell.z);
       this.resetMiningProgress();
       return broken;

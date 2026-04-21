@@ -24,6 +24,45 @@ export class Player {
 
         this.setupVisuals();
         this.game.renderer.scene.add(this.mesh);
+
+        window.addEventListener('player-morph-changed', (e) => {
+            this.setupMorph(e.detail);
+        });
+    }
+
+    setupMorph(morphId) {
+        if (this.morphModel) {
+            this.mesh.remove(this.morphModel.group);
+            this.morphModel = null;
+        }
+
+        const isMorphed = Boolean(morphId);
+        
+        // Hide/Show base parts
+        const basePartNames = ['torso', 'head', 'headGroup', 'armL', 'armR', 'legL', 'legR', 'face'];
+        for (const name of basePartNames) {
+            if (this.parts[name]) {
+                this.parts[name].visible = !isMorphed;
+            }
+        }
+
+        if (isMorphed) {
+            const model = this.game.entities.createModelById(morphId);
+            if (model) {
+                this.morphModel = model;
+                this.mesh.add(model.group);
+                
+                // Try to load texture
+                const mobConfig = this.game.entities.game.world.state.blockData.get('mobs')?.find(m => m.id === morphId) || { id: morphId, textureKey: morphId };
+                const textureUrl = this.game.entities.resolveTextureUrl(mobConfig) || this.game.entities.resolveTextureUrl({ id: morphId, textureKey: morphId });
+                
+                if (textureUrl) {
+                    this.game.entities.loadEntityTexture(textureUrl, 'billboard').then(tex => {
+                        if (tex && this.morphModel) this.morphModel.setTexture(tex);
+                    });
+                }
+            }
+        }
     }
 
     setupVisuals() {
@@ -145,6 +184,13 @@ export class Player {
         // Sync head tilt to view pitch
         if (this.parts.headGroup) {
             this.parts.headGroup.rotation.x = -viewPitch;
+        }
+
+        // Animate Morph
+        if (this.morphModel) {
+            this.morphModel.update(delta, velocity);
+            // Hide torso if morphed (redundant safety)
+            this.parts.torso.visible = false;
         }
     }
 

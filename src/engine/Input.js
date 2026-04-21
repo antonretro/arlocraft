@@ -157,7 +157,8 @@ export class Input {
         'F5',
         'Escape',
       ]);
-      if (preventCodes.has(event.code)) event.preventDefault();
+      const isInput = event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA';
+      if (preventCodes.has(event.code) && !isInput) event.preventDefault();
 
       if (event.code === 'Escape') {
         if (this.game.isSettingsOpen?.()) {
