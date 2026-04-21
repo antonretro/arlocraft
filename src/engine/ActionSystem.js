@@ -44,6 +44,10 @@ export class ActionSystem {
           this.handleSecondaryAction();
         }
 
+        if (this.game.input.isJustPressed('KeyQ')) {
+          this.dropSelectedItem();
+        }
+
         this.updateSelection();
     }
   }
@@ -126,6 +130,26 @@ export class ActionSystem {
       this.gameState.inventory[selectedSlot] = null;
     }
     window.dispatchEvent(new CustomEvent('inventory-changed'));
+  }
+
+  dropSelectedItem() {
+    const selectedSlot = this.gameState.selectedSlot;
+    const item = this.gameState.inventory[selectedSlot];
+    if (!item || item.count <= 0) return;
+
+    // In ArloCraft, dropping just deletes from inventory and plays a sound/particle
+    // since we don't have physics-item entities yet.
+    item.count--;
+    if (item.count <= 0) {
+      this.gameState.inventory[selectedSlot] = null;
+    }
+
+    const pos = this.game.camera.instance.position;
+    this.game.world.explosions.spawnPickupEffect(pos.x, pos.y, pos.z, item.id, pos);
+    this.game.audio?.play('throw');
+    
+    window.dispatchEvent(new CustomEvent('inventory-changed'));
+    this.game.hud?.flashPrompt?.(`Dropped: ${item.id}`, '#ffaa44');
   }
 
   throwProjectile(selected) {

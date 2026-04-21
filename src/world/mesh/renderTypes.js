@@ -127,10 +127,10 @@ export function resolveLODGeometry(world, blockData) {
   if (!geo) return null;
 
   if (blockData?.renderShape === TALL_CROSS_SHAPE) {
-    return geo.tallDecoLOD ?? geo.decoLOD ?? geo.tallDeco ?? geo.deco ?? null;
+    return geo.tallDeco ?? geo.deco ?? null;
   }
 
-  return geo.decoLOD ?? geo.deco ?? null;
+  return geo.deco ?? null;
 }
 
 export function shouldSkipChunkBlockInstance({

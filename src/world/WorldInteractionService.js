@@ -40,6 +40,18 @@ export class WorldInteractionService {
       new CustomEvent('block-mined', { detail: { id: dropId, x, y, z } })
     );
 
+    // Loot on break for containers
+    const isChest = id === 'starter_chest' || id === 'chest' || id === 'barrel';
+    if (isChest) {
+      const chestKey = key;
+      if (!this.world.state.openedChestKeys.has(chestKey)) {
+        this.world.state.openedChestKeys.add(chestKey);
+        // Roll small amount of loot for broken chest
+        const loot = [ { id: 'apple', count: 1 }, { id: 'stick', count: 2 } ]; 
+        this.world.game?.gameState?.addLootRoll?.(loot);
+      }
+    }
+
     // Gravity collapse
     if (
       !skipGravity &&

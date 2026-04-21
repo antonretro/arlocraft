@@ -404,6 +404,7 @@ export class Renderer {
     const stormFactor = this.weatherType === 'storm' ? rainFactor : 0;
 
     let depthBlend = forcedDepthBlend !== null ? forcedDepthBlend : 0;
+
     if (forcedDepthBlend === null && playerPos) {
       const surfaceY = 64;
       const depth = surfaceY - playerPos.y;
@@ -691,7 +692,7 @@ export class Renderer {
     if (this.instance && this.sun) {
       const shadowRes = this.qualityTier === 'high' ? 1024 : 512;
       this.sun.shadow.mapSize.set(shadowRes, shadowRes);
-      this.instance.shadowMap.type = this.qualityTier === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+      this.instance.shadowMap.type = THREE.PCFShadowMap;
       this.sun.shadow.map?.dispose();
       this.sun.shadow.map = null;
     }

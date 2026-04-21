@@ -206,7 +206,7 @@ export class Input {
         return;
       }
 
-      if (event.code === 'KeyQ') {
+      if (event.code === 'KeyP') {
         this.game.pickBlock?.();
         return;
       }

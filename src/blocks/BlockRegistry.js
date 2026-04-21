@@ -234,7 +234,7 @@ export class BlockRegistry {
     const assetPath = base.endsWith('/') ? base : base + '/';
     
     const paths = {
-      anton: assetPath + 'anton_real.png',
+      anton: assetPath + 'arlo_real.png',
     };
 
     const loadOne = (id, path) => {
@@ -253,8 +253,6 @@ export class BlockRegistry {
 
   updateMaterialsWithStunningAssets() {
     const idToTexKey = {
-      furnace: 'furnace',
-      starter_chest: 'starter_chest',
       fern: 'fern',
       banana: 'banana',
     };
