@@ -622,19 +622,10 @@ export const MainMenu = ({ setScreen }) => {
                 </div>
               )}
 
-              <div className="flex flex-col gap-2 mt-auto">
-                 <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Your Identity</label>
-                 <div className="bg-white/5 p-4 rounded-xl flex items-center justify-between">
-                    <span className="text-xs font-mono opacity-60">
-                      {multiplayerId || 'Connecting to network...'}
-                    </span>
-                    <button 
-                      onClick={() => navigator.clipboard.writeText(game.multiplayer?.peer?.id)}
-                      className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                    >
-                      <Clipboard size={16}/>
-                    </button>
-                 </div>
+              <div className="mt-auto p-4 rounded-xl bg-arlo-blue/5 border border-arlo-blue/10">
+                <p className="text-[10px] text-white/40 leading-relaxed italic">
+                  To host a world and get a Join Code, simply start a Singleplayer world. Your friends can then use your code to join you.
+                </p>
               </div>
             </motion.div>
           )}
