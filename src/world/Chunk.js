@@ -1353,6 +1353,7 @@ export class Chunk {
       if (typeof mesh.dispose === 'function') mesh.dispose();
     }
     this.meshes.clear();
+    if (this.blockKeys) this.blockKeys.clear();
     if (this.group?.parent) this.group.parent.remove(this.group);
   }
 }

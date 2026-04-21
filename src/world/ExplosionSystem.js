@@ -542,4 +542,14 @@ export class ExplosionSystem {
     }
     this.flyingBlocks = [];
   }
+
+  dispose() {
+    this.clearAll();
+    this.textureCache.forEach((tex) => tex.dispose());
+    this.textureCache.clear();
+    this.particleCache.forEach((tex) => tex.dispose());
+    this.particleCache.clear();
+    if (this.breakParticleGeometry) this.breakParticleGeometry.dispose();
+    if (this.pickupGeometry) this.pickupGeometry.dispose();
+  }
 }

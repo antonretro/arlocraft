@@ -19,6 +19,7 @@ export class Input {
       placing: false,
     };
     this.isLocked = false;
+    this.handlers = {};
     this.init();
   }
 
@@ -28,10 +29,12 @@ export class Input {
   }
 
   isDown(code) {
+    if (this.game.chat?.visible) return false;
     return Boolean(this.keys[code]);
   }
 
   isJustPressed(code) {
+    if (this.game.chat?.visible) return false;
     return Boolean(this.justPressed[code]);
   }
 
@@ -121,30 +124,29 @@ export class Input {
   }
 
   init() {
-    window.addEventListener('inventory-toggle', (event) => {
+    this.handlers.onInventoryToggle = (event) => {
       const isOpen = Boolean(event.detail);
       if (isOpen) {
         if (document.pointerLockElement) document.exitPointerLock();
       } else if (this.game.hasStarted && !this.game.isPaused) {
         this.setPointerLock();
       }
-    });
+    };
 
-    document.addEventListener('pointerlockchange', () => {
+    this.handlers.onPointerLockChange = () => {
       const canvas = this.game?.renderer?.instance?.domElement;
       const locked = Boolean(canvas && document.pointerLockElement === canvas);
       this.isLocked = locked;
       this.game.onPointerLockChange(locked);
-      // On touch devices pointer lock is never acquired — don't wipe touch button state
       if (!locked && !this.game.touchControls) {
         this.keys = Object.create(null);
         this.mouseButtons.left = false;
         this.mouseButtons.right = false;
         this.clearTransientInputs();
       }
-    });
+    };
 
-    window.addEventListener('keydown', (event) => {
+    this.handlers.onKeyDown = (event) => {
       const preventCodes = new Set([
         'Space',
         'ArrowUp',
@@ -194,7 +196,7 @@ export class Input {
       }
 
       if (event.code === 'KeyE' || event.code === 'KeyI') {
-        event.preventDefault(); // Force browser to yield key to the game
+        event.preventDefault();
         this.game.toggleInventory();
         return;
       }
@@ -215,47 +217,54 @@ export class Input {
           this.game.gameState.setSlot(index - 1);
         }
       }
-    });
 
-    window.addEventListener('keyup', (event) => {
+      if (event.code === 'KeyT' && !this.game.chat?.visible) {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('chat-open', { detail: { prefill: '' } }));
+        return;
+      }
+
+      if (event.code === 'Slash' && !this.game.chat?.visible) {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('chat-open', { detail: { prefill: '/' } }));
+        return;
+      }
+    };
+
+    this.handlers.onKeyUp = (event) => {
       delete this.keys[event.code];
-    });
+    };
 
-    document.addEventListener('mousemove', (event) => {
+    this.handlers.onMouseMove = (event) => {
       if (
         !this.isLocked ||
         this.game.isPaused ||
         this.game.gameState.isInventoryOpen
       )
         return;
-      const sensitivity = (this.game.settings?.sensitivity ?? 0.00145) * 0.85; // Slight reduction for smoothing
+      const sensitivity = (this.game.settings?.sensitivity ?? 0.00145) * 0.85;
       const invertFactor = this.game.settings?.invertY ? -1 : 1;
 
-      // Raw movement with slight dampening for 30fps stability
       this.game.adjustLook(
         -event.movementX * sensitivity,
         -event.movementY * sensitivity * invertFactor
       );
-    });
+    };
 
-    window.addEventListener(
-      'wheel',
-      (event) => {
-        if (
-          !this.isLocked ||
-          this.game.isPaused ||
-          this.game.gameState.isInventoryOpen
-        )
-          return;
-        event.preventDefault();
-        const current = this.game.gameState.selectedSlot;
-        const delta = event.deltaY > 0 ? 1 : -1;
-        this.game.gameState.setSlot((current + delta + 9) % 9);
-      },
-      { passive: false }
-    );
+    this.handlers.onWheel = (event) => {
+      if (
+        !this.isLocked ||
+        this.game.isPaused ||
+        this.game.gameState.isInventoryOpen
+      )
+        return;
+      event.preventDefault();
+      const current = this.game.gameState.selectedSlot;
+      const delta = event.deltaY > 0 ? 1 : -1;
+      this.game.gameState.setSlot((current + delta + 9) % 9);
+    };
 
-    window.addEventListener('mousedown', (event) => {
+    this.handlers.onMouseDown = (event) => {
       if (
         !this.isLocked ||
         this.game.isPaused ||
@@ -269,24 +278,48 @@ export class Input {
         this.mouseButtons.right = true;
         this.mouseButtons.rightJustPressed = true;
       }
-    });
+    };
 
-    window.addEventListener('mouseup', (event) => {
+    this.handlers.onMouseUp = (event) => {
       if (event.button === 0) {
         this.mouseButtons.left = false;
         this.game.cancelMining();
       }
       if (event.button === 2) this.mouseButtons.right = false;
-    });
+    };
 
-    window.addEventListener('blur', () => {
+    this.handlers.onBlur = () => {
       this.keys = Object.create(null);
       this.mouseButtons.left = false;
       this.mouseButtons.right = false;
       this.clearTransientInputs();
       this.game.cancelMining();
-    });
+    };
 
-    window.addEventListener('contextmenu', (event) => event.preventDefault());
+    this.handlers.onContextMenu = (event) => event.preventDefault();
+
+    window.addEventListener('inventory-toggle', this.handlers.onInventoryToggle);
+    document.addEventListener('pointerlockchange', this.handlers.onPointerLockChange);
+    window.addEventListener('keydown', this.handlers.onKeyDown);
+    window.addEventListener('keyup', this.handlers.onKeyUp);
+    document.addEventListener('mousemove', this.handlers.onMouseMove);
+    window.addEventListener('wheel', this.handlers.onWheel, { passive: false });
+    window.addEventListener('mousedown', this.handlers.onMouseDown);
+    window.addEventListener('mouseup', this.handlers.onMouseUp);
+    window.addEventListener('blur', this.handlers.onBlur);
+    window.addEventListener('contextmenu', this.handlers.onContextMenu);
+  }
+
+  dispose() {
+    window.removeEventListener('inventory-toggle', this.handlers.onInventoryToggle);
+    document.removeEventListener('pointerlockchange', this.handlers.onPointerLockChange);
+    window.removeEventListener('keydown', this.handlers.onKeyDown);
+    window.removeEventListener('keyup', this.handlers.onKeyUp);
+    document.removeEventListener('mousemove', this.handlers.onMouseMove);
+    window.removeEventListener('wheel', this.handlers.onWheel);
+    window.removeEventListener('mousedown', this.handlers.onMouseDown);
+    window.removeEventListener('mouseup', this.handlers.onMouseUp);
+    window.removeEventListener('blur', this.handlers.onBlur);
+    window.removeEventListener('contextmenu', this.handlers.onContextMenu);
   }
 }

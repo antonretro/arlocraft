@@ -7,7 +7,7 @@ export class WorldMutationService {
 
   // --- Core Mutation API ---
 
-  addBlock(x, y, z, id, ownerKey = null, replace = false, options = {}) {
+  addBlock(x, y, z, id, ownerKey = null, replace = false, options = {}, data = null) {
     const gx = Math.round(x);
     const gy = Math.round(y);
     const gz = Math.round(z);
@@ -51,6 +51,7 @@ export class WorldMutationService {
 
     this.world.state.blockMap.set(key, id);
     this.world.state.blockOwners.set(key, owner);
+    if (data) this.world.state.blockData.set(key, data);
 
     if (id === 'virus') this.world.state.virusBlockCount++;
 
@@ -87,12 +88,16 @@ export class WorldMutationService {
       this.world.fluids?.scheduleSpread(gx, gy, gz, id, initialDepth);
     }
 
-    this.world.gravity?.onBlockChanged(gx, gy, gz, 'add');
-    this.world.redstone?.onBlockChanged(gx, gy, gz, 'add');
+    if (!options?.skipGravity) {
+      this.world.gravity?.onBlockChanged(gx, gy, gz, 'add');
+    }
+    if (!options?.skipRedstone) {
+      this.world.redstone?.onBlockChanged(gx, gy, gz, 'add');
+    }
 
     // --- Multiplayer Broadcast ---
     if (this.world.game?.multiplayer && !options.silent) {
-      this.world.game.multiplayer.broadcastBlockUpdate(gx, gy, gz, id, 'add');
+      this.world.game.multiplayer.broadcastBlockUpdate(gx, gy, gz, id, 'add', data);
     }
 
     return id;
@@ -109,6 +114,7 @@ export class WorldMutationService {
     const owner = this.world.state.blockOwners.get(key);
     this.world.state.blockMap.delete(key);
     this.world.state.blockOwners.delete(key);
+    this.world.state.blockData.delete(key);
 
     if (id === 'virus' && this.world.state.virusBlockCount > 0)
       this.world.state.virusBlockCount--;
@@ -184,6 +190,6 @@ export class WorldMutationService {
       const key = this.world.coords.getKey(x, y, z);
       return this.removeBlockByKey(key, options);
     }
-    return this.addBlock(x, y, z, id, owner, true, options);
+    return this.addBlock(x, y, z, id, owner, true, options, options.data);
   }
 }

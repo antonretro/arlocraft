@@ -261,24 +261,46 @@ function mergeBlocks() {
       const isFullBlock = block.renderType === 'cube' || !block.renderType;
       
       if (isConstruction && isFullBlock && !block.id.includes('_slab') && !block.id.includes('_stairs')) {
-        // Slab variant
+        // Slab Variant
         const slabId = `${block.id}_slab`;
         merged.set(slabId, {
           ...block,
           id: slabId,
           name: `${block.name} Slab`,
           renderType: 'slab',
-          slab: true
+          slab: true,
+          transparent: true
         });
 
-        // Stairs variant
+        // Stair Variant
         const stairId = `${block.id}_stairs`;
         merged.set(stairId, {
           ...block,
           id: stairId,
           name: `${block.name} Stairs`,
           renderType: 'stairs',
-          stairs: true
+          stairs: true,
+          transparent: true
+        });
+
+        // Trapdoor Variant
+        const trapdoorId = `${block.id}_trapdoor`;
+        merged.set(trapdoorId, {
+          ...block,
+          id: trapdoorId,
+          name: `${block.name} Trapdoor`,
+          renderType: 'trapdoor',
+          transparent: true
+        });
+
+        // Door Variant
+        const doorId = `${block.id}_door`;
+        merged.set(doorId, {
+          ...block,
+          id: doorId,
+          name: `${block.name} Door`,
+          renderType: 'door',
+          transparent: true
         });
       }
     }

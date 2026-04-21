@@ -252,6 +252,29 @@ export class WorldVisuals {
         geo.translate(0, -0.25, 0);
         return withWhiteVertexColors(geo);
       })(),
+      sign: (() => {
+        const board = new THREE.BoxGeometry(0.875, 0.5, 0.0625);
+        board.translate(0, 0.25, 0);
+        const stick = new THREE.BoxGeometry(0.125, 0.5, 0.125);
+        stick.translate(0, -0.25, 0);
+        
+        // Manual merge
+        const merged = new THREE.BufferGeometry();
+        const bPos = board.attributes.position.array;
+        const sPos = stick.attributes.position.array;
+        const bUv = board.attributes.uv.array;
+        const sUv = stick.attributes.uv.array;
+        const bNorm = board.attributes.normal.array;
+        const sNorm = stick.attributes.normal.array;
+        const bIdx = Array.from(board.index.array);
+        const sIdx = Array.from(stick.index.array).map(i => i + board.attributes.position.count);
+        
+        merged.setAttribute('position', new THREE.Float32BufferAttribute([...bPos, ...sPos], 3));
+        merged.setAttribute('uv', new THREE.Float32BufferAttribute([...bUv, ...sUv], 2));
+        merged.setAttribute('normal', new THREE.Float32BufferAttribute([...bNorm, ...sNorm], 3));
+        merged.setIndex([...bIdx, ...sIdx]);
+        return withWhiteVertexColors(merged);
+      })(),
       grass_block_top: (() => {
         const geo = new THREE.PlaneGeometry(1.002, 1.002);
         geo.rotateX(-Math.PI / 2);

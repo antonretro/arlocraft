@@ -1154,4 +1154,23 @@ export class World {
       arlo: Math.min(1, arloHits / Math.max(4, base * 0.3)),
     };
   }
+
+  dispose() {
+    if (this.chunkManager) this.chunkManager.clearAll();
+    this.state.blockMap.clear();
+    this.state.changedBlocks.clear();
+    this.state.blockOwners.clear();
+    this.state.landmarks.clear();
+    this.state.openedChestKeys.clear();
+    this.state.restoredLandmarks.clear();
+    this.state.terrainHeightCache.clear();
+    this.state.biomeCache.clear();
+    this.chunks.clear();
+    
+    if (this.visuals?.dispose) this.visuals.dispose();
+    if (this.fluids?.dispose) this.fluids.dispose();
+    if (this.redstone?.dispose) this.redstone.dispose();
+    if (this.blockRegistry?.dispose) this.blockRegistry.dispose();
+    if (this.explosions?.dispose) this.explosions.dispose();
+  }
 }

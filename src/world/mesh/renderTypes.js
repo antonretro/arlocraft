@@ -59,7 +59,7 @@ export function shouldSkipStandaloneTypeRender(blockData) {
 }
 
 export function isDecoType(blockData) {
-  return isPlantRenderType(blockData);
+  return isPlantRenderType(blockData) || blockData?.renderType === 'sign';
 }
 
 export function resolveChunkGeometry(world, id, blockData) {
@@ -111,6 +111,10 @@ export function resolveChunkGeometry(world, id, blockData) {
   }
   if (blockData?.renderType === 'stairs' || id.includes('_stairs')) {
     return geo.stair ?? geo.solid ?? null;
+  }
+  
+  if (blockData?.renderType === 'sign' || id.includes('_sign')) {
+    return geo.sign ?? geo.deco ?? geo.solid ?? null;
   }
 
   return geo.solid ?? null;

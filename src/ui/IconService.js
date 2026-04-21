@@ -167,9 +167,24 @@ export class IconService {
       tomato: 'sweet_berries',
     };
     
-    // Add direct block aliases for mushrooms
+    // Add direct block aliases for mushrooms and common mismatches
     this.blockTextures['mushroom_brown'] = this.blockTextures['brown_mushroom'];
     this.blockTextures['mushroom_red'] = this.blockTextures['red_mushroom'];
+  }
+
+  /**
+   * Normalizes IDs that are flipped (e.g. concrete_white -> white_concrete)
+   */
+  _normalizeFlippedId(id) {
+    if (!id) return id;
+    const categories = ['concrete_powder', 'concrete', 'terracotta', 'glazed_terracotta', 'stained_glass', 'wool', 'candle', 'carpet'];
+    for (const cat of categories) {
+      if (id.startsWith(`${cat}_`)) {
+        const color = id.replace(`${cat}_`, '');
+        return `${color}_${cat}`;
+      }
+    }
+    return id;
   }
 
   resolveAsset(path) {
@@ -265,6 +280,9 @@ export class IconService {
       normalizedId.startsWith('leaves_') ||
       normalizedId.includes('_stairs') ||
       normalizedId.includes('_slab');
+      const isStair = normalizedId.includes('_stairs');
+      const isSlab = normalizedId.includes('_slab');
+      const isMultiFrame = normalizedId === 'lantern' || normalizedId === 'command_block' || normalizedId.includes('door') || normalizedId.includes('active') || normalizedId.includes('lamp');
 
     if (isBlockItem) {
       const texture = this.getPreferredBlockIconTexture(normalizedId);
@@ -340,6 +358,23 @@ export class IconService {
 
     let alias = this.getBlockTextureKey(id);
     if (legacyMap[alias]) alias = legacyMap[alias];
+    
+    // Normalize flipped color names (concrete_white -> white_concrete)
+    alias = this._normalizeFlippedId(alias);
+
+    // Door/Trapdoor handling
+    if (alias.endsWith('_door')) {
+        const base = alias.replace('_door', '');
+        const top = this.blockTextures[`${base}_door_top`] || this.blockTextures[`${base}_door`];
+        const bottom = this.blockTextures[`${base}_door_bottom`] || this.blockTextures[`${base}_door`];
+        if (top || bottom) {
+            return { all: top || bottom, top: top || bottom, front: top || bottom };
+        }
+    }
+    if (alias.endsWith('_trapdoor')) {
+        const tex = this.blockTextures[alias];
+        if (tex) return { all: tex, front: tex };
+    }
 
     const all = this.blockTextures[alias] || this.blockTextures[`${alias}_all`];
     if (alias === 'farmland') {

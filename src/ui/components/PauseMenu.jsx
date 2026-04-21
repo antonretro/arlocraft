@@ -19,9 +19,13 @@ import {
 
 export const PauseMenu = ({ setIsPaused }) => {
   const game = getGame();
+  
+  // Safety check to prevent UI crash if game instance isn't ready
+  if (!game) return null;
+
   const [subScreen, setSubScreen] = useState('main'); // main, settings
   const [settingTab, setSettingTab] = useState('video'); // video, audio, controls, social
-  const [settings, setSettings] = useState(() => game?.settingsManager?.getAll() ?? {});
+  const [settings, setSettings] = useState(() => game.settingsManager?.getAll() ?? {});
 
   const updateSetting = (key, value) => {
     game.settingsManager.set(key, value);

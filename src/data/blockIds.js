@@ -4,7 +4,16 @@ export function normalizeBlockVariantId(id) {
   const raw = String(id ?? '').trim();
   if (!raw) return '';
 
-  const base = raw.includes(':') ? raw.split(':')[1] : raw;
+  let base = raw;
+  if (raw.includes(':')) {
+    const parts = raw.split(':');
+    if (parts[0] === 'minecraft' || parts[0] === 'arlo') {
+        base = parts[1];
+    } else {
+        base = parts[0];
+    }
+  }
+  
   const dirMatch = base.match(/^(.*)_[nswe]$/);
   if (dirMatch) return dirMatch[1];
 

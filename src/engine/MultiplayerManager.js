@@ -14,6 +14,10 @@ export class MultiplayerManager {
     this.onConnected = null;
   }
 
+  isConnected() {
+    return this.connections.size > 0;
+  }
+
   init() {
     if (typeof Peer === 'undefined') {
       console.error(
@@ -116,6 +120,7 @@ export class MultiplayerManager {
           conn.peer
         );
         this.sendWorldSync(conn.peer);
+        this.sendWorldDataSync(conn.peer);
       }
 
       this.game.notifications?.show('Multiplayer', 'Peer Connected!', 'success');
@@ -136,9 +141,11 @@ export class MultiplayerManager {
   sendWorldSync(peerId) {
     const blockMap = this.game.world.state.blockMap;
     const blockCount = blockMap.size;
-    if (blockCount === 0) return;
+    if (blockCount === 0) {
+      this.send(peerId, { type: 'world_sync_complete', data: {} });
+      return;
+    }
 
-    // Use a palette to minimize string data
     const palette = [];
     const paletteMap = new Map();
     const getPaletteIndex = (id) => {
@@ -151,37 +158,55 @@ export class MultiplayerManager {
       return idx;
     };
 
-    // Format: [x, y, z, paletteIndex, ...]
-    const data = new Int32Array(blockCount * 4);
-    let ptr = 0;
-    for (const [key, id] of blockMap.entries()) {
-      const [x, y, z] = this.game.world.coords.keyToCoords(key);
-      data[ptr++] = x;
-      data[ptr++] = y;
-      data[ptr++] = z;
-      data[ptr++] = getPaletteIndex(id);
-    }
+    const entries = Array.from(blockMap.entries());
+    const CHUNK_SIZE = 1000; // Smaller chunks for reliability
+    
+    for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+      const chunkEntries = entries.slice(i, i + CHUNK_SIZE);
+      const data = new Int32Array(chunkEntries.length * 4);
+      let ptr = 0;
+      for (const [key, id] of chunkEntries) {
+        const [x, y, z] = this.game.world.coords.keyToCoords(key);
+        data[ptr++] = x;
+        data[ptr++] = y;
+        data[ptr++] = z;
+        data[ptr++] = getPaletteIndex(id);
+      }
 
-    // Send binary sync
+      this.send(peerId, {
+        type: 'world_sync_chunk',
+        data: {
+          payload: data.buffer,
+          palette: palette,
+          progress: i + chunkEntries.length,
+          total: entries.length,
+          isLast: i + CHUNK_SIZE >= entries.length
+        },
+      });
+    }
+  }
+
+  sendWorldDataSync(peerId) {
+    const blockData = this.game.world.state.blockData;
+    if (!blockData || blockData.size === 0) return;
+
+    // Send all block metadata (signs, command blocks, etc)
+    const data = Array.from(blockData.entries());
     this.send(peerId, {
-      type: 'world_sync_binary',
-      data: {
-        payload: data.buffer,
-        palette: palette,
-      },
+      type: 'world_data_sync',
+      data: data
     });
   }
 
-  handleWorldSync(data) {
-    const { payload, palette } = data;
+  handleWorldSyncChunk(data) {
+    const { payload, palette, progress, total, isLast } = data;
     if (!payload || !palette) return;
 
     const blocks = new Int32Array(payload);
     const count = blocks.length / 4;
 
-    console.log(`[Multiplayer] Applying binary sync for ${count} blocks...`);
+    this.game.notifications?.show('Multiplayer', `Syncing World: ${Math.round((progress/total)*100)}%`, 'info');
 
-    // Use a silent mutation pass to avoid broadcast loops
     for (let i = 0; i < blocks.length; i += 4) {
       const x = blocks[i];
       const y = blocks[i + 1];
@@ -191,11 +216,21 @@ export class MultiplayerManager {
       if (id) {
         this.game.world.addBlock(x, y, z, id, 'sync', true, {
           silent: true,
+          skipChunkDirtying: true,
+          skipNeighborDirtying: true,
+          skipRedstone: true,
+          skipGravity: true
         });
       }
     }
 
-    this.game.notifications?.show('Multiplayer', 'World Synchronized', 'success');
+    if (isLast) {
+      console.log('[Multiplayer] World sync complete. Rebuilding geometry...');
+      this.game.world.chunkManager.chunks.forEach(chunk => {
+        chunk.dirty = true;
+      });
+      this.game.notifications?.show('Multiplayer', 'World Link Stabilized', 'success');
+    }
   }
 
   handleMessage(peerId, payload) {
@@ -216,12 +251,27 @@ export class MultiplayerManager {
         break;
 
       case 'chat':
-        this.game.hud?.addChat?.(peerId, data.text);
+        this.game.chat?.addMessage(data.sender || peerId, data.text);
         break;
 
-      case 'world_sync_binary':
-        console.log('[Multiplayer] Received Binary World Sync from host');
-        this.handleWorldSync(data);
+      case 'world_sync_chunk':
+        this.handleWorldSyncChunk(data);
+        break;
+      
+      case 'world_sync_complete':
+        this.game.notifications?.show('Multiplayer', 'World Sync Complete', 'success');
+        break;
+
+      case 'world_data_sync':
+        if (Array.isArray(data)) {
+            data.forEach(([key, meta]) => {
+                this.game.world.state.blockData.set(key, meta);
+            });
+            // Force remesh to show new text/data
+            this.game.world.chunkManager.chunks.forEach(chunk => {
+                chunk.dirty = true;
+            });
+        }
         break;
     }
   }
@@ -254,10 +304,10 @@ export class MultiplayerManager {
     });
   }
 
-  broadcastBlockUpdate(x, y, z, id, type = 'add') {
+  broadcastBlockUpdate(x, y, z, id, type = 'add', data = null) {
     this.broadcast({
       type: 'block_update',
-      data: { x, y, z, id, operation: type },
+      data: { x, y, z, id, operation: type, meta: data },
     });
   }
 
@@ -274,6 +324,8 @@ export class MultiplayerManager {
     if (this.game.entities) {
       this.game.entities.spawnRemotePlayer?.(peerId, data.skinUsername);
     }
+
+    this.game.chat?.addMessage('SYSTEM', `${data.skinUsername} has entered the simulation.`, 'system');
   }
 
   updateRemotePlayer(peerId, data) {
@@ -290,18 +342,31 @@ export class MultiplayerManager {
   }
 
   removeRemotePlayer(peerId) {
+    const p = this.remotePlayers.get(peerId);
+    const name = p?.skin || peerId;
     this.remotePlayers.delete(peerId);
     if (this.game.entities) {
       this.game.entities.removeRemotePlayer?.(peerId);
     }
+    this.game.chat?.addMessage('SYSTEM', `${name} has left the simulation.`, 'system');
   }
 
   syncBlock(data) {
-    const { x, y, z, id, operation } = data;
+    const { x, y, z, id, operation, meta } = data;
     if (operation === 'add') {
-      this.game.world.addBlock(x, y, z, id, 'remote', true, { silent: true });
+      this.game.world.addBlock(x, y, z, id, 'remote', true, { silent: true, data: meta });
     } else {
       this.game.world.removeBlockAt(x, y, z, { silent: true });
     }
+  }
+
+  dispose() {
+    this.connections.forEach((conn) => conn.close());
+    this.connections.clear();
+    if (this.peer) {
+      this.peer.destroy();
+      this.peer = null;
+    }
+    this.roomId = null;
   }
 }

@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getGame } from '../UIManager';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, RefreshCw, Box, Hammer, Leaf, Cpu, Carrot, Palette, Trophy, Warehouse, Zap } from 'lucide-react';
+import { X, Search, RefreshCw, Box, Hammer, Leaf, Cpu, Carrot, Palette, Trophy, Warehouse, Zap, Shield } from 'lucide-react';
 import { ItemIcon } from './ItemIcon';
 import { RECIPE_BOOK } from '../../data/recipeBook';
 import { BLOCKS } from '../../data/blocks';
 import { AchievementScreen } from './AchievementScreen';
+import { CraftingSystem } from '../../engine/CraftingSystem';
 
 const MAX_STACK = 99;
+const craftingSystem = new CraftingSystem(RECIPE_BOOK);
 const CATEGORIES = [
   { id: 'Building', icon: Hammer, label: 'Construction' },
   { id: 'Natural', icon: Leaf, label: 'Natural' },
@@ -20,6 +22,7 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
   const game = getGame();
   const [inventory, setInventory] = useState(() => game?.gameState?.inventory ?? []);
   const [craftingGrid, setCraftingGrid] = useState(() => game?.gameState?.craftingGrid ?? []);
+  const [armor, setArmor] = useState(() => game?.gameState?.armor ?? [null, null, null, null]);
   const [carryItem, setCarryItem] = useState(null);
   const [activeTab, setActiveTab] = useState('STORAGE'); // STORAGE | ACHIEVEMENTS
   const [activeCategory, setActiveCategory] = useState('Building');
@@ -33,6 +36,7 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
     const handleUpdate = () => {
       setInventory([...game.gameState.inventory]);
       setCraftingGrid([...game.gameState.craftingGrid]);
+      setArmor([...game.gameState.armor]);
     };
     window.addEventListener('inventory-changed', handleUpdate);
     return () => window.removeEventListener('inventory-changed', handleUpdate);
@@ -53,31 +57,31 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
 
   // Crafting Logic (Enhanced for 3x3)
   const craftingResult = useMemo(() => {
-    const isCreative = game.gameState.mode === 'CREATIVE';
     const isWorkshop = uiMode === 'WORKSHOP';
     
     // In PLAYER mode, only indices [0, 1, 3, 4] are active (2x2)
-    const grid = isWorkshop 
-        ? craftingGrid 
-        : [0, 1, 3, 4].map(idx => craftingGrid[idx]);
-
-    const hasAny = grid.some(Boolean);
-    if (!hasAny) return null;
-
-    // Check recipes (CraftingSystem matches 3x3 logic)
-    for (const recipe of RECIPE_BOOK) {
-      if (recipe.type === 'shaped') {
-         // Pattern matching logic... (Simplified for now, CraftingSystem handles advanced)
-         // In a real impl, we'd use CraftingSystem.match(craftingGrid)
-      }
+    // However, the CraftingSystem expects a 3x3 grid (Array(9))
+    let grid = craftingGrid;
+    if (!isWorkshop) {
+        // Map 2x2 to 3x3 (top-left)
+        grid = new Array(9).fill(null);
+        grid[0] = craftingGrid[0];
+        grid[1] = craftingGrid[1];
+        grid[3] = craftingGrid[3];
+        grid[4] = craftingGrid[4];
     }
-    // Fallback to simplified 2x2 if in player mode and no 3x3 match
-    return null; 
+
+    const match = craftingSystem.match(grid);
+    return match ? match.result : null;
   }, [craftingGrid, uiMode]);
 
   const handleSlotClick = (idx, type, isRightClick = false) => {
-    const target = type === 'inventory' ? game.gameState.inventory : game.gameState.craftingGrid;
+    const target = type === 'inventory' ? game.gameState.inventory : type === 'crafting' ? game.gameState.craftingGrid : game.gameState.armor;
     const slotItem = target[idx];
+
+    // Armor-specific logic: Only allow armor in armor slots
+    if (type === 'armor' && carryItem && carryItem.kind !== 'armor') return;
+    // In a real impl, we'd also check if the armor slot matches (helmet to 0, etc.)
 
     if (!carryItem) {
       if (!slotItem) return;
@@ -121,6 +125,31 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
     window.dispatchEvent(new CustomEvent('inventory-changed'));
   };
 
+  const handleCraftingResultClick = () => {
+    if (!craftingResult) return;
+    if (carryItem && !sameItem(carryItem, craftingResult)) return;
+    if (carryItem && carryItem.count + craftingResult.count > MAX_STACK) return;
+
+    const newCarry = carryItem ? { ...carryItem, count: carryItem.count + craftingResult.count } : { ...craftingResult };
+    setCarryItem(newCarry);
+
+    // Consume ingredients
+    const isWorkshop = uiMode === 'WORKSHOP';
+    const grid = [...game.gameState.craftingGrid];
+    const indices = isWorkshop ? [0,1,2,3,4,5,6,7,8] : [0, 1, 3, 4];
+    
+    indices.forEach(i => {
+      if (grid[i]) {
+        grid[i].count--;
+        if (grid[i].count <= 0) grid[i] = null;
+      }
+    });
+
+    game.gameState.craftingGrid = grid;
+    setCraftingGrid(grid);
+    window.dispatchEvent(new CustomEvent('inventory-changed'));
+  };
+
   const handleCreativePick = (blockId) => {
       setCarryItem({ id: blockId, kind: 'block', count: 64 });
   };
@@ -132,7 +161,7 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
   };
 
   const renderSlot = (idx, type) => {
-    const item = type === 'inventory' ? inventory[idx] : craftingGrid[idx];
+    const item = type === 'inventory' ? inventory[idx] : type === 'crafting' ? craftingGrid[idx] : armor[idx];
     const isActive = type === 'inventory' && idx === game.gameState.selectedSlot;
 
     return (
@@ -142,9 +171,15 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
         onContextMenu={(e) => { e.preventDefault(); handleSlotClick(idx, type, true); }}
         className={`w-12 h-12 md:w-14 md:h-14 aspect-square flex-none rounded-sm flex items-center justify-center transition-all cursor-pointer relative
           ${isActive ? 'bg-white/20 border-2 border-arlo-blue shadow-[0_0_15px_rgba(0,195,227,0.2)]' : 'bg-black/40 border border-white/10 hover:bg-white/5'}
-          ${item ? '' : 'hover:border-white/20'}`}
+          ${item ? '' : 'hover:border-white/20'} group`}
       >
+        {!item && type === 'armor' && <Shield className="text-white/5" size={20} />}
         {item && <ItemIcon item={item} className="w-8 h-8 md:w-10 md:h-10" />}
+        {item && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/80 backdrop-blur-md rounded text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[100] border border-white/10 shadow-xl">
+            {item.name || item.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+          </div>
+        )}
       </div>
     );
   };
@@ -231,10 +266,18 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
                         <div className="flex-1 flex flex-col justify-center items-center p-8 bg-white/5 rounded-3xl border border-dashed border-white/5">
                             <Zap className="text-white/5 mb-4" size={48} />
                             <p className="text-[10px] font-bold text-white/10 uppercase tracking-[0.2em] text-center">
-                                Resource processing units active.<br/>Standby for fabrication.
+                                System Matrix Standby.<br/>Ready for Fabrication.
                             </p>
                         </div>
                     )}
+
+                    {/* Armor Slots */}
+                    <div className="flex flex-col gap-3 items-center">
+                        <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Defense</span>
+                        <div className="flex flex-col gap-2">
+                            {Array.from({ length: 4 }, (_, i) => renderSlot(i, 'armor'))}
+                        </div>
+                    </div>
 
                     {/* Right: Crafting Table Area */}
                     <div className="flex flex-col gap-3 items-center">
@@ -247,9 +290,13 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
                                 : [0, 1, 3, 4].map(i => renderSlot(i, 'crafting'))
                             }
                         </div>
-                        <div className="w-14 h-14 mt-4 bg-white/5 border border-arlo-blue/20 rounded-xl flex items-center justify-center shadow-lg relative">
+                        <div 
+                            onClick={handleCraftingResultClick}
+                            className={`w-14 h-14 mt-4 bg-white/5 border rounded-xl flex items-center justify-center shadow-lg relative transition-all
+                                ${craftingResult ? 'border-arlo-blue cursor-pointer hover:bg-arlo-blue/10 scale-105' : 'border-white/5 cursor-default'}`}
+                        >
                              {craftingResult && <ItemIcon item={craftingResult} className="w-10 h-10" />}
-                             <div className="absolute -top-1 -right-1 w-3 h-3 bg-arlo-blue rounded-full animate-pulse" />
+                             {craftingResult && <div className="absolute -top-1 -right-1 w-3 h-3 bg-arlo-blue rounded-full animate-pulse" />}
                         </div>
                     </div>
                 </div>

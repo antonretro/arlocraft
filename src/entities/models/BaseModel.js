@@ -126,4 +126,12 @@ export class BaseModel {
   animateWalking(t) {
     // Override in specific models to animate legs/arms
   }
+
+  dispose() {
+    this.group.clear();
+    if (this.material) this.material.dispose();
+    Object.values(this.parts).forEach((part) => {
+      if (part.geometry) part.geometry.dispose();
+    });
+  }
 }

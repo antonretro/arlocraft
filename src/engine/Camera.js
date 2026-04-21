@@ -85,4 +85,20 @@ export class Camera {
         this.screenShake = Math.max(0, this.screenShake - delta * this.shakeDecay);
     }
   }
+
+  dispose() {
+    if (this.instance.parent) {
+      this.instance.parent.remove(this.instance);
+    }
+    this.viewmodelGroup.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach(m => m.dispose());
+        } else {
+          obj.material.dispose();
+        }
+      }
+    });
+  }
 }

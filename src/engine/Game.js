@@ -22,6 +22,8 @@ export class Game {
     this._camLook = new THREE.Vector3();
     this.lastKnownPosition = new THREE.Vector3(0, 70, 0);
 
+    this.handlers = {};
+
     // Initial Legacy Bridge
     this._currentScreen = 'loading';
     this.ui = {
@@ -37,8 +39,7 @@ export class Game {
       showSettings: (v) => this.ui.setMenuScreen(v ? 'settings' : (this.hasStarted ? 'pause' : 'title')),
     };
 
-    // Bootstrap
-    EngineBootstrap.init(this);
+    // Bootstrap initialized in init()
     this.simulation = new SimulationManager(this);
 
     // Startup Configuration
@@ -50,8 +51,6 @@ export class Game {
 
     this.init().catch(e => console.error('[ArloCraft] Init Failure:', e));
   }
-
-
 
   saveSettings() {
     this.settingsManager.save();
@@ -117,7 +116,7 @@ export class Game {
   }
 
   startGame({ skipSeedApply = false, preserveCurrentMode = false } = {}) {
-    this.renderer.setVisible(true); // Show 3D world as we start generating/loading
+    this.renderer.setVisible(true);
     if (!skipSeedApply) {
       const seedInput = document.getElementById('seed-input');
       if (seedInput?.value.trim()) this.world.setSeed(seedInput.value.trim());
@@ -138,7 +137,7 @@ export class Game {
     this.gameState.craftingGrid = Array(9).fill(null);
 
     if (this.physics.isReady) {
-      this.physics.resetPlayer(0, 160, 0); // Physics will resolve safe spawn
+      this.physics.resetPlayer(0, 160, 0);
     }
 
     this.hasStarted = true;
@@ -151,7 +150,6 @@ export class Game {
       : this.input.setPointerLock();
     this.helpPanel.setState('playing');
 
-    // Auto-init multiplayer on world start so a Join Code is ready
     if (this.multiplayer && !this.multiplayer.peer) {
       this.multiplayer.init();
     }
@@ -230,11 +228,18 @@ export class Game {
     this.cancelMining();
     this.showPause(true);
     this.ui.showHUD(false);
-    this.world.visuals.updateHover(0, 0, 0, false);
-    this.world.visuals.updatePlacement(0, 0, 0, false);
-    this.helpPanel.setState('paused');
-    this.touchControls?.show(false);
-    if (document.pointerLockElement) document.exitPointerLock();
+    
+    if (this.world?.visuals) {
+      this.world.visuals.updateHover?.(0, 0, 0, false);
+      this.world.visuals.updatePlacement?.(0, 0, 0, false);
+    }
+    
+    this.helpPanel?.setState?.('paused');
+    this.touchControls?.show?.(false);
+    
+    if (document.pointerLockElement) {
+        document.exitPointerLock();
+    }
   }
 
   resumeGame() {
@@ -299,7 +304,6 @@ export class Game {
       return;
     }
 
-    // Default case: auto-pause on lock lost if playing
     if (this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen) {
        this.pauseGame();
     }
@@ -321,7 +325,7 @@ export class Game {
   }
 
   returnToTitle() {
-    this.renderer.setVisible(false); // Hide 3D world again
+    this.renderer.setVisible(false);
     this.hasStarted = false;
     this.isPaused = false;
     this.gameState.setPaused(false);
@@ -330,7 +334,6 @@ export class Game {
     this.showTitle(true);
     this.ui.showHUD(false);
     
-    // Recovery: strictly hide all selector visuals
     if (this.world?.visuals) {
       this.world.visuals.updateHover(0, 0, 0, false);
       this.world.visuals.updatePlacement(0, 0, 0, false);
@@ -359,8 +362,10 @@ export class Game {
     if (input) input.value = String(seed);
     this.audio.play('ui-click');
   }
+
   async init() {
     console.log('[ArloCraft] Engine Init...');
+    await EngineBootstrap.init(this);
     await this.resourceManager.ready();
     await this.world.init();
     await this.physics.init();
@@ -382,28 +387,30 @@ export class Game {
     this.onResize();
     this.animate();
     
-    // Stability: Auto-pause on tab switch/blur to prevent engine drift/unloading
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden && this.hasStarted && !this.isPaused) {
+    this.handlers.onVisibilityChange = () => {
+      if (document.hidden && this.hasStarted && !this.isPaused && !this.multiplayer?.isConnected()) {
         this.pauseGame();
       }
-    });
-    window.addEventListener('blur', () => {
-      if (this.hasStarted && !this.isPaused) {
+    };
+    this.handlers.onBlur = () => {
+      if (this.hasStarted && !this.isPaused && !this.multiplayer?.isConnected()) {
         this.pauseGame();
       }
-    });
+    };
+    this.handlers.onResize = () => this.onResize();
 
-    window.addEventListener('resize', () => this.onResize());
+    document.addEventListener('visibilitychange', this.handlers.onVisibilityChange);
+    window.addEventListener('blur', this.handlers.onBlur);
+    window.addEventListener('resize', this.handlers.onResize);
     
     this.ui.setMenuScreen('title');
     this.helpPanel.setState('title');
   }
 
   animate(timestamp = 0) {
-    requestAnimationFrame((ts) => this.animate(ts));
+    if (this._destroyed) return;
+    this._animationId = requestAnimationFrame((ts) => this.animate(ts));
 
-    // FPS cap Logic
     const targetMs = 1000 / (this.settings.fpsCap || 60);
     const elapsed = timestamp - (this._lastFrameTs || 0);
     if (elapsed < targetMs - 1) return;
@@ -415,7 +422,6 @@ export class Game {
     this.profiler.update(this.renderer.instance);
     this.world.blockRegistry.updateShaderMaterials(this.clock.getElapsed());
 
-    // Main Simulation & Interaction Flow
     const canSimulate = this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen;
     this.input.update();
 
@@ -425,10 +431,8 @@ export class Game {
       this.actionSystem.update(delta);
     }
 
-    // Unify all world, survival, and UI updates in the Simulation Manager
     this.simulation.update(delta);
 
-    // Final Rendering Sync
     const playerPos = this.getPlayerPosition();
     const playerVel = this.physics.velocity;
     const speed = Math.sqrt(playerVel.x * playerVel.x + playerVel.z * playerVel.z);
@@ -463,7 +467,6 @@ export class Game {
 
     this.hand.update(delta, this.player.bobCycle, speed > 0.1);
 
-    // Sync held item visuals
     const selected = this.gameState.getSelectedItem();
     if (this.hand.lastHeldId !== selected?.id) {
       this.hand.setHeldItem(selected?.id, this.world.blockRegistry, selected);
@@ -535,7 +538,6 @@ export class Game {
     return Math.max(2, Math.min(cap, requested));
   }
 
-  // --- RECONCILED DELEGATES & UI PROXIES ---
   cancelMining() { 
     if (this.world?.resetMiningProgress) this.world.resetMiningProgress(); 
   }
@@ -616,5 +618,26 @@ export class Game {
 
   shakeCamera(intensity, duration = 0.5, frequency = 12) { 
     this.camera?.shake?.(intensity, duration, frequency); 
+  }
+
+  cancelMining() {
+    this.world.resetMiningProgress();
+  }
+
+  dispose() {
+    this._destroyed = true;
+    if (this._animationId) cancelAnimationFrame(this._animationId);
+
+    document.removeEventListener('visibilitychange', this.handlers.onVisibilityChange);
+    window.removeEventListener('blur', this.handlers.onBlur);
+    window.removeEventListener('resize', this.handlers.onResize);
+
+    if (this.input?.dispose) this.input.dispose();
+    if (this.multiplayer?.dispose) this.multiplayer.dispose();
+    if (this.entities?.reset) this.entities.reset();
+    if (this.particles?.clear) this.particles.clear();
+    if (this.world?.dispose) this.world.dispose();
+    if (this.renderer?.dispose) this.renderer.dispose();
+    if (this.camera?.dispose) this.camera.dispose();
   }
 }

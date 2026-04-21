@@ -171,10 +171,23 @@ export function shouldPlaceTree(noise, x, z, height, biome, seed) {
   if (height <= SEA_LEVEL + 1) return false;
   const density = biome.treeDensity ?? 0.05;
   if (density <= 0) return false;
+
+  // Jittered Grid Spacing: Ensure trees are at least 4-5 blocks apart
+  const spacing = 5;
+  const gx = Math.floor(x / spacing);
+  const gz = Math.floor(z / spacing);
+  
+  // Deterministic jitter for this cell
+  const jx = Math.floor(hash2D(gx, gz, seed + 102) * spacing);
+  const jz = Math.floor(hash2D(gx, gz, seed + 204) * spacing);
+  
+  if (x !== gx * spacing + jx || z !== gz * spacing + jz) return false;
+
   const clumpMask = getClumpedDensityMask(noise, x, z, 'trees', seed);
   if (clumpMask < 0.5) return false;
-  const n = valueNoise2D(noise, x, z, 1.8, seed + 555);
-  return n < density * 1.5;
+  
+  const n = hash2D(x, z, seed + 555);
+  return n < density * 3.5; // Adjusted for grid sparsity
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +257,9 @@ export function addGroundLife(
   setPlannedPlant,
   surfaceId
 ) {
-  if (surfaceId === 'snow_block') return;
+  if (!surfaceId) return; // Must know what we're spawning on
+  const validSoil = ['grass_block', 'mycelium', 'podzol', 'moss_block', 'mossy_cobblestone', 'dirt'];
+  if (!validSoil.includes(surfaceId)) return;
   const lifeList = BIOME_GROUND_LIFE[biome.id] || [];
   if (lifeList.length === 0) return;
 

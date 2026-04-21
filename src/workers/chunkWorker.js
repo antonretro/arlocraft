@@ -403,6 +403,7 @@ const api = {
           terrainHeight > waterLevel
         ) {
           if (terrainHeight >= startY && terrainHeight < endY) {
+            // First call for non-pair blocks (setPlannedBlock)
             addGroundLife(
               planMap,
               changedMap,
@@ -412,17 +413,10 @@ const api = {
               biome,
               workerNoise,
               currentSeed,
-              setPlannedBlock
+              setPlannedBlock,
+              surfaceId
             );
-          }
-        }
-        if (
-          !surfaceCarved &&
-          !inSpawnZone &&
-          !isHighAltitude &&
-          terrainHeight > waterLevel
-        ) {
-          if (terrainHeight >= startY && terrainHeight < endY) {
+            // Second call for pair-block support (setPlannedPlant)
             addGroundLife(
               planMap,
               changedMap,

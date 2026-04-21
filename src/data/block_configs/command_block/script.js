@@ -1,12 +1,21 @@
-import '../../../blocks/handlers/CommandBlockHandler.js';
+export function onInteract(game, x, y, z) {
+  const key = game.world.coords.getKey(x, y, z);
+  const data = game.world.state.blockData.get(key) || { command: "" };
+  
+  window.dispatchEvent(new CustomEvent('open-command-editor', { 
+    detail: { x, y, z, command: data.command } 
+  }));
+  return true;
+}
 
-export const handlerIds = ['command_block'];
-export const blockTags = ['redstone', 'interactive', 'scripting'];
-export const blockParameters = {
-  interactive: true,
-  ui: 'command_block',
-  redstoneTriggerable: true,
-};
-export const blockMeta = {
-  docsSummary: 'Interactive automation block that executes script commands.',
-};
+export function onRedstoneUpdate(game, x, y, z, power) {
+  if (power > 0) {
+    const key = game.world.coords.getKey(x, y, z);
+    const data = game.world.state.blockData.get(key);
+    if (data?.command) {
+        game.commandManager?.execute(data.command);
+    }
+  }
+}
+
+export const handlerIds = ['onInteract', 'onRedstoneUpdate'];

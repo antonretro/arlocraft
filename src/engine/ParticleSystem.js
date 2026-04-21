@@ -113,6 +113,11 @@ export class ParticleSystem {
     for (const p of this.pool) p.dispose();
     this.pool = [];
   }
+
+  dispose() {
+    this.clear();
+    if (this.geometry) this.geometry.dispose();
+  }
 }
 
 class Particle {

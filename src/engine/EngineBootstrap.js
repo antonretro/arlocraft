@@ -11,7 +11,10 @@ import { DayNightSystem } from './DayNightSystem.js';
 import { HorizonService } from '../world/visuals/HorizonService.js';
 import { ParticleSystem } from './ParticleSystem.js';
 import { ScriptSystem } from './ScriptSystem.js';
+import { BlockScriptManager } from './BlockScriptManager.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
+import { ChatSystem } from './ChatSystem.js';
+import { CommandManager } from './CommandManager.js';
 import { Input } from './Input.js';
 import { ActionSystem } from './ActionSystem.js';
 import { NotificationSystem } from './NotificationSystem.js';
@@ -38,7 +41,7 @@ import { FEATURES } from '../data/features.js';
  * Moves the "God Object" setup logic out of Game.js.
  */
 export class EngineBootstrap {
-  static init(game) {
+  static async init(game) {
     console.log('[ArloCraft] Bootstrapping Engine...');
 
     // 1. Data & State
@@ -85,6 +88,10 @@ export class EngineBootstrap {
 
     // 4. Gameplay Systems
     game.notifications = new NotificationSystem();
+    game.chat = new ChatSystem(game);
+    game.blockScripts = new BlockScriptManager(game);
+    await game.blockScripts.init();
+    
     game.multiplayer = new MultiplayerManager(game);
     game.particles = new ParticleSystem(game);
     game.scripts = new ScriptSystem(game);

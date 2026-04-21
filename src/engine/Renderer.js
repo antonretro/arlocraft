@@ -39,9 +39,10 @@ export class Renderer {
     this.setupWeatherEffects();
     this.setupPostProcessing();
 
-    window.addEventListener('resize', () => {
+    this.onResizeHandler = () => {
       this.setSize(window.innerWidth, window.innerHeight);
-    });
+    };
+    window.addEventListener('resize', this.onResizeHandler);
   }
 
   syncViewportSize(width = window.innerWidth, height = window.innerHeight) {
@@ -61,9 +62,6 @@ export class Renderer {
     }
   }
 
-  /**
-   * Controls the visibility of the 3D rendering canvas.
-   */
   setVisible(visible) {
     if (this.instance.domElement) {
       this.instance.domElement.style.display = visible ? 'block' : 'none';
@@ -84,17 +82,15 @@ export class Renderer {
     this._initPromise = Promise.resolve();
     console.log('[ArloCraft] Using WebGL2 renderer (Stability Mode)');
 
-    // Update DOM if app exists
     const appElem = document.getElementById('app');
     if (appElem) {
-      // Remove existing canvas if any
       const existing = appElem.querySelector('canvas');
       if (existing && existing !== this.instance.domElement) {
         existing.remove();
       }
       if (this.instance.domElement.parentNode !== appElem) {
         appElem.appendChild(this.instance.domElement);
-        this.instance.domElement.style.display = 'none'; // Hidden until startGame
+        this.instance.domElement.style.display = 'none';
       }
     }
   }
@@ -156,22 +152,18 @@ export class Renderer {
                 
                 void main() {
                     float h = vHeight;
-                    // Improved gradient: use a sigmoidal mix for more natural sky transitions
                     float factor = smoothstep(-0.05, 0.65, h); 
                     vec3 sky = mix(bottom, top, factor);
                     
-                    // Atmospheric Scattering / Sun Glow
                     vec3 normWorld = normalize(vWorldPos);
                     float sunDot = max(0.0, dot(normWorld, normalize(sunPos)));
                     float sunGlow = pow(sunDot, 64.0) * 0.45 + pow(sunDot, 8.0) * 0.15;
                     sky += horizon * sunGlow * horizonStrength;
 
-                    // Horizon glow band: Use smoother transitions
                     float horizonBand = clamp(1.0 - abs(h) * 2.5, 0.0, 1.0);
                     horizonBand = smoothstep(0.0, 1.0, pow(horizonBand, 4.0)) * horizonStrength;
                     sky = mix(sky, horizon, horizonBand);
                     
-                    // Darken slightly below horizon but keep it smooth
                     if (h < 0.0) {
                         float depthFactor = clamp(-h * 2.0, 0.0, 0.4);
                         sky = mix(bottom, vec3(0.02, 0.04, 0.08), depthFactor);
@@ -212,8 +204,6 @@ export class Renderer {
                     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
                     gl_PointSize = 1.4 * (300.0 / -mvPosition.z);
                     gl_Position = projectionMatrix * mvPosition;
-                    
-                    // Per-star twinkle phase
                     vTwinkle = sin(uTime * 3.0 + position.x * 10.0 + position.z * 10.0) * 0.5 + 0.5;
                 }
             `,
@@ -251,7 +241,6 @@ export class Renderer {
     });
     this.moonGlow = new THREE.Mesh(moonGlowGeo, moonGlowMat);
     this.scene.add(this.moonGlow);
-    this.scene.add(this.moonGlow);
   }
 
   setupPostProcessing() {
@@ -260,12 +249,11 @@ export class Renderer {
       this.renderPass = new RenderPass(this.scene, this._lastCamera || new THREE.PerspectiveCamera());
       this.composer.addPass(this.renderPass);
 
-      // World Class: Luminous Bloom for torches/sun
       this.bloomPass = new UnrealBloomPass(
         new THREE.Vector2(window.innerWidth, window.innerHeight),
-        0.22, // strength
-        0.4,  // radius
-        0.85  // threshold
+        0.22,
+        0.4,
+        0.85
       );
       this.composer.addPass(this.bloomPass);
 
@@ -283,7 +271,6 @@ export class Renderer {
     cloudsTexture.magFilter = THREE.LinearFilter;
     cloudsTexture.minFilter = THREE.LinearFilter;
 
-    // Layer 1: Low-altitude fluffy clouds
     const cloudGeo1 = new THREE.PlaneGeometry(8000, 8000, 1, 1);
     cloudGeo1.rotateX(-Math.PI / 2);
     const cloudMat1 = new THREE.ShaderMaterial({
@@ -317,7 +304,6 @@ export class Renderer {
     this.cloudPlane1.position.y = 210;
     this.scene.add(this.cloudPlane1);
 
-    // Layer 2: High-altitude wispy clouds (Parallax)
     const cloudGeo2 = new THREE.PlaneGeometry(8000, 8000, 1, 1);
     cloudGeo2.rotateX(-Math.PI / 2);
     const cloudMat2 = new THREE.ShaderMaterial({
@@ -354,7 +340,6 @@ export class Renderer {
     this.cloudLayer1 = { mesh: this.cloudPlane1, mat: cloudMat1, speed: 0.0018 };
     this.cloudLayer2 = { mesh: this.cloudPlane2, mat: cloudMat2, speed: 0.0006 };
     
-    // Compatibility aliases for settings/qualityTier logic
     this.cloudPlane = this.cloudPlane1;
     this.cloudMat = cloudMat1;
   }
@@ -390,7 +375,6 @@ export class Renderer {
     playerPos = null,
     forcedDepthBlend = null
   ) {
-    // 1. MUST Update sun tracking position first so it follows player regardless of daylight change
     if (playerPos) {
       const sx = Math.floor(playerPos.x / 4) * 4;
       const sz = Math.floor(playerPos.z / 4) * 4;
@@ -399,16 +383,13 @@ export class Renderer {
       this.sun.target.updateMatrixWorld();
     }
 
-    // Only update shadow map if daylight actually moves
     if (Math.abs(this.daylight - daylight) > 0.001) {
       this.instance.shadowMap.needsUpdate = true;
     }
     
     this.daylight = daylight;
-    
     const clamped = Math.max(0, Math.min(1, daylight));
 
-    // Atmosphere logic
     let state = 'DAY';
     if (daylight < 0.24) state = 'NIGHT';
     else if (daylight < 0.45) {
@@ -422,7 +403,6 @@ export class Renderer {
     const rainFactor = Math.max(0, Math.min(1, this.weatherIntensity || 0));
     const stormFactor = this.weatherType === 'storm' ? rainFactor : 0;
 
-    // Apply depth-based darkening
     let depthBlend = forcedDepthBlend !== null ? forcedDepthBlend : 0;
     if (forcedDepthBlend === null && playerPos) {
       const surfaceY = 64;
@@ -477,7 +457,6 @@ export class Renderer {
       (1 + rainFactor * 0.35 + stormFactor * 0.2) *
       (this.fogDensityScale || 1.0);
 
-    // Enforce visibility floor
     const intensityFactor = (0.4 + clamped * 1.1) * (1 - rainFactor * 0.22);
     this.sun.intensity = intensityFactor;
     this.sun.color.copy(sunCol);
@@ -491,7 +470,6 @@ export class Renderer {
       this.ambientFill.color.copy(sunCol).lerp(new THREE.Color(0xffffff), 0.35);
     }
 
-    // Center sun shadow camera on player for infinite coverage
     if (playerPos) {
       const sx = Math.floor(playerPos.x / 4) * 4;
       const sz = Math.floor(playerPos.z / 4) * 4;
@@ -500,7 +478,6 @@ export class Renderer {
       this.sun.target.updateMatrixWorld();
     }
 
-    // Stars & Moon Visibility
     if (this.stars) {
       const starOp = Math.max(0, (0.35 - daylight) * 2.5) * (1 - rainFactor * 0.75);
       if (this.stars.material.uniforms && this.stars.material.uniforms.opacity) {
@@ -521,15 +498,12 @@ export class Renderer {
 
   setDaylightLevel(daylight) {
     this.daylight = Math.max(0, Math.min(1, daylight));
-
-    // Synced with updateEnvironmentLighting logic
     this.sun.intensity = 0.4 + this.daylight * 1.1;
     this.hemiLight.intensity = 0.8 + this.daylight * 0.6;
     if (this.ambientFill) {
       this.ambientFill.intensity = 0.35 + this.daylight * 0.2;
     }
 
-    // Sky colors mix - use THREE.Color to wrap the hex constants from RenderConfig
     const dayTop = new THREE.Color(ATMOSPHERIC_COLORS.DAY.top);
     const dayBottom = new THREE.Color(ATMOSPHERIC_COLORS.DAY.bottom);
     const nightTop = new THREE.Color(ATMOSPHERIC_COLORS.NIGHT.top);
@@ -584,7 +558,6 @@ export class Renderer {
   setUnderwaterState(submerged) {
     this.submerged = Boolean(submerged);
     if (submerged) {
-      // Deep teal-blue underwater fog
       this.scene.fog.color.setHex(0x0a3d5a);
       this.scene.background.setHex(0x061e2e);
       if (this.skyDome) this.skyDome.visible = false;
@@ -597,13 +570,11 @@ export class Renderer {
   }
 
   render(camera) {
-    this._lastCamera = camera; // exposed for DayNightSystem sun/moon positioning
+    this._lastCamera = camera;
     if (this.skyDome) this.skyDome.position.copy(camera.position);
     if (this.stars) this.stars.position.copy(camera.position);
 
-    // Moon Billboarding: face the camera
     if (this.moonMesh && this.moonGlow) {
-      // Position moon in the sky distance
       const moonDir = new THREE.Vector3(0, 0.45, -1).normalize();
       const moonDist = 400;
       this.moonMesh.position
@@ -623,7 +594,6 @@ export class Renderer {
     );
     this.lastCloudUpdateMs = now;
 
-    // Time synchronization for shaders: with absolute safety checks
     try {
       if (this.skyDome?.material?.uniforms?.uTime) {
         this.skyDome.material.uniforms.uTime.value = timeSec;
@@ -631,11 +601,8 @@ export class Renderer {
       if (this.stars?.material?.uniforms?.uTime) {
         this.stars.material.uniforms.uTime.value = timeSec;
       }
-    } catch (e) {
-      // Shaders not ready yet
-    }
+    } catch (e) {}
 
-    // Scroll cloud layers with Parallax: using ultra-safe access
     if (this.cloudLayer1?.mat?.uniforms?.uOffset) {
       this.cloudLayer1.mat.uniforms.uOffset.value.x += delta * (this.cloudLayer1.speed || 0.001);
       this.cloudLayer1.mat.uniforms.cloudOpacity.value =
@@ -726,7 +693,7 @@ export class Renderer {
       this.sun.shadow.mapSize.set(shadowRes, shadowRes);
       this.instance.shadowMap.type = this.qualityTier === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
       this.sun.shadow.map?.dispose();
-      this.sun.shadow.map = null; // Forces re-allocation
+      this.sun.shadow.map = null;
     }
 
     this.syncViewportSize(window.innerWidth, window.innerHeight);
@@ -747,12 +714,10 @@ export class Renderer {
   applyFromSettings(settings) {
     if (!this.instance) return;
 
-    // Resolution Scaling
     if (settings.resolutionScale !== undefined) {
       this.setResolutionScale(settings.resolutionScale);
     }
 
-    // Cloud Opacity
     if (settings.cloudOpacity !== undefined) {
       this.baseCloudOpacity = settings.cloudOpacity;
       if (this.cloudMat?.uniforms?.cloudOpacity) {
@@ -766,7 +731,6 @@ export class Renderer {
       }
     }
 
-    // Shadow Management
     const shadows = Boolean(settings.shadowsEnabled);
     if (this.instance.shadowMap) {
       this.instance.shadowMap.enabled = shadows;
@@ -783,5 +747,36 @@ export class Renderer {
 
   async waitForInit() {
     await this._initPromise;
+  }
+
+  dispose() {
+    window.removeEventListener('resize', this.onResizeHandler);
+    
+    // Recursive disposal of scene
+    this.scene.traverse((object) => {
+      if (object.isMesh || object.isPoints || object.isLine) {
+        if (object.geometry) object.geometry.dispose();
+        if (object.material) {
+          if (Array.isArray(object.material)) {
+            object.material.forEach(m => m.dispose());
+          } else {
+            object.material.dispose();
+          }
+        }
+      }
+    });
+
+    if (this.composer) {
+      this.composer.passes.forEach(pass => {
+        if (pass.dispose) pass.dispose();
+      });
+    }
+
+    if (this.instance) {
+      this.instance.dispose();
+      if (this.instance.domElement && this.instance.domElement.parentNode) {
+        this.instance.domElement.parentNode.removeChild(this.instance.domElement);
+      }
+    }
   }
 }

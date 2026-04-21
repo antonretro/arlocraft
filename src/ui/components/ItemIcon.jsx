@@ -82,10 +82,25 @@ export const ItemIcon = React.memo(({ item, className = "" }) => {
           ? 'tint-grass'
           : '';
 
+      const isStair = normalizedId.includes('_stairs');
+      const isSlab = normalizedId.includes('_slab');
+      const isMultiFrame = normalizedId === 'lantern' || normalizedId === 'command_block' || normalizedId.includes('door') || normalizedId.includes('active') || normalizedId.includes('lamp');
+
       return (
         <div
-          className={`item-icon block-sprite-icon ${tintClass} ${className}`}
-          style={{ backgroundImage: `url('${blockTexture}')` }}
+          className={`item-icon block-sprite-icon ${tintClass} ${className} relative overflow-hidden`}
+          style={{ 
+            backgroundImage: `url('${blockTexture}')`,
+            backgroundSize: isMultiFrame ? '100% auto' : 'contain',
+            backgroundPosition: isMultiFrame ? 'top' : 'center',
+            clipPath: isStair ? 'polygon(0 0, 50% 0, 50% 50%, 100% 50%, 100% 100%, 0 100%)' : 'none',
+            height: isSlab ? '50%' : '100%',
+            bottom: 0,
+            position: isSlab ? 'absolute' : 'relative',
+            left: isSlab ? '0' : 'auto',
+            right: isSlab ? '0' : 'auto',
+            margin: isSlab ? 'auto' : '0'
+          }}
         >
           {renderDurability()}
           {item.count > 1 && <span className="item-count">{item.count}</span>}

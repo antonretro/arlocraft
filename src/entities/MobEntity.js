@@ -500,5 +500,18 @@ export class MobEntity {
     // Terminate the other entity
     other.dead = true;
     this.game.renderer.scene.remove(other.mesh);
+    if (other.dispose) other.dispose();
+  }
+
+  dispose() {
+    if (this.model?.dispose) {
+      this.model.dispose();
+    } else {
+      if (this.geometry) this.geometry.dispose();
+      if (this.material) this.material.dispose();
+    }
+    if (this.mesh?.parent) {
+      this.mesh.parent.remove(this.mesh);
+    }
   }
 }

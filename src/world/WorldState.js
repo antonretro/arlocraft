@@ -5,6 +5,7 @@ export class WorldState {
   constructor() {
     this.blockMap = new Map();
     this.blockOwners = new Map();
+    this.blockData = new Map(); // Metadata for blocks (e.g. sign text, command block commands)
     this.changedBlocks = new Map();
 
     this.waterMeshes = new Set();

@@ -457,6 +457,7 @@ export class EntityManager {
             // Clean cleanup
             this.game.renderer.scene.remove(entity.mesh);
         }
+        if (entity.dispose) entity.dispose();
         return;
       }
 

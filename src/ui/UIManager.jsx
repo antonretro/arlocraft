@@ -4,6 +4,8 @@ import { MainMenu } from './components/MainMenu';
 import { HUD } from './components/HUD';
 import { PauseMenu } from './components/PauseMenu';
 import { Inventory } from './components/Inventory';
+import { SignEditor } from './components/SignEditor';
+import { CommandEditor } from './components/CommandEditor';
 import { MainMenuPanorama } from './components/MainMenuPanorama';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../css/index.css';
@@ -20,6 +22,8 @@ const UIApp = () => {
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [hudVisible, setHudVisible] = useState(false);
   const [uiMode, setUiMode] = useState('PLAYER');
+  const [signData, setSignData] = useState(null);
+  const [commandBlockData, setCommandBlockData] = useState(null);
   const panoRef = React.useRef(null);
   const panoInstance = React.useRef(null);
 
@@ -66,6 +70,16 @@ const UIApp = () => {
         }
     };
 
+    const handleOpenSignEditor = (e) => {
+        setSignData(e.detail);
+        document.exitPointerLock?.();
+    };
+
+    const handleOpenCommandEditor = (e) => {
+        setCommandBlockData(e.detail);
+        document.exitPointerLock?.();
+    };
+
     const handleKeyDown = (e) => {
         if (e.code === 'KeyE' && screen === 'ingame' && !isPaused) {
             game.gameState.toggleInventory();
@@ -80,6 +94,8 @@ const UIApp = () => {
     window.addEventListener('ui-set-pause', handlePause);
     window.addEventListener('ui-set-hud', handleHud);
     window.addEventListener('inventory-toggle', handleInventory);
+    window.addEventListener('open-sign-editor', handleOpenSignEditor);
+    window.addEventListener('open-command-editor', handleOpenCommandEditor);
     window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
@@ -87,6 +103,8 @@ const UIApp = () => {
       window.removeEventListener('ui-set-pause', handlePause);
       window.removeEventListener('ui-set-hud', handleHud);
       window.removeEventListener('inventory-toggle', handleInventory);
+      window.removeEventListener('open-sign-editor', handleOpenSignEditor);
+      window.removeEventListener('open-command-editor', handleOpenCommandEditor);
       window.removeEventListener('keydown', handleKeyDown, true);
     };
   }, []);
@@ -159,6 +177,26 @@ const UIApp = () => {
               onClose={() => game.gameState.toggleInventory()} 
             />
           </motion.div>
+        )}
+
+        {signData && (
+          <SignEditor 
+            x={signData.x}
+            y={signData.y}
+            z={signData.z}
+            initialText={signData.text}
+            onClose={() => setSignData(null)}
+          />
+        )}
+
+        {commandBlockData && (
+          <CommandEditor 
+            x={commandBlockData.x}
+            y={commandBlockData.y}
+            z={commandBlockData.z}
+            initialCommand={commandBlockData.command}
+            onClose={() => setCommandBlockData(null)}
+          />
         )}
       </AnimatePresence>
 

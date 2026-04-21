@@ -11,6 +11,7 @@ export class GameState {
     this.inventory = new Array(36).fill(null);
     this.selectedSlot = 0;
     this.offhand = null;
+    this.armor = new Array(4).fill(null); // 0: Helmet, 1: Chest, 2: Legs, 3: Boots
 
     // UI State
     this.isInventoryOpen = false;
@@ -170,6 +171,7 @@ export class GameState {
       inventory: this.inventory,
       selectedSlot: this.selectedSlot,
       offhand: this.offhand,
+      armor: this.armor,
       discoveredBlocks: Array.from(this.discoveredBlocks),
       discoveredRecipes: Array.from(this.discoveredRecipes),
       unlockedAchievements: Array.from(this.unlockedAchievements),
@@ -190,6 +192,7 @@ export class GameState {
     this.inventory = data.inventory || new Array(36).fill(null);
     this.selectedSlot = data.selectedSlot ?? 0;
     this.offhand = data.offhand ?? null;
+    this.armor = data.armor || new Array(4).fill(null);
 
     if (data.discoveredBlocks)
       this.discoveredBlocks = new Set(data.discoveredBlocks);

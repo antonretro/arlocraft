@@ -129,11 +129,12 @@ export const HUD = () => {
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
         </div>
 
-        {/* Target Block Name (NEW) */}
-        <div className="h-6 -mt-2 mb-1 flex items-center justify-center">
-            <AnimatePresence>
-                {targetBlock && targetBlock.name && (
+        {/* Target Block & Active Item (NEW) */}
+        <div className="h-6 -mt-2 mb-1 flex items-center justify-center relative">
+            <AnimatePresence mode="wait">
+                {targetBlock && targetBlock.name ? (
                     <motion.div
+                        key="target"
                         initial={{ opacity: 0, scale: 0.9, y: 5 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 1.1, y: -5 }}
@@ -141,6 +142,18 @@ export const HUD = () => {
                     >
                         {targetBlock.name}
                     </motion.div>
+                ) : (
+                    inventory[activeSlot] && (
+                        <motion.div
+                            key="held"
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 0.6, y: 0 }}
+                            exit={{ opacity: 0, y: -5 }}
+                            className="premium-text !text-white !text-[9px] uppercase tracking-[0.2em]"
+                        >
+                            {inventory[activeSlot].name || inventory[activeSlot].id.replace(/_/g, ' ')}
+                        </motion.div>
+                    )
                 )}
             </AnimatePresence>
         </div>
@@ -163,11 +176,114 @@ export const HUD = () => {
         </div>
       </div>
 
+      {/* Chat Interface (NEW) */}
+      <ChatBox game={game} />
+
       {/* Centered Crosshair */}
       <div id="crosshair" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 border-2 border-white/40 rounded-full" />
 
       {/* Modern Debug Overlay (F3) */}
       <DebugOverlay />
+    </div>
+  );
+};
+
+const ChatBox = ({ game }) => {
+  const [messages, setMessages] = useState([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const chatRef = React.useRef();
+  const inputRef = React.useRef();
+
+  useEffect(() => {
+    const handleOpen = () => {
+      setIsOpen(true);
+      game.chat.visible = true;
+      if (document.pointerLockElement) document.exitPointerLock();
+      setTimeout(() => inputRef.current?.focus(), 50);
+    };
+
+    const handleUpdate = (e) => setMessages([...e.detail]);
+
+    window.addEventListener('chat-open', handleOpen);
+    window.addEventListener('chat-updated', handleUpdate);
+
+    return () => {
+      window.removeEventListener('chat-open', handleOpen);
+      window.removeEventListener('chat-updated', handleUpdate);
+    };
+  }, [game]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (inputValue.trim()) {
+      game.chat.sendMessage(inputValue);
+      setInputValue('');
+    }
+    setIsOpen(false);
+    game.chat.visible = false;
+    // Re-lock pointer if possible
+    if (game.hasStarted && !game.isPaused && !game.gameState.isInventoryOpen) {
+        game.input?.setPointerLock();
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      setIsOpen(false);
+      game.chat.visible = false;
+      if (game.hasStarted && !game.isPaused && !game.gameState.isInventoryOpen) {
+          game.input?.setPointerLock();
+      }
+    }
+  };
+
+  return (
+    <div className={`absolute bottom-40 left-4 md:bottom-48 md:left-8 w-full max-w-sm flex flex-col gap-2 transition-all duration-300 ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+      {/* Message List */}
+      <div className="flex flex-col gap-1 overflow-hidden h-48 justify-end">
+        <AnimatePresence initial={false}>
+          {messages.slice(-8).map((msg, i) => (
+            <motion.div
+              key={msg.id}
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className={`px-3 py-1.5 rounded text-[11px] font-medium max-w-fit shadow-lg shadow-black/20
+                ${msg.type === 'system' ? 'bg-arlo-blue/20 text-arlo-blue border border-arlo-blue/30 italic' : 
+                  msg.type === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                  'bg-black/40 text-white border border-white/5 backdrop-blur-sm'}`}
+            >
+              <span className={msg.type === 'user' ? 'text-arlo-blue/80 mr-2 font-bold' : ''}>
+                {msg.type === 'user' ? `<${msg.sender}>` : ''}
+              </span>
+              <span className="leading-relaxed tracking-wide">{msg.text}</span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* Input Field */}
+      {isOpen && (
+        <motion.form
+          initial={{ y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          onSubmit={handleSubmit}
+          className="flex gap-2"
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="flex-1 bg-black/60 backdrop-blur-2xl border border-arlo-blue/50 rounded-lg px-4 py-3 text-xs text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-arlo-blue/30 shadow-2xl"
+            placeholder="Type your transmission..."
+          />
+          <button type="submit" className="hidden">Send</button>
+        </motion.form>
+      )}
     </div>
   );
 };
@@ -300,7 +416,7 @@ const HotbarSlot = ({ item, active, index }) => (
     whileHover={{ y: -4, scale: 1.05 }}
     whileTap={{ scale: 0.95 }}
     onClick={() => window.dispatchEvent(new CustomEvent('set-hotbar-index', { detail: index }))}
-    className={`relative w-12 h-12 md:w-14 md:h-14 aspect-square flex-none rounded-md flex items-center justify-center transition-all border-2
+    className={`relative w-12 h-12 md:w-14 md:h-14 aspect-square flex-none rounded-md flex items-center justify-center transition-all border-2 group
       ${active
         ? 'bg-arlo-blue/30 border-arlo-blue shadow-[0_0_15px_rgba(0,195,227,0.4)] scale-110 z-10'
         : 'bg-black/40 border-white/10 hover:bg-white/10'
@@ -308,7 +424,12 @@ const HotbarSlot = ({ item, active, index }) => (
   >
     <div className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center">
       {item ? (
-        <ItemIcon item={item} className="w-full h-full" />
+        <>
+          <ItemIcon item={item} className="w-full h-full" />
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 bg-black/80 backdrop-blur-md rounded text-[9px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 border border-white/10 shadow-xl">
+            {item.name || item.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+          </div>
+        </>
       ) : (
         <div className="w-1 h-1 bg-white/10 rounded-full" />
       )}

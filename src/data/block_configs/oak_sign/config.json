@@ -1,0 +1,8 @@
+{
+  "id": "oak_sign",
+  "name": "Oak Sign",
+  "category": "Decorative",
+  "renderType": "sign",
+  "transparent": true,
+  "tags": ["sign", "wood"]
+}
