@@ -372,7 +372,7 @@ export const MainMenu = ({ setScreen }) => {
                           ${isActive ? 'bg-arlo-blue/20 border-arlo-blue' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
                       >
                         <img 
-                          src={skin.faceUrl || skin.url || '/assets/skins/default_face.png'} 
+                          src={skin.faceUrl || skin.url || `${import.meta.env.BASE_URL || '/'}assets/skins/default_face.png`} 
                           className="w-full h-full object-contain pixelated rounded-md"
                           alt={skin.name}
                         />

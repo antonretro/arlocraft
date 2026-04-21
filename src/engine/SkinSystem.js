@@ -2,18 +2,21 @@ export class SkinSystem {
   constructor() {
     this.currentSkin = 'classic_steve';
     this.customSkinData = null;
+    const base = import.meta.env.BASE_URL || '/';
+    const assetPath = base.endsWith('/') ? base + 'assets/' : base + '/assets/';
+    
     this.classicSkins = [
       {
         id: 'classic_steve',
         name: 'Steve',
-        url: '/assets/steve.png',
-        faceUrl: '/assets/steve.png',
+        url: assetPath + 'steve.png',
+        faceUrl: assetPath + 'steve.png',
       },
       {
         id: 'classic_alex',
         name: 'Alex',
-        url: '/assets/alex.png',
-        faceUrl: '/assets/alex.png',
+        url: assetPath + 'alex.png',
+        faceUrl: assetPath + 'alex.png',
       },
     ];
     this.randomSkins = this._generateRandomSkins(10);
@@ -80,7 +83,9 @@ export class SkinSystem {
       return this.customSkinData;
     }
 
-    return '/assets/steve.png';
+    const base = import.meta.env.BASE_URL || '/';
+    const assetPath = base.endsWith('/') ? base + 'assets/' : base + '/assets/';
+    return assetPath + 'steve.png';
   }
 
   getSkinMeta(skinId) {

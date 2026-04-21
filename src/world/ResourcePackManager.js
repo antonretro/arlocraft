@@ -14,14 +14,17 @@ export class ResourcePackManager {
 
     constructor() {
         this.manifest = new Set();
-        this.baseUrl = '/resource_pack/assets/minecraft/textures/block/';
+        // Use relative paths or BASE_URL for GitHub Pages compatibility
+        const base = import.meta.env.BASE_URL || '/';
+        this.baseAssetPath = base.endsWith('/') ? base : base + '/';
+        this.baseUrl = `${this.baseAssetPath}resource_pack/assets/minecraft/textures/block/`;
         this.isLoaded = false;
         this.loadPromise = this.init();
     }
 
     async init() {
         try {
-            const response = await fetch('/resource_pack/manifest.txt');
+            const response = await fetch(`${this.baseAssetPath}resource_pack/manifest.txt`);
             const text = await response.text();
             // Split by line and filter out empty strings
             const files = text.split(/\r?\n/).map(f => f.trim()).filter(f => f.length > 0);

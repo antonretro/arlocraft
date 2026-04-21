@@ -230,8 +230,11 @@ export class BlockRegistry {
   }
 
   async loadStunningExpansion() {
+    const base = import.meta.env.BASE_URL || '/';
+    const assetPath = base.endsWith('/') ? base : base + '/';
+    
     const paths = {
-      anton: 'anton_real.png',
+      anton: assetPath + 'anton_real.png',
     };
 
     const loadOne = (id, path) => {
@@ -509,7 +512,9 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     const key = `${safeX}|${safeY}`;
     if (this.atlasTileCache.has(key)) return this.atlasTileCache.get(key);
 
-    const tile = this.textureLoader.load('atlas.png');
+    const base = import.meta.env.BASE_URL || '/';
+    const assetPath = base.endsWith('/') ? base : base + '/';
+    const tile = this.textureLoader.load(assetPath + 'atlas.png');
     tile.magFilter = THREE.NearestFilter;
     tile.minFilter = THREE.NearestFilter;
     tile.colorSpace = THREE.SRGBColorSpace;

@@ -586,15 +586,17 @@ export class Game {
       const normalized = String(username || 'Steve').trim();
       const { materials } = await this.skinLoader.loadSkin(normalized);
       this._applyLoadedSkin(materials);
+      const base = import.meta.env.BASE_URL || '/';
+      const assetPath = base.endsWith('/') ? base + 'assets/' : base + '/assets/';
       window.dispatchEvent(
         new CustomEvent('skin-updated', {
           detail: {
             skinId: normalized === 'Steve' ? 'classic_steve' : `custom_${normalized}`,
             avatarUrl:
               normalized === 'Steve'
-                ? '/assets/steve.png'
+                ? assetPath + 'steve.png'
                 : normalized === 'Alex'
-                  ? '/assets/alex.png'
+                  ? assetPath + 'alex.png'
                   : `https://minotar.net/helm/${normalized}/64`,
             name: normalized,
           },
