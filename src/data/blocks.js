@@ -8,7 +8,7 @@ const docModules = import.meta.glob('./block_configs/*/README.md', {
   import: 'default',
   query: '?raw',
 });
-const scriptModules = import.meta.glob('./block_configs/*/script.js', {
+export const scriptModules = import.meta.glob('./block_configs/*/script.js', {
   eager: true,
 });
 

@@ -16,10 +16,12 @@ export class HorizonService {
 
     async init() {
         const loader = new THREE.TextureLoader();
+        const base = import.meta.env.BASE_URL || '/';
+        const assetPath = base.endsWith('/') ? base : base + '/';
         const texturePaths = {
-            plains: '/textures/horizon/plains.png',
-            mountains: '/textures/horizon/mountains.png',
-            forest: '/textures/horizon/forest.png'
+            plains: `${assetPath}textures/horizon/plains.png`,
+            mountains: `${assetPath}textures/horizon/mountains.png`,
+            forest: `${assetPath}textures/horizon/forest.png`
         };
 
         for (const [key, path] of Object.entries(texturePaths)) {

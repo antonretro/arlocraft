@@ -289,7 +289,8 @@ const ChatBox = ({ game }) => {
 };
 
 const PlayerAvatar = () => {
-  const defaultAvatar = '/assets/steve.png';
+  const base = import.meta.env.BASE_URL || '/';
+  const defaultAvatar = (base.endsWith('/') ? base : base + '/') + 'assets/steve.png';
   const [avatar, setAvatar] = useState(defaultAvatar);
   
   useEffect(() => {

@@ -7,7 +7,8 @@ import { Snowball } from './throwables/Snowball.js';
 import { Egg } from './throwables/Egg.js';
 import { EnderPearl } from './throwables/EnderPearl.js';
 
-const RESOURCE_PACK_URL = '/resource_pack/assets/minecraft/textures/entity/';
+const base = import.meta.env.BASE_URL || '/';
+const RESOURCE_PACK_URL = (base.endsWith('/') ? base : base + '/') + 'resource_pack/assets/minecraft/textures/entity/';
 
 function getEntityTextureUrl(textureKey) {
   // Direct access to the public resource pack

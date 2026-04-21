@@ -2,8 +2,10 @@ import * as THREE from 'three';
 
 export class SkinLoader {
   constructor() {
-    this.defaultSteve = '/assets/steve.png';
-    this.defaultAlex = '/assets/alex.png';
+    const base = import.meta.env.BASE_URL || '/';
+    const assetPath = base.endsWith('/') ? base : base + '/';
+    this.defaultSteve = `${assetPath}assets/steve.png`;
+    this.defaultAlex = `${assetPath}assets/alex.png`;
   }
 
   _loadImage(url) {

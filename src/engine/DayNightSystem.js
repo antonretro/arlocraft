@@ -86,13 +86,16 @@ export class DayNightSystem {
       cb(mat);
     };
 
-    loadTex('/resource_pack/assets/minecraft/textures/environment/sun.png', 0xfffde8, (mat) => {
+    const base = import.meta.env.BASE_URL || '/';
+    const assetPath = base.endsWith('/') ? base : base + '/';
+
+    loadTex(`${assetPath}resource_pack/assets/minecraft/textures/environment/sun.png`, 0xfffde8, (mat) => {
       this.sunPlane = new THREE.Mesh(planeGeo, mat);
       this.sunPlane.renderOrder = -1;
       scene.add(this.sunPlane);
     });
 
-    loadTex('/resource_pack/assets/minecraft/textures/environment/moon_phases.png', 0xddeeff, (mat) => {
+    loadTex(`${assetPath}resource_pack/assets/minecraft/textures/environment/moon_phases.png`, 0xddeeff, (mat) => {
       mat.opacity = 0;
       if (mat.map) {
         mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
