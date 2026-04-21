@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 export class SkinLoader {
   constructor() {
-    this.defaultSteve = 'https://minotar.net/skin/steve';
-    this.defaultAlex = 'https://minotar.net/skin/alex';
+    this.defaultSteve = '/assets/steve.png';
+    this.defaultAlex = '/assets/alex.png';
   }
 
   _loadImage(url) {

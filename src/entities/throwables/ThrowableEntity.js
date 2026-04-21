@@ -120,6 +120,17 @@ export class ThrowableEntity {
     this.dead = true;
     if (this.mesh) {
       this.game.renderer.scene.remove(this.mesh);
+      this.mesh.traverse((node) => {
+        if (node.geometry?.dispose) node.geometry.dispose();
+        if (Array.isArray(node.material)) {
+          for (const material of node.material) {
+            if (material?.dispose) material.dispose();
+          }
+        } else if (node.material?.dispose) {
+          node.material.dispose();
+        }
+      });
+      this.mesh = null;
     }
   }
 }

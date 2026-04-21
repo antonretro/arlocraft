@@ -24,6 +24,7 @@ export class SkeletonModel extends BaseModel {
         w: 8,
         h: 8,
         d: 8,
+        th: 32,
       }
     );
     headGroup.add(this.head);
@@ -45,11 +46,12 @@ export class SkeletonModel extends BaseModel {
         w: 8,
         h: 12,
         d: 4,
+        th: 32,
       }
     );
 
     // Arms (2x12x2) - Skeletons have thin limbs
-    const armUV = { u: 40, v: 16, w: 2, h: 12, d: 2 };
+    const armUV = { u: 40, v: 16, w: 2, h: 12, d: 2, th: 32 };
     this.armR = this.createPart(
       'armR',
       2 * unit,
@@ -76,7 +78,7 @@ export class SkeletonModel extends BaseModel {
     this.armL.rotation.x = -Math.PI / 3;
 
     // Legs (2x12x2)
-    const legUV = { u: 0, v: 16, w: 2, h: 12, d: 2 };
+    const legUV = { u: 0, v: 16, w: 2, h: 12, d: 2, th: 32 };
     this.legR = this.createPart(
       'legR',
       2 * unit,

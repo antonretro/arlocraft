@@ -23,6 +23,7 @@ export class CowModel extends BaseModel {
         w: 12,
         h: 10,
         d: 18,
+        th: 32,
       }
     );
 
@@ -43,6 +44,7 @@ export class CowModel extends BaseModel {
         w: 8,
         h: 8,
         d: 6,
+        th: 32,
       }
     );
     headGroup.add(this.head);
@@ -62,6 +64,7 @@ export class CowModel extends BaseModel {
         w: 1,
         h: 3,
         d: 1,
+        th: 32,
       }
     );
     const hornR = this.createPart(
@@ -78,6 +81,7 @@ export class CowModel extends BaseModel {
         w: 1,
         h: 3,
         d: 1,
+        th: 32,
       }
     );
     headGroup.add(hornL);
@@ -98,6 +102,7 @@ export class CowModel extends BaseModel {
         w: 4,
         h: 3,
         d: 1,
+        th: 32,
       }
     );
     headGroup.add(muzzle);
@@ -120,11 +125,12 @@ export class CowModel extends BaseModel {
         w: 4,
         h: 3,
         d: 6,
+        th: 32,
       }
     );
 
     // Legs (4x12x4)
-    const legUV = { u: 0, v: 16, w: 4, h: 12, d: 4 };
+    const legUV = { u: 0, v: 16, w: 4, h: 12, d: 4, th: 32 };
     this.legFR = this.createPart(
       'legFR',
       4 * unit,

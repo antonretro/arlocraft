@@ -73,18 +73,31 @@ export class WorldState {
     let props = 0x00;
     const lowId = blockId.toLowerCase();
     
-    const isTintable = lowId.includes('leaves') || lowId.includes('grass') || 
-                       lowId === 'fern' || lowId === 'water' || config?.tintable;
+    const hasFixedLeafColor =
+      lowId === 'cherry_leaves' ||
+      lowId === 'leaves_cherry' ||
+      lowId === 'flowering_azalea_leaves';
+    const isTintable =
+      ((lowId.includes('leaves') && !hasFixedLeafColor) ||
+        lowId.includes('grass') ||
+        lowId === 'fern' ||
+        lowId === 'water' ||
+        config?.tintable);
     
     const isTransparent = lowId.includes('leaves') || lowId.includes('glass') || 
                           lowId === 'water' || lowId === 'ice' || 
                           config?.transparent || config?.deco;
+    
+    // Bit 0x08: Non-Full Block (Paths, Slabs, Stairs, etc.)
+    const isShort = lowId.includes('path') || lowId.includes('slab') || 
+                    lowId.includes('stair') || lowId.includes('farmland');
     
     const isOpaque = !isTransparent;
 
     if (isOpaque) props |= 0x01;
     if (isTransparent) props |= 0x02;
     if (isTintable) props |= 0x04;
+    if (isShort) props |= 0x08;
 
     this.propertyCache[id] = props;
   }

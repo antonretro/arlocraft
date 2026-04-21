@@ -43,14 +43,19 @@ export class DayNightSystem {
       cb(mat);
     };
 
-    loadTex('textures/sky/sun.png', 0xfffde8, (mat) => {
+    loadTex('/resource_pack/assets/minecraft/textures/environment/sun.png', 0xfffde8, (mat) => {
       this.sunPlane = new THREE.Mesh(planeGeo, mat);
       this.sunPlane.renderOrder = -1;
       scene.add(this.sunPlane);
     });
 
-    loadTex('textures/sky/moon.png', 0xddeeff, (mat) => {
+    loadTex('/resource_pack/assets/minecraft/textures/environment/moon_phases.png', 0xddeeff, (mat) => {
       mat.opacity = 0;
+      if (mat.map) {
+        mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+        mat.map.repeat.set(0.25, 0.5); // Minecraft moon_phases are 4x2 or 4 phases horizontally
+        mat.map.offset.set(0, 0.5);   // Full moon is usually first top-left
+      }
       this.moonPlane = new THREE.Mesh(planeGeo.clone(), mat);
       this.moonPlane.renderOrder = -1;
       scene.add(this.moonPlane);

@@ -32,6 +32,59 @@ export class ChunkManager {
     this.visibilityScanTick = 0;
     this.meshSanityTick = 0;
     this.colorSanityTick = 0;
+    this.lastStreamingWindow = {
+      mode: 'balanced',
+      minCy: 0,
+      maxCy: 0,
+      aboveRadius: 0,
+      belowRadius: 0,
+      surfaceChunkCy: 0,
+    };
+  }
+
+  getQualityTier() {
+    return this.world.game?.qualityTier ?? 'balanced';
+  }
+
+  getVerticalStreamingWindow(playerPosition, centerCy) {
+    const configuredVertical = Math.max(
+      1,
+      Number(this.world.config.renderDistance.vertical) || 2
+    );
+    const tier = this.getQualityTier();
+    const tierVerticalCap =
+      tier === 'low' ? 1 : tier === 'high' ? configuredVertical + 1 : configuredVertical;
+    const surfaceY = this.world.getTerrainHeight(
+      playerPosition.x,
+      playerPosition.z
+    );
+    const surfaceChunkCy = this.world.getChunkCoord(surfaceY);
+    const deltaFromSurface = playerPosition.y - surfaceY;
+
+    let mode = 'surface';
+    let belowRadius = 0;
+    let aboveRadius = tier === 'high' ? 2 : 1;
+
+    if (deltaFromSurface < -8) {
+      mode = 'underground';
+      belowRadius = tierVerticalCap;
+      aboveRadius = Math.max(1, tierVerticalCap - 1);
+    } else if (deltaFromSurface > this.world.chunkSize * 1.5) {
+      mode = 'elevated';
+      belowRadius = Math.max(1, Math.floor(tierVerticalCap / 2));
+      aboveRadius = tierVerticalCap;
+    }
+
+    const minCy = centerCy - belowRadius;
+    const maxCy = centerCy + aboveRadius;
+    return {
+      mode,
+      minCy,
+      maxCy,
+      aboveRadius,
+      belowRadius,
+      surfaceChunkCy,
+    };
   }
 
   // ─── Chunk accessors ──────────────────────────────────────────────
@@ -193,15 +246,14 @@ export class ChunkManager {
 
   // ─── Unloading ────────────────────────────────────────────────────
 
-  unloadFarChunks(centerCx, centerCy, centerCz) {
-    const unloadRadius = this.world.renderDistance + 3;
-    const vUnloadRadius = (this.world.config.renderDistance.vertical || 2) + 2;
+  unloadFarChunks(centerCx, centerCz, minCy, maxCy) {
+    const unloadRadius = this.world.renderDistance + 2;
 
     for (const [key, chunk] of this.chunks.entries()) {
       const dx = Math.abs(chunk.cx - centerCx);
-      const dy = Math.abs(chunk.cy - centerCy);
       const dz = Math.abs(chunk.cz - centerCz);
-      if (dx <= unloadRadius && dy <= vUnloadRadius && dz <= unloadRadius)
+      const withinVertical = chunk.cy >= minCy - 1 && chunk.cy <= maxCy + 1;
+      if (dx <= unloadRadius && withinVertical && dz <= unloadRadius)
         continue;
       chunk.destroy();
       this.chunks.delete(key);
@@ -210,10 +262,12 @@ export class ChunkManager {
     if (this.pendingChunkLoads.length > 0) {
       this.pendingChunkLoads = this.pendingChunkLoads.filter((pending) => {
         const dx = Math.abs(pending.cx - centerCx);
-        const dy = Math.abs(pending.cy - centerCy);
         const dz = Math.abs(pending.cz - centerCz);
         const keep =
-          dx <= unloadRadius && dy <= vUnloadRadius && dz <= unloadRadius;
+          dx <= unloadRadius &&
+          pending.cy >= minCy - 1 &&
+          pending.cy <= maxCy + 1 &&
+          dz <= unloadRadius;
         if (!keep) this.pendingChunkSet.delete(pending.key);
         return keep;
       });
@@ -235,13 +289,37 @@ export class ChunkManager {
     this.pendingChunkLoads.push({ cx, cy, cz, key });
   }
 
-  ensureChunksAround(centerCx, centerCy, centerCz) {
-    const preloadRadius = this.world.renderDistance + 1;
-    const vRadius = this.world.config.renderDistance.vertical || 2;
+  ensureChunksAround(centerCx, centerCz, minCy, maxCy) {
+    const preloadRadius = this.world.renderDistance;
     for (let dx = -preloadRadius; dx <= preloadRadius; dx++) {
-      for (let dy = -vRadius; dy <= vRadius; dy++) {
+      for (let cy = minCy; cy <= maxCy; cy++) {
         for (let dz = -preloadRadius; dz <= preloadRadius; dz++) {
-          this.queueChunkLoad(centerCx + dx, centerCy + dy, centerCz + dz);
+          this.queueChunkLoad(centerCx + dx, cy, centerCz + dz);
+        }
+      }
+    }
+  }
+
+  ensureCriticalChunksWindow(centerCx, centerCy, centerCz, minCy, maxCy) {
+    for (let dx = -1; dx <= 1; dx++) {
+      for (
+        let cy = Math.max(minCy, centerCy - 1);
+        cy <= Math.min(maxCy, centerCy + 1);
+        cy++
+      ) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const cx = centerCx + dx;
+          const cz = centerCz + dz;
+          const key = this.world.getChunkKey(cx, cy, cz);
+          const chunk = this.chunks.get(key);
+          if (!chunk) {
+            const isInner = Math.abs(dx) <= 1 && Math.abs(dz) <= 1;
+            this.loadChunk(cx, cy, cz, isInner);
+            continue;
+          }
+          if (chunk.dirty && !chunk.destroyed) {
+            this.priorityDirtyChunkKeys.add(key);
+          }
         }
       }
     }
@@ -263,7 +341,7 @@ export class ChunkManager {
             continue;
           }
           if (chunk.dirty && !chunk.destroyed) {
-            chunk.update();
+            this.priorityDirtyChunkKeys.add(key);
           }
         }
       }
@@ -275,10 +353,10 @@ export class ChunkManager {
 
     let budget = explicitBudget;
     if (!Number.isFinite(budget)) {
-      const tier = this.world.game?.qualityTier ?? 'balanced';
-      if (tier === 'low') budget = 6;
-      else if (tier === 'high') budget = 14;
-      else budget = 10;
+      const tier = this.getQualityTier();
+      if (tier === 'low') budget = 4;
+      else if (tier === 'high') budget = 10;
+      else budget = 6;
     }
 
     budget = Math.max(1, Math.floor(budget));
@@ -339,27 +417,38 @@ export class ChunkManager {
     const pcy = this.world.getChunkCoord(playerPosition.y);
     const pcz = this.world.getChunkCoord(playerPosition.z);
 
-    // 1. Emergency Rebuilds: Immediate 5x5 chunks ignore budget
-    // Budgeted dirty chunk rebuilds to prevent frame-rate freezing.
-    // We only process up to 2 dirty chunks per frame, prioritizing the central 5x5 area.
-    let rebuildsDone = 0;
-    const maxRebuildsPerFrame = 2;
+    const settings = this.world.game?.settings || {};
+    const tier = this.getQualityTier();
+    const rebuildCap = tier === 'low' ? 1 : tier === 'high' ? 3 : 2;
+    const maxRebuildsPerFrame = Math.min(
+      settings.chunkRebuildBudget ?? 2,
+      rebuildCap
+    );
+    const stabilityMode = settings.stabilityMode ?? false;
 
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dz = -1; dz <= 1; dz++) {
+    // 1. Emergency rebuilds: keep the current chunk responsive without
+    // invalidating a whole cube around the player every time they move.
+    let rebuildsDone = 0;
+
+    const emergencyRadius = tier === 'high' ? 1 : 0;
+    for (let dx = -emergencyRadius; dx <= emergencyRadius; dx++) {
+      for (let dy = -emergencyRadius; dy <= emergencyRadius; dy++) {
+        for (let dz = -emergencyRadius; dz <= emergencyRadius; dz++) {
           if (rebuildsDone >= maxRebuildsPerFrame) break;
           const key = this.world.getChunkKey(pcx + dx, pcy + dy, pcz + dz);
           const chunk = this.chunks.get(key);
           if (chunk?.dirty && !chunk.destroyed) {
             chunk.update();
+            chunk.lastRebuildTime = performance.now();
             rebuildsDone++;
           }
         }
       }
     }
 
-    this.flushPriorityChunkRebuilds(2);
+    // Adjust priority flush based on stability mode (slower but smoother in stability mode)
+    const priorityLimit = stabilityMode ? 1 : tier === 'high' ? 2 : 1;
+    this.flushPriorityChunkRebuilds(priorityLimit);
 
     const cs = this.world.chunkSize;
     const px = playerPosition.x,
@@ -381,12 +470,23 @@ export class ChunkManager {
     if (chunks.length === 0) return;
     chunks.sort((a, b) => a.dSq - b.dSq);
 
+    const remainingRebuildBudget = Math.max(
+      0,
+      maxRebuildsPerFrame - rebuildsDone
+    );
+    if (remainingRebuildBudget === 0) return;
+
     const startTime = performance.now();
-    const frameBudgetMs = 2.5; // Optimized strict budget for chunk meshing per frame
+    const frameBudgetMs = stabilityMode
+      ? 1.0
+      : tier === 'high'
+        ? 2.2
+        : 1.4;
     let rebuilt = 0;
 
     for (let i = 0; i < chunks.length; i++) {
       if (performance.now() - startTime > frameBudgetMs) break;
+      if (rebuilt >= remainingRebuildBudget) break;
       const c = chunks[i].chunk;
       c.update();
       c.lastRebuildTime = performance.now();
@@ -422,11 +522,20 @@ export class ChunkManager {
             break;
           }
         }
+        const hasGeometryColors = Boolean(mesh.geometry?.getAttribute?.('color'));
+        const isInstanced = Boolean(mesh.isInstancedMesh);
         const hasInstanceColor = Boolean(mesh.instanceColor);
-        if (
-          (hasVertexColors && !hasInstanceColor) ||
-          (!hasVertexColors && hasInstanceColor)
-        ) {
+        if (hasVertexColors) {
+          if (isInstanced) {
+            if (!hasInstanceColor && !hasGeometryColors) {
+              needsRebuild = true;
+              break;
+            }
+          } else if (!hasGeometryColors) {
+            needsRebuild = true;
+            break;
+          }
+        } else if (hasGeometryColors || hasInstanceColor) {
           needsRebuild = true;
           break;
         }
@@ -470,6 +579,11 @@ export class ChunkManager {
     const playerCx = this.world.getChunkCoord(playerPosition.x);
     const playerCy = this.world.getChunkCoord(playerPosition.y);
     const playerCz = this.world.getChunkCoord(playerPosition.z);
+    const verticalWindow = this.getVerticalStreamingWindow(
+      playerPosition,
+      playerCy
+    );
+    this.lastStreamingWindow = verticalWindow;
     const key = this.world.getChunkKey(playerCx, playerCy, playerCz);
 
     // Force visibility re-sync during resume grace period
@@ -491,10 +605,20 @@ export class ChunkManager {
     }
 
     if (this.lastPlayerChunkKey !== key) {
-      this.unloadFarChunks(playerCx, playerCy, playerCz);
-      this.ensureChunksAround(playerCx, playerCy, playerCz);
+      this.unloadFarChunks(
+        playerCx,
+        playerCz,
+        verticalWindow.minCy,
+        verticalWindow.maxCy
+      );
+      this.ensureChunksAround(
+        playerCx,
+        playerCz,
+        verticalWindow.minCy,
+        verticalWindow.maxCy
+      );
 
-      // Boundary Flush: Force remesh 3x3x3 area to prevent voids during movement
+      // Prioritize already-dirty nearby chunks instead of dirtying clean ones.
       for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {
           for (let dz = -1; dz <= 1; dz++) {
@@ -504,7 +628,7 @@ export class ChunkManager {
               playerCz + dz
             );
             const c = this.chunks.get(ck);
-            if (c) c.dirty = true;
+            if (c?.dirty) this.priorityDirtyChunkKeys.add(ck);
           }
         }
       }
@@ -514,22 +638,27 @@ export class ChunkManager {
       this.needsQueueSort = true; // Trigger sort on next process
     }
 
-    this.chunkRefreshTick = (this.chunkRefreshTick + 1) % 12;
+    this.chunkRefreshTick = (this.chunkRefreshTick + 1) % 24;
     if (this.chunkRefreshTick === 0) {
-      this.ensureChunksAround(playerCx, playerCy, playerCz);
+      this.ensureChunksAround(
+        playerCx,
+        playerCz,
+        verticalWindow.minCy,
+        verticalWindow.maxCy
+      );
     }
 
-    this.criticalChunkTick = (this.criticalChunkTick + 1) % 4;
+    this.criticalChunkTick = (this.criticalChunkTick + 1) % 8;
     if (this.criticalChunkTick === 0) {
-      this.ensureCriticalChunks(playerCx, playerCy, playerCz, 2);
+      this.ensureCriticalChunksWindow(
+        playerCx,
+        playerCy,
+        playerCz,
+        verticalWindow.minCy,
+        verticalWindow.maxCy
+      );
     }
     this.processChunkLoadQueue(playerCx, playerCy, playerCz);
-
-    // Ensure all loaded chunks stay visible (prevents "invisible" holes)
-    this.visibilityScanTick = (this.visibilityScanTick + 1) % 10;
-    if (this.visibilityScanTick === 0 || this.forceVisibilityResetPending) {
-      this.forceAllVisible();
-      this.forceVisibilityResetPending = false;
-    }
+    this.forceVisibilityResetPending = false;
   }
 }

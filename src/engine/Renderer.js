@@ -13,33 +13,11 @@ THREE.ColorManagement.enabled = true;
 
 export class Renderer {
   constructor(preferredAPI = 'webgl2') {
-    const canUseWebGPU =
-      typeof THREE.WebGPURenderer === 'function' && navigator.gpu;
-    this.rendererType =
-      preferredAPI === 'webgpu' && canUseWebGPU ? 'webgpu' : 'webgl2';
-
-    try {
-      if (this.rendererType === 'webgpu') {
-        this.instance = new THREE.WebGPURenderer({ antialias: true });
-        this._initPromise = this.instance
-          .init()
-          .then(() => {
-            console.log('[ArloCraft] Using WebGPU renderer (Performance Mode)');
-          })
-          .catch((err) => {
-            console.warn(
-              '[ArloCraft] WebGPU init failed, falling back to WebGL2:',
-              err
-            );
-            this.fallbackToWebGL();
-          });
-      } else {
-        this.fallbackToWebGL();
-      }
-    } catch (e) {
-      console.warn('[ArloCraft] Renderer initialization failed:', e);
-      this.fallbackToWebGL();
-    }
+    this.rendererType = 'webgl2';
+    this.resolutionScale = 1;
+    this.qualityTier = 'balanced';
+    this.postProcessingEnabled = false;
+    this.fallbackToWebGL();
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x7ec8f0);
@@ -57,10 +35,25 @@ export class Renderer {
     this.setupPostProcessing();
 
     window.addEventListener('resize', () => {
-      if (this.instance) {
-        this.instance.setSize(window.innerWidth, window.innerHeight);
-      }
+      this.setSize(window.innerWidth, window.innerHeight);
     });
+  }
+
+  syncViewportSize(width = window.innerWidth, height = window.innerHeight) {
+    if (!this.instance) return;
+
+    const dprCap =
+      this.qualityTier === 'high' ? 1.5 : this.qualityTier === 'low' ? 0.9 : 1;
+    const pixelRatio =
+      Math.min(window.devicePixelRatio || 1, dprCap) *
+      (this.resolutionScale || 1);
+    this.instance.setPixelRatio(pixelRatio);
+    this.instance.setSize(width, height);
+
+    if (this.composer) {
+      this.composer.setPixelRatio?.(pixelRatio);
+      this.composer.setSize(width, height);
+    }
   }
 
   /**
@@ -74,9 +67,11 @@ export class Renderer {
 
   fallbackToWebGL() {
     this.rendererType = 'webgl2';
-    this.instance = new THREE.WebGLRenderer({ antialias: true });
-    this.instance.setSize(window.innerWidth, window.innerHeight);
-    this.instance.setPixelRatio(window.devicePixelRatio);
+    this.instance = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+    });
+    this.syncViewportSize(window.innerWidth, window.innerHeight);
     this.instance.shadowMap.enabled = true;
     this.instance.shadowMap.type = THREE.PCFShadowMap;
     this.instance.outputColorSpace = THREE.SRGBColorSpace;
@@ -235,6 +230,7 @@ export class Renderer {
 
       this.outputPass = new OutputPass();
       this.composer.addPass(this.outputPass);
+      this.syncViewportSize(window.innerWidth, window.innerHeight);
     });
   }
 
@@ -485,7 +481,7 @@ export class Renderer {
       this.cloudPlane.position.z = camera.position.z;
     }
 
-    if (this.composer && camera) {
+    if (this.postProcessingEnabled && this.composer && camera) {
       if (this.renderPass.camera !== camera) this.renderPass.camera = camera;
       this.composer.render();
     } else {
@@ -493,12 +489,37 @@ export class Renderer {
     }
   }
 
+  setQualityTier(tier = 'balanced') {
+    this.qualityTier = ['low', 'balanced', 'high'].includes(tier)
+      ? tier
+      : 'balanced';
+    this.postProcessingEnabled = this.qualityTier === 'high';
+    
+    if (this.bloomPass) {
+      this.bloomPass.enabled = this.postProcessingEnabled;
+    }
+    
+    if (this.cloudPlane) {
+      this.cloudPlane.visible = this.qualityTier !== 'low';
+    }
+
+    if (this.instance && this.sun) {
+      const shadowRes = this.qualityTier === 'high' ? 1024 : 512;
+      this.sun.shadow.mapSize.set(shadowRes, shadowRes);
+      this.instance.shadowMap.type = this.qualityTier === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null; // Forces re-allocation
+    }
+
+    this.syncViewportSize(window.innerWidth, window.innerHeight);
+  }
+
   setResolutionScale(scale) {
-    const val = Math.max(0.1, Math.min(2.0, Number(scale) || 1.0));
-    this.instance.setPixelRatio(window.devicePixelRatio * val);
+    this.resolutionScale = Math.max(0.1, Math.min(2.0, Number(scale) || 1.0));
+    this.syncViewportSize(window.innerWidth, window.innerHeight);
   }
   setSize(w, h) {
-    this.instance.setSize(w, h);
+    this.syncViewportSize(w, h);
   }
 
   setAreaInfluence(influence) {

@@ -229,6 +229,7 @@ export class Chunk {
     this.touchedGenerationChunks.set(this.key, {
       key: this.key,
       cx: this.cx,
+      cy: this.cy,
       cz: this.cz,
     });
   }
@@ -283,7 +284,15 @@ export class Chunk {
     const override = this.world.state.changedBlocks.get(key);
     const finalId = override ?? id;
     const owner = this.noteTouchedGenerationChunk(x, y, z);
-    this.world.addBlock(x, y, z, finalId, owner.key, false, options);
+    this.world.addBlock(
+      x,
+      y,
+      z,
+      finalId,
+      owner.key,
+      Boolean(options.replace),
+      options
+    );
   }
 
   addGeneratedPlant(x, y, z, id) {
@@ -333,7 +342,10 @@ export class Chunk {
   }
 
   addGeneratedStructureBlock(x, y, z, id) {
-    this.applyGeneratedBlock(x, y, z, id, { allowCorruption: true });
+    this.applyGeneratedBlock(x, y, z, id, {
+      allowCorruption: true,
+      replace: true,
+    });
   }
 
   selectUndergroundBlock(wx, y, wz, biome) {
@@ -528,6 +540,56 @@ export class Chunk {
     return true;
   }
 
+  getBlueprintBounds(blocks) {
+    if (!Array.isArray(blocks) || blocks.length === 0) return null;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let maxZ = -Infinity;
+
+    for (const block of blocks) {
+      if (!block) continue;
+      if (block.x < minX) minX = block.x;
+      if (block.y < minY) minY = block.y;
+      if (block.z < minZ) minZ = block.z;
+      if (block.x > maxX) maxX = block.x;
+      if (block.y > maxY) maxY = block.y;
+      if (block.z > maxZ) maxZ = block.z;
+    }
+
+    if (!Number.isFinite(minX)) return null;
+    return { minX, minY, minZ, maxX, maxY, maxZ };
+  }
+
+  clearBlueprintVolume(bounds, verticalPadding = 4) {
+    if (!bounds) return;
+
+    for (let bx = bounds.minX - 1; bx <= bounds.maxX + 1; bx++) {
+      for (let bz = bounds.minZ - 1; bz <= bounds.maxZ + 1; bz++) {
+        for (let by = bounds.minY; by <= bounds.maxY + verticalPadding; by++) {
+          const existing = this.world.getBlockAt(bx, by, bz);
+          const isNature =
+            existing?.includes('leaves') ||
+            existing?.includes('log') ||
+            existing?.includes('grass') ||
+            existing?.includes('flower') ||
+            existing?.includes('vine');
+
+          if (
+            existing &&
+            existing !== 'air' &&
+            (this.world.isBlockSolid(existing) || isNature)
+          ) {
+            this.addGeneratedStructureBlock(bx, by, bz, 'air');
+          }
+        }
+      }
+    }
+  }
+
   placeUnderwaterStructure(centerX, centerZ) {
     const roll = this.world.hash2D(this.cx * 7 + 401, this.cz * 11 - 293);
     if (roll > 0.035) return; // ~3.5% of underwater chunks get a structure
@@ -600,35 +662,7 @@ export class Chunk {
     const blocks = struct.blueprints(x, y, z);
     if (!blocks || blocks.length === 0) return;
 
-    // ─── VOLUME CLEARING PASS ───
-    const sw = struct.width || 7;
-    const sh = (struct.height || 6) + 1;
-    const sd = struct.depth || 7;
-
-    for (let dx = 0; dx < sw; dx++) {
-      for (let dz = 0; dz < sd; dz++) {
-        for (let dy = 0; dy < sh; dy++) {
-          const bx = x + dx;
-          const by = y + dy;
-          const bz = z + dz;
-
-          const existing = this.world.getBlockAt(bx, by, bz);
-          const isNature =
-            existing?.includes('leaves') ||
-            existing?.includes('log') ||
-            existing?.includes('grass') ||
-            existing?.includes('flower');
-
-          if (
-            existing &&
-            existing !== 'air' &&
-            (this.world.isBlockSolid(existing) || isNature)
-          ) {
-            this.addGeneratedStructureBlock(bx, by, bz, 'air');
-          }
-        }
-      }
-    }
+    this.clearBlueprintVolume(this.getBlueprintBounds(blocks), 4);
 
     for (const b of blocks) {
       this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
@@ -844,6 +878,7 @@ export class Chunk {
       const [x, y, z] = this.world.keyToCoords(key);
       if (
         this.world.getChunkCoord(x) !== this.cx ||
+        this.world.getChunkCoord(y) !== this.cy ||
         this.world.getChunkCoord(z) !== this.cz
       )
         continue;
@@ -1081,21 +1116,9 @@ export class Chunk {
       const hz = centerZ + dz;
       const struct = structures[i % structures.length];
 
-      // --- Clearance Pass: Remove terrain/vegetation in the structure footprint + 1 margin ---
-      // We clear at a generic height first to ensure a flat starting area
       const approxGround = this.world.getColumnHeight(hx, hz);
-      const sw = struct.width || 5,
-        sh = (struct.height || 4) + 1,
-        sd = struct.depth || 5;
-
-      for (let dx = -1; dx < sw + 1; dx++) {
-        for (let dz = -1; dz < sd + 1; dz++) {
-          for (let dy = 0; dy < sh + 4; dy++) {
-            // clear higher up too
-            this.addGeneratedBlock(hx + dx, approxGround + dy, hz + dz, 'air');
-          }
-        }
-      }
+      const previewBlocks = struct.blueprints(hx, approxGround + 1, hz);
+      this.clearBlueprintVolume(this.getBlueprintBounds(previewBlocks), 4);
 
       // Now calculate the REAL ground height for placement AFTER clearance
       const hy = this.world.getColumnHeight(hx, hz) + 1;
@@ -1103,7 +1126,7 @@ export class Chunk {
       const blocks = struct.blueprints(hx, hy, hz);
 
       for (const block of blocks)
-        this.addGeneratedBlock(block.x, block.y, block.z, block.id);
+        this.addGeneratedStructureBlock(block.x, block.y, block.z, block.id);
 
       // Lamp posts near houses should only spawn if grounded
       if (this.world.isSolidAt(hx + 2, hy - 1, hz + 2)) {
@@ -1148,9 +1171,9 @@ export class Chunk {
 
     while (x !== x1 || z !== z1) {
       const y = this.world.getColumnHeight(x, z);
-      this.addGeneratedBlock(x, y, z, 'path_block');
+      this.addGeneratedStructureBlock(x, y, z, 'path_block');
       if (this.world.hash2D(x + 91, z - 44) > 0.83) {
-        this.addGeneratedBlock(x, y - 1, z, 'cobblestone');
+        this.addGeneratedStructureBlock(x, y - 1, z, 'cobblestone');
       }
 
       if (Math.abs(x1 - x) > Math.abs(z1 - z)) x += stepX;
@@ -1161,11 +1184,11 @@ export class Chunk {
   placeLampPost(x, y, z) {
     const baseY = this.world.getColumnHeight(x, z) + 1;
     for (let i = 0; i < 3; i++) {
-      this.addGeneratedBlock(x, baseY + i, z, 'oak_planks');
+      this.addGeneratedStructureBlock(x, baseY + i, z, 'oak_planks');
     }
-    this.addGeneratedBlock(x, baseY + 3, z, 'sea_lantern');
-    this.addGeneratedBlock(x + 1, baseY + 2, z, 'sea_lantern');
-    this.addGeneratedBlock(x - 1, baseY + 2, z, 'sea_lantern');
+    this.addGeneratedStructureBlock(x, baseY + 3, z, 'sea_lantern');
+    this.addGeneratedStructureBlock(x + 1, baseY + 2, z, 'sea_lantern');
+    this.addGeneratedStructureBlock(x - 1, baseY + 2, z, 'sea_lantern');
   }
 
   setVisible(visible) {

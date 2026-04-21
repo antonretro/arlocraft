@@ -8,6 +8,7 @@ export class BaseModel {
   constructor() {
     this.group = new THREE.Group();
     this.parts = {}; // Name -> Mesh mapping
+    this.uvConfigs = new Map(); // Name -> config mapping
     this.walkCycle = 0;
     this.material = new THREE.MeshLambertMaterial({
       transparent: true,
@@ -32,7 +33,8 @@ export class BaseModel {
     mesh.receiveShadow = true;
 
     if (uvConfig) {
-      this.applyUVs(geo, uvConfig);
+      this.uvConfigs.set(name, { ...uvConfig });
+      this.applyUVs(mesh.geometry, uvConfig);
     }
 
     this.parts[name] = mesh;
@@ -89,6 +91,20 @@ export class BaseModel {
     texture.minFilter = THREE.NearestFilter;
     this.material.map = texture;
     this.material.needsUpdate = true;
+
+    // Check if we need to re-apply UVs based on actual texture height
+    // Minecraft entity textures are often 64x32 (Legacy) or 64x64 (Modern)
+    if (texture.image && texture.image.height > 0) {
+      const realHeight = texture.image.height;
+      Object.entries(this.parts).forEach(([name, mesh]) => {
+        const config = this.uvConfigs.get(name);
+        if (config && config.th !== realHeight) {
+          // Update config to match real height and re-apply
+          config.th = realHeight;
+          this.applyUVs(mesh.geometry, config);
+        }
+      });
+    }
   }
 
   update(delta, velocity, isDead = false) {

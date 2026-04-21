@@ -24,6 +24,7 @@ export class CreeperModel extends BaseModel {
         w: 8,
         h: 8,
         d: 8,
+        th: 32,
       }
     );
     headGroup.add(this.head);
@@ -45,11 +46,12 @@ export class CreeperModel extends BaseModel {
         w: 8,
         h: 12,
         d: 4,
+        th: 32,
       }
     );
 
     // Legs (4x6x4) - 4 legs
-    const legUV = { u: 0, v: 16, w: 4, h: 6, d: 4 };
+    const legUV = { u: 0, v: 16, w: 4, h: 6, d: 4, th: 32 };
     this.legFR = this.createPart(
       'legFR',
       4 * unit,

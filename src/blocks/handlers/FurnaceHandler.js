@@ -310,9 +310,11 @@ function handleInventoryClick(idx) {
   // No special logic yet — slot display only
 }
 
-window.addEventListener('keydown', (e) => {
-  if (getOverlay()?.style.display !== 'flex') return;
-  if (e.code === 'KeyE' || e.code === 'Escape') close();
-});
+if (typeof document !== 'undefined') {
+  window.addEventListener('keydown', (e) => {
+    if (getOverlay()?.style.display !== 'flex') return;
+    if (e.code === 'KeyE' || e.code === 'Escape') close();
+  });
+}
 
 registerBlockHandler('furnace', { open, close });

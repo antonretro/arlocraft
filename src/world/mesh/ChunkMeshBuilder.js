@@ -15,6 +15,12 @@ import {
 } from './renderTypes.js';
 import { VoxelGeometryBuilder } from './VoxelGeometryBuilder.js';
 
+let sharedGeoBuilder = null;
+function getSharedGeoBuilder(world) {
+  if (!sharedGeoBuilder) sharedGeoBuilder = new VoxelGeometryBuilder(world);
+  return sharedGeoBuilder;
+}
+
 function isTintableMaterial(material) {
   return Boolean(material?.userData?.tintable);
 }
@@ -34,7 +40,17 @@ function specializeMaterial(baseMaterial) {
     : isTintableMaterial(baseMaterial);
 
   if (!needsSpecialization) return { material: baseMaterial, owned: false };
-  return { material: cloneMaterial(baseMaterial), owned: true };
+  
+  const material = cloneMaterial(baseMaterial);
+  if (Array.isArray(material)) {
+    material.forEach((m) => {
+      if (isTintableMaterial(m)) m.vertexColors = true;
+    });
+  } else if (isTintableMaterial(material)) {
+    material.vertexColors = true;
+  }
+  
+  return { material, owned: true };
 }
 
 function getRenderOrder(id, material) {
@@ -109,7 +125,7 @@ function _rebuildChunkMeshesInner(chunk) {
     Math.abs(chunk.cy - chunk.world.getChunkCoord(camPos.y)) <= 2 &&
     Math.abs(chunk.cz - chunk.world.getChunkCoord(camPos.z)) <= 2;
 
-  const geoBuilder = new VoxelGeometryBuilder(chunk.world);
+  const geoBuilder = getSharedGeoBuilder(chunk.world);
   geoBuilder.prepareBuffer(chunk);
 
   for (const [baseId, keys] of byBaseId.entries()) {
@@ -149,18 +165,19 @@ function _rebuildChunkMeshesInner(chunk) {
         }
       } else {
         // SOLID/CUBES: Consolidate and Greedy Mesh
-        const blockIdSet = new Set(keys.map(k => {
-          const raw = chunk.world.state.blockMap.get(k);
-          return normalizeBlockVariantId(raw);
-        }));
+        const numericIdSet = new Set();
+        for (const rawId of keys) {
+          const raw = chunk.world.state.blockMap.get(rawId);
+          numericIdSet.add(chunk.world.state.getInternalId(normalizeBlockVariantId(raw)));
+        }
         
-        const geo = geoBuilder.build(chunk, blockIdSet);
+        const geo = geoBuilder.build(chunk, numericIdSet);
         if (geo) {
           const mesh = new THREE.Mesh(geo, material);
           if (owned) mesh.userData.ownedMaterial = true;
           
           mesh.renderOrder = getRenderOrder(baseId, material);
-          mesh.castShadow = !baseId.startsWith('water') && !materialIsTransparent(material);
+          mesh.castShadow = !baseId.startsWith('water') && !materialUsesBlendTransparency(material);
           mesh.receiveShadow = true;
           mesh.frustumCulled = true;
           
@@ -192,6 +209,9 @@ function createInstancedMesh(chunk, id, keys, geometry, material, owned, blockDa
   const cam = chunk.world?.game?.camera?.instance;
   const camPos = cam ? cam.position : new THREE.Vector3(0, 0, 0);
 
+  const isTintable = Array.isArray(material) ? material.some(isTintableMaterial) : isTintableMaterial(material);
+  const color = new THREE.Color();
+
   let renderCount = 0;
   for (const key of keys) {
     const [ax, ay, az] = chunk.world.keyToCoords(key);
@@ -202,6 +222,12 @@ function createInstancedMesh(chunk, id, keys, geometry, material, owned, blockDa
       if (below === 'path_block' || below === 'dirt_path' || below === 'farmland') {
         tempPos.y -= 0.0625;
       }
+    }
+
+    if (isTintable) {
+      const hex = chunk.world.terrain.getBlendedColor(ax, az, 'color');
+      color.setHex(hex);
+      mesh.setColorAt(renderCount, color);
     }
 
     tempEuler.set(0, 0, 0);
@@ -217,7 +243,11 @@ function createInstancedMesh(chunk, id, keys, geometry, material, owned, blockDa
 
   mesh.count = renderCount;
   mesh.instanceMatrix.needsUpdate = true;
+  if (isTintable && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  
   mesh.frustumCulled = true;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   mesh.renderOrder = getRenderOrder(id, material);
   
   const key = isLod ? `${id}_lod` : id;

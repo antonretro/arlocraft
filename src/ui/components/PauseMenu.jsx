@@ -27,6 +27,19 @@ export const PauseMenu = ({ setIsPaused }) => {
     game.settingsManager.set(key, value);
     setSettings({ ...game.settingsManager.getAll() });
   };
+
+  const applyPerformancePreset = () => {
+    // MAX STABILITY PRESET
+    updateSetting('renderDistance', 2);
+    updateSetting('resolutionScale', 0.65);
+    updateSetting('autoQuality', true);
+    updateSetting('stabilityMode', true);
+    updateSetting('chunkRebuildBudget', 1);
+    updateSetting('lowSpecPresetApplied', true);
+
+    game.world.setRenderDistance(2);
+    game.renderer.setResolutionScale(0.65);
+  };
   
   const worldSummary = {
     mode: game.gameState?.mode || 'SURVIVAL',
@@ -272,6 +285,29 @@ export const PauseMenu = ({ setIsPaused }) => {
                           updateSetting('foliageSwaying', val);
                         }}
                       />
+
+                      <div className="border-t border-white/5 pt-6 flex flex-col gap-4">
+                        <span className="text-[10px] font-bold text-arlo-blue uppercase tracking-[0.2em] px-1">Engine Stability Controls</span>
+                        <ToggleSetting 
+                          label="Stability Mode" 
+                          desc="Smooths out frame-time spikes during world generation" 
+                          active={settings.stabilityMode}
+                          onToggle={() => updateSetting('stabilityMode', !settings.stabilityMode)}
+                        />
+                        <RangeSetting 
+                          label="Chunk Rebuild Budget" 
+                          desc="Max chunk geometry updates per frame"
+                          value={settings.chunkRebuildBudget} 
+                          min={1} max={16} 
+                          onChange={(v) => updateSetting('chunkRebuildBudget', v)}
+                        />
+                        <button 
+                          onClick={applyPerformancePreset}
+                          className="w-full py-4 bg-arlo-blue/10 hover:bg-arlo-blue/20 border border-arlo-blue/20 rounded-xl text-arlo-blue text-xs font-bold uppercase tracking-widest transition-all"
+                        >
+                          Maximize Stability (One-Click Preset)
+                        </button>
+                      </div>
                     </motion.div>
                   )}
  

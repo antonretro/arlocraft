@@ -1,6 +1,7 @@
 export class WorldConfig {
   constructor() {
     this.chunkSize = 12;
+    this.qualityTier = 'balanced'; // Default tier
     this.renderDistance = {
       min: 1,
       max: 6,

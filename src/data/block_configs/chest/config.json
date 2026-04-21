@@ -1,0 +1,6 @@
+{
+  "name": "Chest",
+  "hardness": 2.5,
+  "xp": 4,
+  "dropId": "chest"
+}

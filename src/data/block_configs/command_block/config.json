@@ -1,0 +1,8 @@
+{
+  "name": "Command Block",
+  "hardness": 3,
+  "xp": 30,
+  "color": "0x7bb3ff",
+  "emissive": true,
+  "emissiveColor": "0x1d4ed8"
+}

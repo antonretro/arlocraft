@@ -14,7 +14,7 @@ export const BIOMES = [
     ridgeStrength: 0.08,
     detailStrength: 0.5,
     treeDensity: 0.04,
-    color: 0x91bd59,
+    color: 0x76c12d, // Vibrant Lush Plains
     waterColor: 0x3f76e4,
   },
   {
@@ -28,7 +28,7 @@ export const BIOMES = [
     detailStrength: 0.72,
     waterLevelOffset: 0,
     treeDensity: 0.1,
-    color: 0x79c05a,
+    color: 0x59a31a, // Rich Forest Green
     waterColor: 0x3f76e4,
   },
   {
@@ -70,7 +70,7 @@ export const BIOMES = [
     detailStrength: 0.82,
     waterLevelOffset: -2,
     treeDensity: 0.04,
-    color: 0x85b565,
+    color: 0x6fb04a, // Clearer Highland green
     waterColor: 0x3d57d6,
   },
   {
@@ -84,7 +84,7 @@ export const BIOMES = [
     detailStrength: 0.4,
     waterLevelOffset: 0,
     treeDensity: 0.015,
-    color: 0x83bb6d,
+    color: 0x6ab542, // Vibrant Meadow
     waterColor: 0x3fb8e4,
   },
   {

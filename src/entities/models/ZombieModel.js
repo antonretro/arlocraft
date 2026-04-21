@@ -24,6 +24,7 @@ export class ZombieModel extends BaseModel {
         w: 8,
         h: 8,
         d: 8,
+        th: 32,
       }
     );
     headGroup.add(this.head);
@@ -45,11 +46,12 @@ export class ZombieModel extends BaseModel {
         w: 8,
         h: 12,
         d: 4,
+        th: 32,
       }
     );
 
     // Arms (4x12x4)
-    const armUV = { u: 40, v: 16, w: 4, h: 12, d: 4 };
+    const armUV = { u: 40, v: 16, w: 4, h: 12, d: 4, th: 32 };
     this.armR = this.createPart(
       'armR',
       4 * unit,
@@ -76,7 +78,7 @@ export class ZombieModel extends BaseModel {
     this.armL.rotation.x = -Math.PI / 2;
 
     // Legs (4x12x4)
-    const legUV = { u: 0, v: 16, w: 4, h: 12, d: 4 };
+    const legUV = { u: 0, v: 16, w: 4, h: 12, d: 4, th: 32 };
     this.legR = this.createPart(
       'legR',
       4 * unit,

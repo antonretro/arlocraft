@@ -38,6 +38,19 @@ export const MainMenu = ({ setScreen }) => {
     setSettings({ ...game.settingsManager.getAll() });
   };
 
+  const applyPerformancePreset = () => {
+    // MAX STABILITY PRESET
+    updateSetting('renderDistance', 2);
+    updateSetting('resolutionScale', 0.65);
+    updateSetting('autoQuality', true);
+    updateSetting('stabilityMode', true);
+    updateSetting('chunkRebuildBudget', 1);
+    updateSetting('lowSpecPresetApplied', true);
+
+    game.world.setRenderDistance(2);
+    game.renderer.setResolutionScale(0.65);
+  };
+
   const handleJoin = async () => {
     if (!joinCode.trim()) {
       setStatus({ type: 'error', message: 'Please enter a valid Join Code.' });
@@ -108,7 +121,22 @@ export const MainMenu = ({ setScreen }) => {
               />
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <IconButton onClick={() => setSubScreen('skins')} icon={<Palette/>} label="Skins" color="green" />
-                <IconButton onClick={() => window.alert('Resource Packs coming soon in Voyage v1.2')} icon={<Library/>} label="Packs" color="orange" />
+                <IconButton
+                  onClick={() => window.alert('Resource Packs coming soon in Voyage v1.2')}
+                  icon={<Library/>}
+                  label="Packs"
+                  color="orange"
+                  badge="Voyage v1.2"
+                  caption="Resource Packs coming soon"
+                />
+              </div>
+              <div className="rounded-2xl border border-orange-400/20 bg-orange-500/10 px-4 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-orange-200/80">
+                  Voyage v1.2 Preview
+                </div>
+                <div className="mt-1 text-sm text-white/70">
+                  Resource Packs coming soon in Voyage v1.2.
+                </div>
               </div>
               <MenuButton 
                 onClick={() => setSubScreen('settings')}
@@ -446,6 +474,28 @@ export const MainMenu = ({ setScreen }) => {
                             updateSetting('cloudOpacity', op);
                           }}
                         />
+
+                        <div className="border-t border-white/5 pt-6 flex flex-col gap-6">
+                          <span className="text-[10px] font-bold text-arlo-blue uppercase tracking-[0.2em] px-1">Engine Stability Controls</span>
+                          <ToggleSetting 
+                            label="Stability Mode" 
+                            desc="Smooths out frame-time spikes during world generation" 
+                            active={settings.stabilityMode}
+                            onToggle={() => updateSetting('stabilityMode', !settings.stabilityMode)}
+                          />
+                          <RangeSetting 
+                            label="Chunk Rebuild Budget" 
+                            value={settings.chunkRebuildBudget} 
+                            min={1} max={16} 
+                            onChange={(v) => updateSetting('chunkRebuildBudget', v)}
+                          />
+                          <button 
+                            onClick={applyPerformancePreset}
+                            className="w-full py-4 bg-arlo-blue/10 hover:bg-arlo-blue/20 border border-arlo-blue/20 rounded-xl text-arlo-blue text-xs font-bold uppercase tracking-widest transition-all"
+                          >
+                            Maximize Stability (One-Click Preset)
+                          </button>
+                        </div>
                       </motion.div>
                     )}
 
@@ -453,12 +503,11 @@ export const MainMenu = ({ setScreen }) => {
                       <motion.div key="audio" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-8">
                         <RangeSetting 
                           label="Master Volume" 
-                          value={Math.round(game.settings.volume * 100)} 
+                          value={Math.round((settings.audioMaster || 0.82) * 100)} 
                           min={0} max={100} 
                           onChange={(v) => {
-                            game.settings.volume = v / 100;
-                            game.audio.applyFromSettings(game.settings);
-                            game.saveSettings();
+                            updateSetting('audioMaster', v / 100);
+                            game.audio.applyFromSettings(game.settingsManager.getAll());
                           }}
                         />
                       </motion.div>
@@ -681,7 +730,7 @@ const MenuButton = ({ label, desc, icon, onClick, color = 'default' }) => {
   );
 };
 
-const IconButton = ({ icon, label, color, onClick }) => (
+const IconButton = ({ icon, label, color, onClick, badge = null, caption = null }) => (
   <motion.button 
     whileHover={{ scale: 1.02 }}
     whileTap={{ scale: 0.98 }}
@@ -690,6 +739,16 @@ const IconButton = ({ icon, label, color, onClick }) => (
   >
     <div className={`text-${color}-400`}>{icon}</div>
     <span className="text-xs font-bold uppercase tracking-widest opacity-60 text-white">{label}</span>
+    {badge ? (
+      <span className="rounded-full border border-orange-400/25 bg-orange-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.22em] text-orange-200">
+        {badge}
+      </span>
+    ) : null}
+    {caption ? (
+      <span className="text-center text-[10px] leading-relaxed text-white/45">
+        {caption}
+      </span>
+    ) : null}
   </motion.button>
 );
 
@@ -745,4 +804,3 @@ const ToggleSetting = ({ label, desc, active, onToggle }) => (
     </div>
   </button>
 );
-

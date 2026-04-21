@@ -2,6 +2,12 @@ import React, { useMemo } from 'react';
 import { iconService } from '../IconService';
 import { normalizeBlockVariantId } from '../../data/blockIds';
 
+const FIXED_COLOR_FOLIAGE_IDS = new Set([
+  'cherry_leaves',
+  'leaves_cherry',
+  'flowering_azalea_leaves',
+]);
+
 /**
  * High-fidelity Item Icon component that renders 3D isometric blocks
  * or high-quality 2D sprites based on the item type.
@@ -15,6 +21,9 @@ export const ItemIcon = React.memo(({ item, className = "" }) => {
     const b = iconService.blockById.get(normalizedId);
     const tKey = iconService.getDisplayTextureKey(normalizedId);
     const deco = Boolean(b?.deco);
+    const hasFixedFoliageColor =
+      FIXED_COLOR_FOLIAGE_IDS.has(normalizedId) ||
+      FIXED_COLOR_FOLIAGE_IDS.has(tKey);
     const blockItem = 
       (b && !b.deco) || 
       normalizedId === 'wood' || 
@@ -29,9 +38,20 @@ export const ItemIcon = React.memo(({ item, className = "" }) => {
       textureKey: tKey,
       isDeco: deco,
       isBlockItem: blockItem,
-      shouldTintGrassFace: normalizedId === 'grass_block',
-      shouldTintFoliageIcon: (deco && (tKey === 'grass' || tKey.includes('grass') || tKey === 'fern')) || tKey.includes('leaves'),
-      shouldUseGrassSpriteTint: deco && (tKey === 'grass' || normalizedId === 'short_grass' || normalizedId === 'tall_grass')
+      shouldTintGrassFace: false,
+      shouldTintFoliageIcon:
+        !hasFixedFoliageColor &&
+        ((deco &&
+          (tKey === 'grass' ||
+            tKey.includes('grass') ||
+            tKey === 'fern')) ||
+          tKey.includes('leaves')),
+      shouldUseGrassSpriteTint:
+        !hasFixedFoliageColor &&
+        deco &&
+        (tKey === 'grass' ||
+          normalizedId === 'short_grass' ||
+          normalizedId === 'tall_grass')
     };
   }, [normalizedId]);
 
@@ -52,23 +72,23 @@ export const ItemIcon = React.memo(({ item, className = "" }) => {
     );
   };
 
-  // BLOCK ITEM: Render 3D Isometric View
+  // BLOCK ITEM: Render crisp block sprite instead of a distorted CSS pseudo-3D cube.
   if (isBlockItem) {
-    const set = iconService.getBlockTextureSet(normalizedId);
-    if (set && (set.top || set.all || set.side || set.front || set.bottom)) {
-      const topTex = set.top || set.all || set.side || set.front || set.bottom;
-      const leftTex = set.front || set.side || set.all || set.top || set.bottom;
-      const rightTex = set.side || set.front || set.all || set.top || set.bottom;
+    const blockTexture = iconService.getPreferredBlockIconTexture(normalizedId);
+    if (blockTexture) {
+      const tintClass = shouldTintGrassFace
+        ? 'tint-grass-face'
+        : shouldTintFoliageIcon
+          ? 'tint-grass'
+          : '';
 
       return (
-        <div className={`item-icon ${shouldTintFoliageIcon ? 'tint-grass' : ''} ${className}`}>
-           <div className="iso-icon">
-              <div className={`iso-face top ${shouldTintGrassFace ? 'tint-grass-face' : ''}`} style={{ backgroundImage: `url('${topTex}')` }} />
-              <div className="iso-face left" style={{ backgroundImage: `url('${leftTex}')` }} />
-              <div className="iso-face right" style={{ backgroundImage: `url('${rightTex}')` }} />
-           </div>
-           {renderDurability()}
-           {item.count > 1 && <span className="item-count">{item.count}</span>}
+        <div
+          className={`item-icon block-sprite-icon ${tintClass} ${className}`}
+          style={{ backgroundImage: `url('${blockTexture}')` }}
+        >
+          {renderDurability()}
+          {item.count > 1 && <span className="item-count">{item.count}</span>}
         </div>
       );
     }

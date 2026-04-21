@@ -217,6 +217,7 @@ export class GameState {
   }
 
   setMode(mode) {
+    if (this.mode === mode) return;
     this.mode = mode;
     if (mode === 'CREATIVE') {
       this.hp = this.maxHp;

@@ -109,7 +109,8 @@ export class WorldTerrainService {
     let r = 0,
       g = 0,
       b = 0;
-    const radius = 4; // 9x9 area for smooth results
+    const tier = this.world.config.qualityTier;
+    const radius = tier === 'high' ? 6 : tier === 'balanced' ? 4 : 2; 
     const count = (radius * 2 + 1) * (radius * 2 + 1);
 
     for (let dx = -radius; dx <= radius; dx++) {
@@ -199,10 +200,24 @@ export class WorldTerrainService {
         // Use column height (respects spawn-zone flattening) instead of raw terrain
         const height = this.getColumnHeight(tx, tz);
         if (height > this.world.seaLevel + 1) {
-          // Scan for actual top block (accounts for trees on the surface)
-          const topBlock = this.world.getTopBlockAt?.(tx, tz);
-          const topY = topBlock ? topBlock.y + 1 : height + 1;
-          return { x: tx, y: topY + 0.5, z: tz };
+          const floorX = Math.floor(tx);
+          const floorZ = Math.floor(tz);
+          const scanStartY = Math.max(
+            Math.floor(height) + 12,
+            this.world.seaLevel + 2
+          );
+          const scanFloorY = Math.max(this.world.minTerrainY, Math.floor(height) - 8);
+          let topSolidY = null;
+
+          // Prefer actual loaded block data so trees/platforms count when present.
+          for (let scanY = scanStartY; scanY >= scanFloorY; scanY--) {
+            const blockId = this.world.getBlockAt(floorX, scanY, floorZ);
+            if (!blockId || !this.world.blocks.isSolid(blockId)) continue;
+            topSolidY = scanY + 1;
+            break;
+          }
+
+          return { x: tx, y: (topSolidY ?? height + 1) + 0.5, z: tz };
         }
       }
     }

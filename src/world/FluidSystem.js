@@ -69,11 +69,10 @@ export class FluidSystem {
       const cz = this.world.coords.getChunkCoord(z);
       const ownerKey = this.world.coords.getChunkKey(cx, cy, cz);
       
-      // Use silent placement to avoid immediate rebuilds
+      // use silent placement to avoid immediate rebuilds
       this.world.mutations.setBlock(x, y, z, id, ownerKey, { silent: true });
       
       affectedChunks.add(ownerKey);
-      this.scheduleSpread(x, y, z, id, depth);
       
       this.processSpread(block);
     }

@@ -423,14 +423,21 @@ export class PlayerHand {
           const mesh = this.createVoxelMesh(url || texture.image.src);
           mesh.position.set(0, 0.25, -0.1);
 
-          if (
-            textureKey === 'grass' ||
-            textureKey.includes('grass') ||
-            textureKey.includes('fern') ||
-            textureKey.includes('leaves')
-          ) {
+          const tid = textureKey.toLowerCase();
+          const nid = normalizedId.toLowerCase();
+          const needsTint = tid.includes('grass') || tid.includes('fern') || tid.includes('leaves') ||
+                            nid.includes('grass') || nid.includes('fern') || nid.includes('leaves') ||
+                            nid === 'sugar_cane' || nid === 'vine';
+
+          if (needsTint) {
             mesh.traverse((child) => {
-              if (child.material) child.material.color?.set(0x79c05a);
+              if (child.material) {
+                if (Array.isArray(child.material)) {
+                  child.material.forEach(m => m.color?.set(GRASS_PREVIEW_TINT));
+                } else {
+                  child.material.color?.set(GRASS_PREVIEW_TINT);
+                }
+              }
             });
           }
 

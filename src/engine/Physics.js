@@ -32,7 +32,7 @@ export class Physics {
     this.waterExitStepHeight = 2.0;
     this.feetOffset = 0;
     this.maxStepHeight = 0.6;
-    this.playerRadius = 0.3;
+    this.playerRadius = 0.28;
     this.bodyHeight = 1.8;
     this.eyeHeight = 1.62;
     this.currentEyeHeight = 1.32;
@@ -84,8 +84,11 @@ export class Physics {
   resetPlayer(x = 0, y = 160, z = 0) {
     if (!this.isReady) return;
     const spawn = this.world.getSafeSpawnPoint(x, z);
-    const startY = Number.isFinite(y) && y > spawn.y ? y : spawn.y;
-    const safe = this.resolveSafeSpawn(spawn.x, startY, spawn.z, 24);
+    const preferGround = !Number.isFinite(y) || y >= spawn.y + 8;
+    const startY = preferGround ? spawn.y : y;
+    const safe = this.resolveSafeSpawn(spawn.x, startY, spawn.z, 24, {
+      preferGround,
+    });
     this.position.set(safe.x, safe.y, safe.z);
     this.tryResolveEmbeddedPosition(16); // Increased range for safety
     this.lastSafePosition.copy(this.position);
@@ -93,21 +96,25 @@ export class Physics {
     this.voidFallTimer = 0;
   }
 
-  resolveSafeSpawn(x, y, z, maxRadius = 24) {
+  resolveSafeSpawn(x, y, z, maxRadius = 24, options = {}) {
+    const preferGround = options.preferGround === true;
     const safeX = Number.isFinite(x) ? x : 0;
     const safeZ = Number.isFinite(z) ? z : 0;
-    const primeChunks = (tx, tz) => {
+    const primeChunks = (tx, ty, tz) => {
       const cx = this.world.getChunkCoord(tx);
+      const cy = this.world.getChunkCoord(
+        Number.isFinite(ty) ? ty : this.getGroundYAt(tx, tz, 160)
+      );
       const cz = this.world.getChunkCoord(tz);
-      this.world.ensureCriticalChunks?.(cx, cz, 1);
-      this.world.processChunkLoadQueue?.(cx, cz, 48);
+      this.world.ensureCriticalChunks?.(cx, cy, cz, 1);
+      this.world.processChunkLoadQueue?.(cx, cy, cz, 48);
       this.world.flushPriorityChunkRebuilds?.(48);
     };
-    primeChunks(safeX, safeZ);
+    primeChunks(safeX, y, safeZ);
 
     const baseY = Number.isFinite(y) ? y : this.getGroundYAt(safeX, safeZ, 160);
-    const floorY = this.getGroundYAt(safeX, safeZ, 160);
-    const candidateY = Math.max(baseY, floorY);
+    const floorY = this.getGroundYAt(safeX, safeZ, baseY);
+    const candidateY = preferGround ? floorY : Math.max(baseY, floorY);
 
     const findClearY = (tx, tz, startY, upSteps = 40) => {
       if (this.canOccupyAt(tx, startY, tz)) return startY;
@@ -131,9 +138,11 @@ export class Physics {
     }
 
     const fallback = this.world.getSafeSpawnPoint(safeX, safeZ, maxRadius);
-    primeChunks(fallback.x, fallback.z);
-    const fallbackFloorY = this.getGroundYAt(fallback.x, fallback.z, 160);
-    const fallbackBaseY = Math.max(fallback.y, fallbackFloorY);
+    primeChunks(fallback.x, fallback.y, fallback.z);
+    const fallbackFloorY = this.getGroundYAt(fallback.x, fallback.z, fallback.y);
+    const fallbackBaseY = preferGround
+      ? fallbackFloorY
+      : Math.max(fallback.y, fallbackFloorY);
     const fallbackClearY = findClearY(
       fallback.x,
       fallback.z,
@@ -199,7 +208,7 @@ export class Physics {
 
   isGrounded() {
     // RESTORED: Unified floor detection. Checks multiple offset points for better slab/stair stability.
-    const r = this.playerRadius * 0.8;
+    const r = this.playerRadius * 0.4;
     const offsets = [[0,0], [r,0], [-r,0], [0,r], [0,-r]];
     let maxGroundY = -Infinity;
     for (const [ox, oz] of offsets) {
@@ -288,12 +297,12 @@ export class Physics {
             const overlapY = Math.min(maxY - blockMinY, blockMaxY - minY);
             if (overlapY <= 0) continue;
 
-            const pushEps = 0.0008;
+            const pushEps = 0.005;
             if (overlapY <= overlapX && overlapY <= overlapZ) {
               const centerY = (minY + maxY) * 0.5;
-              if (centerY >= by) this.position.y += overlapY + pushEps;
-              else this.position.y -= overlapY + pushEps;
-              this.velocity.y = 0;
+              if (centerY >= by && this.velocity.y >= 0) this.position.y += overlapY + pushEps;
+              else if (centerY < by) this.position.y -= overlapY + pushEps;
+              if (Math.abs(this.velocity.y) < 2) this.velocity.y = 0;
             } else if (overlapX <= overlapZ) {
               this.position.x += (dx >= 0 ? 1 : -1) * (overlapX + pushEps);
               this.velocity.x = 0;
@@ -797,10 +806,12 @@ export class Physics {
           this.tmpRescuePos.x,
           this.tmpRescuePos.y,
           this.tmpRescuePos.z,
-          24
+          24,
+          { preferGround: true }
         );
         this.position.set(safeRescue.x, safeRescue.y, safeRescue.z);
         this.velocity.set(0, 0, 0);
+        this.lastSafePosition.copy(this.position);
         this.voidFallTimer = 0;
       }
     } else {

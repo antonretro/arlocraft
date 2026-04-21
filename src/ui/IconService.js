@@ -3,15 +3,20 @@ import { TOOLS } from '../data/tools.js';
 import { normalizeBlockVariantId } from '../data/blockIds.js';
 
 const itemTextureModules = import.meta.glob(
-  '../Igneous 1.19.4/assets/minecraft/textures/item/*.png',
+  '../../public/resource_pack/assets/minecraft/textures/item/*.png',
   { eager: true, query: '?url' }
 );
 const blockTextureModules = import.meta.glob(
-  '../Igneous 1.19.4/assets/minecraft/textures/block/*.png',
+  '../../public/resource_pack/assets/minecraft/textures/block/*.png',
   { eager: true, query: '?url' }
 );
 
 const GRASS_PREVIEW_TINT_CLASS = 'tint-grass-face';
+const FIXED_COLOR_FOLIAGE_IDS = new Set([
+  'cherry_leaves',
+  'leaves_cherry',
+  'flowering_azalea_leaves',
+]);
 
 export class IconService {
   constructor() {
@@ -167,6 +172,53 @@ export class IconService {
     return `${base}${normalized}`;
   }
 
+  getBlockPreviewProfile(itemId) {
+    const normalizedId = normalizeBlockVariantId(itemId);
+    if (normalizedId === 'path_block' || normalizedId === 'dirt_path') {
+      return {
+        height: 0.9375,
+        className: 'preview-short-block',
+      };
+    }
+    if (normalizedId === 'farmland') {
+      return {
+        height: 0.9375,
+        className: 'preview-short-block',
+      };
+    }
+    return {
+      height: 1,
+      className: '',
+    };
+  }
+
+  getBlockPreviewStyle(itemId) {
+    const profile = this.getBlockPreviewProfile(itemId);
+    return {
+      '--block-preview-height': String(profile.height),
+    };
+  }
+
+  getPreferredBlockIconTexture(itemId) {
+    const normalizedId = normalizeBlockVariantId(itemId);
+    const set = this.getBlockTextureSet(normalizedId);
+    if (!set) return null;
+
+    if (
+      normalizedId === 'path_block' ||
+      normalizedId === 'dirt_path' ||
+      normalizedId === 'farmland'
+    ) {
+      return set.top || set.front || set.side || set.all || set.bottom || null;
+    }
+
+    if (normalizedId === 'grass_block') {
+      return set.front || set.side || set.all || set.top || set.bottom || null;
+    }
+
+    return set.front || set.side || set.all || set.top || set.bottom || null;
+  }
+
   createItemElement(item) {
     const element = document.createElement('div');
     element.className = 'item-icon';
@@ -174,18 +226,23 @@ export class IconService {
     const block = this.blockById.get(normalizedId);
     const textureKey = this.getDisplayTextureKey(normalizedId);
     const isDeco = Boolean(block?.deco);
-    const shouldTintGrassFace = normalizedId === 'grass_block';
-    const shouldTintFoliageIcon =
-      (isDeco &&
-        (textureKey === 'grass' ||
-          textureKey.includes('grass') ||
-          textureKey === 'fern')) ||
-      textureKey.includes('leaves');
+    const lowId = normalizedId.toLowerCase();
+    const lowTex = String(textureKey).toLowerCase();
+
+    const shouldTintGrassFace = false;
+    const hasFixedFoliageColor =
+      FIXED_COLOR_FOLIAGE_IDS.has(lowId) || FIXED_COLOR_FOLIAGE_IDS.has(lowTex);
+    
+    // Check if it's a foliage type (leaves, tall grass, ferns, etc.)
+    const isFoliage = lowId.includes('grass') || lowId.includes('fern') || 
+                      lowId.includes('leaves') || lowId === 'active_vine' || 
+                      lowId === 'sugar_cane' || lowId === 'vine' ||
+                      lowTex.includes('grass') || lowTex.includes('leaves');
+
+    const shouldTintFoliageIcon = isFoliage && !hasFixedFoliageColor;
+    
     const shouldUseGrassSpriteTint =
-      isDeco &&
-      (textureKey === 'grass' ||
-        normalizedId === 'short_grass' ||
-        normalizedId === 'tall_grass');
+      isFoliage && !isDeco && !hasFixedFoliageColor;
     const isBlockItem =
       (block && !block.deco) ||
       normalizedId === 'wood' ||
@@ -196,42 +253,15 @@ export class IconService {
       normalizedId.includes('_slab');
 
     if (isBlockItem) {
-      const set = this.getBlockTextureSet(normalizedId);
-      if (set && (set.top || set.all || set.side || set.front || set.bottom)) {
-        const topTex =
-          set.top || set.all || set.side || set.front || set.bottom;
-        const leftTex =
-          set.front || set.side || set.all || set.top || set.bottom;
-        const rightTex =
-          set.side || set.front || set.all || set.top || set.bottom;
-
-        const isoContainer = document.createElement('div');
-        isoContainer.className = 'iso-icon';
-
-        const topFace = document.createElement('div');
-        topFace.className = 'iso-face top';
-        topFace.style.backgroundImage = `url('${topTex}')`;
+      const texture = this.getPreferredBlockIconTexture(normalizedId);
+      if (texture) {
+        element.classList.add('block-sprite-icon');
+        element.style.backgroundImage = `url('${texture}')`;
         if (shouldTintGrassFace) {
-          topFace.classList.add(GRASS_PREVIEW_TINT_CLASS);
+          element.classList.add(GRASS_PREVIEW_TINT_CLASS);
+        } else if (shouldTintFoliageIcon) {
+          element.classList.add('tint-grass');
         }
-
-        const leftFace = document.createElement('div');
-        leftFace.className = 'iso-face left';
-        leftFace.style.backgroundImage = `url('${leftTex}')`;
-
-        const rightFace = document.createElement('div');
-        rightFace.className = 'iso-face right';
-        rightFace.style.backgroundImage = `url('${rightTex}')`;
-
-        isoContainer.appendChild(topFace);
-        isoContainer.appendChild(leftFace);
-        isoContainer.appendChild(rightFace);
-
-        if (shouldTintFoliageIcon) {
-          isoContainer.classList.add('tint-grass');
-        }
-
-        element.appendChild(isoContainer);
       } else {
         element.textContent = String(normalizedId).slice(0, 2).toUpperCase();
       }
@@ -298,6 +328,31 @@ export class IconService {
     if (legacyMap[alias]) alias = legacyMap[alias];
 
     const all = this.blockTextures[alias] || this.blockTextures[`${alias}_all`];
+    if (alias === 'farmland') {
+      const dirt =
+        this.blockTextures.dirt || this.blockTextures.dirt_all || all;
+      const top = this.blockTextures.farmland || all;
+      return {
+        all: null,
+        top,
+        side: dirt,
+        front: dirt,
+        bottom: dirt,
+      };
+    }
+    if (alias === 'dirt_path') {
+      const dirt =
+        this.blockTextures.dirt || this.blockTextures.dirt_all || all;
+      const top = this.blockTextures.dirt_path_top || all;
+      const side = this.blockTextures.dirt_path_side || dirt || all;
+      return {
+        all: null,
+        top,
+        side,
+        front: side,
+        bottom: dirt || side || all,
+      };
+    }
     return {
       all: all,
       top: this.blockTextures[`${alias}_top`] || all,

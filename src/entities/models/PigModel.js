@@ -22,6 +22,7 @@ export class PigModel extends BaseModel {
         w: 10,
         h: 8,
         d: 16,
+        th: 32,
       }
     );
 
@@ -42,6 +43,7 @@ export class PigModel extends BaseModel {
         w: 8,
         h: 8,
         d: 8,
+        th: 32,
       }
     );
     headGroup.add(this.head);
@@ -61,6 +63,7 @@ export class PigModel extends BaseModel {
         w: 4,
         h: 3,
         d: 1,
+        th: 32,
       }
     );
     headGroup.add(snout);
@@ -68,8 +71,8 @@ export class PigModel extends BaseModel {
     this.parts['headGroup'] = headGroup;
     this.group.add(headGroup);
 
-    // Legs (4x6x4)
-    const legUV = { u: 0, v: 16, w: 4, h: 6, d: 4 };
+    // Legs (4x12x4 -> wait, pig legs are short, 4x6x4)
+    const legUV = { u: 0, v: 16, w: 4, h: 6, d: 4, th: 32 };
     this.legFR = this.createPart(
       'legFR',
       4 * unit,

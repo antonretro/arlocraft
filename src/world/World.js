@@ -178,8 +178,13 @@ export class World {
     );
   }
 
+  getRawBlockAt(x, y, z) {
+    const id = this.getBlockAt(x, y, z);
+    return this.state.getInternalId(id);
+  }
+
   getGroundYBelow(x, y, z) {
-    const radius = 0.28;
+    const radius = 0.1;
     const searchPoints = [
       [x, z],
       [x - radius, z - radius],
@@ -188,35 +193,54 @@ export class World {
       [x + radius, z + radius],
     ];
 
-    let maxGroundY = -256;
-    const startY = Math.floor(y + 0.1); // Slightly lower than feet to avoid snapping up
-    const searchDepthLimit = 32; // Don't search too far down per frame
+    let maxGroundY = Number.NEGATIVE_INFINITY;
+    const startY = Math.floor(y + 0.1);
+    const searchDepthLimit = 32;
 
     for (const [px, pz] of searchPoints) {
       const gx = Math.floor(px);
       const gz = Math.floor(pz);
-      const terrainY = this.terrain.getColumnHeight(px, pz);
+      const terrainY = Math.floor(this.terrain.getColumnHeight(px, pz));
+      const scanFloorY = Math.max(
+        this.minTerrainY,
+        Math.min(startY - searchDepthLimit, terrainY)
+      );
+      let pointGroundY = Number.NEGATIVE_INFINITY;
 
-      // 1. Scan from player's feet downwards (Searching blockMap first)
-      // startY is slightly into the current block to catch the floor we are standing on.
-      const scanLimit = Math.max(-64, Math.floor(terrainY));
-      for (let gy = startY; gy >= scanLimit; gy--) {
+      // Search real block data first so caves, platforms, and placed blocks win.
+      for (let gy = startY; gy >= scanFloorY; gy--) {
         const id = this.getBlockAt(gx, gy, gz);
-        if (id && this.blocks.isSolid(id)) {
-          const blockTopY = gy + 1;
-          // IMPORTANT: If we are at or slightly above this block, it's our ground.
-          // The 0.6 tolerance allows for smooth step-up/jumping buffer.
-          if (blockTopY <= y + 0.1 || (this.blocks.isStep(id) && blockTopY <= y + 0.6)) {
-            if (blockTopY > maxGroundY) maxGroundY = blockTopY;
-            break;
-          }
-        }
+        if (!id || !this.blocks.isSolid(id)) continue;
+
+        const blockTopY = gy + 1;
+        const withinStepReach =
+          blockTopY <= y + 0.1 ||
+          (this.blocks.isStep(id) && blockTopY <= y + 0.6);
+
+        if (!withinStepReach) continue;
+        pointGroundY = blockTopY;
+        break;
       }
 
-      // 2. Terrain noise fallback (if no placed blocks were higher)
-      if (terrainY > maxGroundY) maxGroundY = terrainY;
+      // Only trust terrain fallback when the terrain surface is not above us.
+      if (terrainY <= startY && terrainY > pointGroundY) {
+        pointGroundY = terrainY;
+      }
+
+      if (pointGroundY > maxGroundY) {
+        maxGroundY = pointGroundY;
+      }
     }
-    return maxGroundY;
+
+    if (Number.isFinite(maxGroundY)) {
+      return maxGroundY;
+    }
+
+    return Math.max(this.minTerrainY, startY - searchDepthLimit);
+  }
+
+  getGroundYAt(x, z, currentY = this.game?.physics?.position?.y ?? this.seaLevel) {
+    return this.getGroundYBelow(x, currentY, z);
   }
 
   getBiomeIdAt(x, z) {

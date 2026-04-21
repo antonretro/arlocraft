@@ -18,6 +18,7 @@ export class DebugProfiler {
       dirtyChunks: 0,
       particles: 0,
       rebuildQueue: 0,
+      meshMs: 0,
       activeEntities: 0,
       playerPos: { x: 0, y: 0, z: 0 },
       chunkPos: { cx: 0, cz: 0 },
@@ -88,8 +89,11 @@ export class DebugProfiler {
     if (this.game.world?.chunkManager) {
       const cm = this.game.world.chunkManager;
       this.metrics.chunks = cm.chunks?.size || 0;
-      this.metrics.dirtyChunks = cm.priorityDirtyChunkKeys?.size || 0;
+      this.metrics.dirtyChunks = Array.from(cm.chunks?.values?.() || []).filter(
+        (chunk) => chunk?.dirty && !chunk.destroyed
+      ).length;
       this.metrics.rebuildQueue = cm.pendingChunkLoads?.length || 0;
+      this.metrics.meshMs = Number(this.game._lastMeshMs || 0);
     }
 
     if (this.game.entities) {

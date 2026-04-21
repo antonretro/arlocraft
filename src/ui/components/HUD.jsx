@@ -20,8 +20,9 @@ export const HUD = () => {
 
     const handleInventory = () => {
       setInventory(game.gameState.inventory.slice(0, 9));
-      setActiveSlot(game.gameState.selectedSlot);
     };
+
+    const handleSlot = (e) => setActiveSlot(e.detail);
 
     const handleEffects = () => {
       // Force a re-render when effects change
@@ -33,6 +34,7 @@ export const HUD = () => {
     window.addEventListener('xp-changed', handleXp);
     window.addEventListener('level-up', handleLevel);
     window.addEventListener('inventory-changed', handleInventory);
+    window.addEventListener('slot-changed', handleSlot);
     window.addEventListener('effects-changed', handleEffects);
 
     let targetTimeout;
@@ -63,6 +65,7 @@ export const HUD = () => {
       window.removeEventListener('xp-changed', handleXp);
       window.removeEventListener('level-up', handleLevel);
       window.removeEventListener('inventory-changed', handleInventory);
+      window.removeEventListener('slot-changed', handleSlot);
       window.removeEventListener('effects-changed', handleEffects);
       window.removeEventListener('target-block-changed', handleTarget);
       if (targetTimeout) clearTimeout(targetTimeout);
@@ -164,19 +167,18 @@ export const HUD = () => {
 };
 
 const PlayerAvatar = () => {
-  const [avatar, setAvatar] = useState(null);
+  const defaultAvatar = '/assets/steve.png';
+  const [avatar, setAvatar] = useState(defaultAvatar);
   
   useEffect(() => {
-    const handleUpdate = (e) => setAvatar(e.detail.avatarUrl);
+    const handleUpdate = (e) => {
+      if (typeof e.detail?.avatarUrl === 'string' && e.detail.avatarUrl) {
+        setAvatar(e.detail.avatarUrl);
+      }
+    };
     window.addEventListener('skin-updated', handleUpdate);
     
-    // Check game for initial
-    const game = getGame();
-    if (game?.settings?.skinUsername) {
-        setAvatar(`https://minotar.net/avatar/${game.settings.skinUsername}/64`);
-    } else {
-        setAvatar('assets/arlo_real.png');
-    }
+    setAvatar(defaultAvatar);
 
     return () => window.removeEventListener('skin-updated', handleUpdate);
   }, []);
@@ -184,10 +186,10 @@ const PlayerAvatar = () => {
   return (
     <div className="relative w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden border border-white/20 bg-white/5 flex-shrink-0 shadow-lg shadow-black/20">
         <img 
-            src={avatar || 'assets/arlo_real.png'} 
+            src={avatar || defaultAvatar} 
             className="w-full h-full object-cover" 
             style={{ imageRendering: 'pixelated' }}
-            onError={(e) => { e.target.src = 'assets/arlo_real.png'; }}
+            onError={(e) => { e.currentTarget.src = defaultAvatar; }}
             alt="ArloAvatar"
         />
         <div className="absolute inset-0 border border-white/10 rounded-lg pointer-events-none" />
@@ -251,7 +253,9 @@ const DebugOverlay = () => {
         
         <div className="col-span-2 h-px bg-white/5 my-1" />
         <span className="text-white/40">Loaded Chunks:</span> <span className="text-right">{metrics.chunks || 0}</span>
+        <span className="text-white/40">Dirty Chunks:</span> <span className="text-right">{metrics.dirtyChunks || 0}</span>
         <span className="text-white/40">Load Queue:</span> <span className="text-right">{metrics.rebuildQueue || 0}</span>
+        <span className="text-white/40">Mesh Build:</span> <span className="text-right">{Number(metrics.meshMs || 0).toFixed(2)}ms</span>
         <span className="text-white/40">Entities:</span> <span className="text-right">{metrics.activeEntities || 0}</span>
       </div>
     </div>

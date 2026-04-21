@@ -276,7 +276,7 @@ export class BlockRegistry {
           new THREE.MeshLambertMaterial({
             map: tex,
             transparent: false,
-            alphaTest: 0.08,
+            alphaTest: 0.5,
             depthWrite: true,
           })
         );
@@ -637,6 +637,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         uniforms: {
           uTime: { value: 0 },
           uWaterColor: { value: new THREE.Color(fluidColor) },
+          uOpacity: { value: isLava ? 1.0 : 0.72 },
         },
         vertexShader: `
                     varying vec2 vUv;
@@ -651,8 +652,10 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
                         vec4 worldPos = modelMatrix * local;
                         vWorldPos = worldPos.xyz;
                         
-                        // Subtle height bobbing (sin waves)
-                        float h = sin(vWorldPos.x * 2.0 + uTime * 1.5) * 0.015 + cos(vWorldPos.z * 1.8 - uTime * 1.2) * 0.015;
+                        // Premium Bobbing: Combined multi-frequency sin waves for organic motion
+                        float h = sin(vWorldPos.x * 1.5 + uTime * 1.3) * 0.02 
+                                + cos(vWorldPos.z * 1.2 - uTime * 1.1) * 0.02
+                                + sin((vWorldPos.x + vWorldPos.z) * 0.8 + uTime * 0.9) * 0.01;
                         local.y += h;
                         #ifdef USE_INSTANCING
                             worldPos.y += h;
@@ -664,20 +667,25 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         fragmentShader: `
                     uniform float uTime;
                     uniform vec3 uWaterColor;
+                    uniform float uOpacity;
                     varying vec2 vUv;
                     varying vec3 vWorldPos;
 
                     void main() {
-                        // Layered scrolling patterns for a 'shimmer' ripple effect
-                        float rippleA = sin((vWorldPos.x * 3.5) + (uTime * 1.8)) * 0.5 + 0.5;
-                        float rippleB = cos((vWorldPos.z * 4.2) - (uTime * 2.2)) * 0.5 + 0.5;
-                        float noise = (rippleA + rippleB) * 0.25;
+                        // Advanced Ripple Engine: Layered scrolling noise
+                        float t = uTime * 0.65;
+                        float rippleA = sin((vWorldPos.x * 2.8) + (t * 1.5)) * 0.5 + 0.5;
+                        float rippleB = cos((vWorldPos.z * 3.1) - (t * 1.8)) * 0.5 + 0.5;
+                        float rippleC = sin((vWorldPos.x - vWorldPos.z) * 1.5 + t * 0.8) * 0.5 + 0.5;
                         
-                        float highlight = smoothstep(0.65, 0.95, noise);
-                        vec3 color = mix(uWaterColor * 0.85, uWaterColor * 1.3, noise);
-                        color = mix(color, vec3(1.0), highlight * 0.35);
+                        float noise = (rippleA * 0.4 + rippleB * 0.4 + rippleC * 0.2);
+                        
+                        // Specular highlight for surface shimmer
+                        float highlight = smoothstep(0.72, 0.98, noise);
+                        vec3 color = mix(uWaterColor * 0.8, uWaterColor * 1.25, noise);
+                        color += vec3(highlight) * 0.42;
 
-                        gl_FragColor = vec4(color, ${isLava ? '1.0' : '0.8'});
+                        gl_FragColor = vec4(color, uOpacity);
                     }
                 `,
         transparent: !isLava,
@@ -742,10 +750,31 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
       return null;
     };
 
+    const loadPackTexture = (fileName) => {
+      const url = this.resourceManager.getTextureUrl(fileName);
+      return url ? this.loadTexture(url) : null;
+    };
+
     const allTex = load('all.png');
-    const sideTex = load('side.png') || allTex;
-    const topTex = load('top.png') || allTex;
-    const bottomTex = load('bottom.png') || allTex;
+    const isFarmlandBlock = targetId === 'farmland' || id === 'farmland';
+    const isPathBlock =
+      targetId === 'dirt_path' || id === 'path_block' || id === 'dirt_path';
+    const dirtTex = loadPackTexture('dirt.png');
+    const sideTex = isFarmlandBlock
+      ? load('side.png') || dirtTex || allTex
+      : isPathBlock
+        ? load('side.png') || dirtTex || allTex
+        : load('side.png') || allTex;
+    const topTex = isFarmlandBlock
+      ? load('top.png') || loadPackTexture('farmland.png') || allTex
+      : isPathBlock
+        ? load('top.png') || loadPackTexture('dirt_path_top.png') || allTex
+        : load('top.png') || allTex;
+    const bottomTex = isFarmlandBlock
+      ? load('bottom.png') || dirtTex || allTex
+      : isPathBlock
+        ? load('bottom.png') || dirtTex || allTex
+        : load('bottom.png') || allTex;
     const decoTex = allTex || sideTex || bottomTex || topTex;
     const frontTex = load('front.png') || sideTex || decoTex;
     const backTex = load('back.png') || sideTex || decoTex;
@@ -777,7 +806,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
       const matConfig = {
         transparent: isTransparent,
         opacity: 1,
-        alphaTest: isCutout ? 0.08 : 0,
+        alphaTest: isCutout ? 0.5 : 0,
         depthWrite: true,
         side: isDeco ? THREE.DoubleSide : THREE.FrontSide,
       };
@@ -795,6 +824,11 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         for (const mat of mats) mat.userData.alphaCutout = true;
       }
 
+      const hasFixedLeafColor =
+        textureId === 'cherry_leaves' ||
+        textureId === 'flowering_azalea_leaves' ||
+        id === 'cherry_leaves' ||
+        id === 'leaves_cherry';
       const isFoliage =
         (isDeco &&
           (textureId === 'grass' ||
@@ -805,7 +839,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             textureId.includes('roots') ||
             textureId.includes('sprouts') ||
             textureId.includes('sapling'))) ||
-        textureId.includes('leaves');
+        (textureId.includes('leaves') && !hasFixedLeafColor);
       const isGrassTopOnly = id === 'grass_block' || id === 'grass';
 
       for (let i = 0; i < mats.length; i++) {

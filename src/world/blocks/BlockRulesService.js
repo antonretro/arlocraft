@@ -156,4 +156,10 @@ export class BlockRulesService {
     const data = this.getBlockData(normalizedId);
     return data?.pickId || normalizedId;
   }
+
+  isStep(id) {
+    if (!id) return false;
+    const lowId = id.toLowerCase();
+    return lowId.includes('slab') || lowId.includes('stair');
+  }
 }

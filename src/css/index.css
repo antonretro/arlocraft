@@ -69,10 +69,23 @@
   image-rendering: pixelated;
 }
 
+.block-sprite-icon {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.28));
+}
+
 .iso-icon {
   @apply relative w-full h-full;
-  transform: scale(0.85) translateY(-2px);
+  --block-preview-height: 1;
+  transform: translateY(calc((1 - var(--block-preview-height)) * 12px)) scale(0.85) scaleY(var(--block-preview-height));
+  transform-origin: center bottom;
   filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+}
+
+.iso-icon.preview-short-block {
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,0.28));
 }
 
 .iso-face {
@@ -109,6 +122,11 @@
   z-index: 1;
 }
 
+.preview-short-block .iso-face.left,
+.preview-short-block .iso-face.right {
+  transform-origin: center bottom;
+}
+
 .item-count {
   @apply absolute -bottom-1 -right-1 text-[10px] font-bold text-white px-1.5 py-0.5 rounded-md bg-black/70 border border-white/10;
   font-family: var(--font-pixel);
@@ -119,16 +137,16 @@
 
 /* Vibrant grass tint for grey masked textures */
 .tint-grass-face {
-  /* Refined filter for deep green vibrant biome look */
-  filter: brightness(1.1) sepia(0.6) hue-rotate(55deg) saturate(3.2) contrast(1.1);
+  /* Refined filter for deep green vibrant biome look - Ground Boosted */
+  filter: brightness(1.05) sepia(0.6) hue-rotate(50deg) saturate(3.8) contrast(1.15);
 }
 
 .tint-grass {
-  filter: sepia(1.2) hue-rotate(48deg) saturate(2);
+  filter: sepia(1.1) hue-rotate(42deg) saturate(2.4);
 }
 
 .tint-grass-sprite {
-  filter: sepia(1.2) hue-rotate(35deg) saturate(2.8);
+  filter: sepia(1.2) hue-rotate(32deg) saturate(3.2);
 }
 
 .slot {

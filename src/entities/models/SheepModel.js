@@ -22,6 +22,7 @@ export class SheepModel extends BaseModel {
         w: 10,
         h: 10,
         d: 16,
+        th: 32,
       }
     );
 
@@ -34,6 +35,7 @@ export class SheepModel extends BaseModel {
       w: 6,
       h: 6,
       d: 8,
+      th: 32,
     });
     headGroup.add(this.head);
 
@@ -41,7 +43,7 @@ export class SheepModel extends BaseModel {
     this.group.add(headGroup);
 
     // Legs (4x12x4)
-    const legUV = { u: 0, v: 16, w: 4, h: 12, d: 4 };
+    const legUV = { u: 0, v: 16, w: 4, h: 12, d: 4, th: 32 };
     this.legFR = this.createPart(
       'legFR',
       4 * unit,

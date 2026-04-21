@@ -29,17 +29,21 @@ export class WorldVisuals {
         const geo = new THREE.BoxGeometry(1.001, height, 1.001);
         geo.translate(0, (height - 1) / 2, 0);
         // Manual UV cropping for side faces (0, 1, 4, 5) to avoid squishing
+        // We crop one extra texel from the top of the side texture so the
+        // dark seam on dirt path edges does not render as a visible black line.
         const uv = geo.attributes.uv;
         const sideFaces = [0, 1, 4, 5];
+        const topSideV = 14 / 16;
         for (const faceIdx of sideFaces) {
           const start = faceIdx * 4;
           // uv is Top-Left, Top-Right, Bottom-Left, Bottom-Right
           // In Three.js BoxGeometry:
           // vertex 0: TL, 1: TR, 2: BL, 3: BR
-          // Standard UVs are [0,1], [1,1], [0,0], [1,0]
-          // We want the TOP of the geometry (height 0.9375) to map to v=0.9375
-          uv.setY(start + 0, 0.9375); // TL
-          uv.setY(start + 1, 0.9375); // TR
+          // Standard UVs are [0,1], [1,1], [0,0], [1,0].
+          // Path blocks are 15/16 tall, but we intentionally shave off the top
+          // texel row from the side texture to hide the dark border artifact.
+          uv.setY(start + 0, topSideV); // TL
+          uv.setY(start + 1, topSideV); // TR
           uv.setY(start + 2, 0); // BL
           uv.setY(start + 3, 0); // BR
         }

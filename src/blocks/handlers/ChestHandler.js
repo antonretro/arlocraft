@@ -201,21 +201,23 @@ function onSlotDown(source, idx, event) {
   renderAll();
 }
 
-document.addEventListener('pointerup', (e) => {
-  if (getOverlay()?.style.display !== 'flex') return;
-  if (!_carryItem) return;
-  const target = document
-    .elementFromPoint(e.clientX, e.clientY)
-    ?.closest('.bh-slot[data-bh-source]');
-  if (target) return;
-  returnCarry();
-  renderAll();
-});
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerup', (e) => {
+    if (getOverlay()?.style.display !== 'flex') return;
+    if (!_carryItem) return;
+    const target = document
+      .elementFromPoint(e.clientX, e.clientY)
+      ?.closest('.bh-slot[data-bh-source]');
+    if (target) return;
+    returnCarry();
+    renderAll();
+  });
 
-window.addEventListener('keydown', (e) => {
-  if (getOverlay()?.style.display !== 'flex') return;
-  if (e.code === 'KeyE' || e.code === 'Escape') close();
-});
+  window.addEventListener('keydown', (e) => {
+    if (getOverlay()?.style.display !== 'flex') return;
+    if (e.code === 'KeyE' || e.code === 'Escape') close();
+  });
+}
 
 const handler = { open, close };
 registerBlockHandler('chest', handler);

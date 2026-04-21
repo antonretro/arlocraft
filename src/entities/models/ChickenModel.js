@@ -22,6 +22,7 @@ export class ChickenModel extends BaseModel {
         w: 6,
         h: 6,
         d: 8,
+        th: 32,
       }
     );
 
@@ -42,6 +43,7 @@ export class ChickenModel extends BaseModel {
         w: 4,
         h: 6,
         d: 3,
+        th: 32,
       }
     );
     headGroup.add(this.head);
@@ -61,6 +63,7 @@ export class ChickenModel extends BaseModel {
         w: 4,
         h: 2,
         d: 2,
+        th: 32,
       }
     );
     headGroup.add(bill);
@@ -80,6 +83,7 @@ export class ChickenModel extends BaseModel {
         w: 2,
         h: 2,
         d: 2,
+        th: 32,
       }
     );
     headGroup.add(wattle);
@@ -102,6 +106,7 @@ export class ChickenModel extends BaseModel {
         w: 1,
         h: 4,
         d: 6,
+        th: 32,
       }
     );
     this.wingR = this.createPart(
@@ -118,11 +123,12 @@ export class ChickenModel extends BaseModel {
         w: 1,
         h: 4,
         d: 6,
+        th: 32,
       }
     );
 
     // Legs (3x5x3) - simpler rod representation
-    const legUV = { u: 26, v: 0, w: 3, h: 5, d: 3 };
+    const legUV = { u: 26, v: 0, w: 3, h: 5, d: 3, th: 32 };
     this.legL = this.createPart(
       'legL',
       1 * unit,

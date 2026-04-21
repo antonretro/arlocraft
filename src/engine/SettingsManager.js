@@ -25,6 +25,10 @@ export class SettingsManager {
       cloudOpacity: 0.85,
       foliageSwaying: true,
       playerName: 'Arlo',
+      skinUsername: '',
+      stabilityMode: false,
+      chunkRebuildBudget: 4,
+      lowSpecPresetApplied: false,
     };
 
     this.settings = this.load();
@@ -118,6 +122,25 @@ export class SettingsManager {
           parsed.foliageSwaying !== undefined
             ? Boolean(parsed.foliageSwaying)
             : defaults.foliageSwaying,
+        playerName:
+          typeof parsed.playerName === 'string' && parsed.playerName.trim()
+            ? parsed.playerName.trim()
+            : defaults.playerName,
+        skinUsername:
+          typeof parsed.skinUsername === 'string'
+            ? parsed.skinUsername.trim()
+            : defaults.skinUsername,
+        stabilityMode:
+          parsed.stabilityMode !== undefined
+            ? Boolean(parsed.stabilityMode)
+            : defaults.stabilityMode,
+        chunkRebuildBudget: Number.isFinite(parsed.chunkRebuildBudget)
+          ? Math.max(1, Math.min(16, Math.round(parsed.chunkRebuildBudget)))
+          : defaults.chunkRebuildBudget,
+        lowSpecPresetApplied:
+          parsed.lowSpecPresetApplied !== undefined
+            ? Boolean(parsed.lowSpecPresetApplied)
+            : defaults.lowSpecPresetApplied,
       };
     } catch {
       return { ...defaults };

@@ -428,12 +428,36 @@ export class EntityManager {
 
     const playerPos = this.game.camera.instance.position;
     this.entities.forEach((entity) => {
-      const farDistanceSq = entity.mesh.position.distanceToSquared(playerPos);
+      const pos = entity.mesh.position;
+      
+      // 1. Distance Despawn
+      const farDistanceSq = pos.distanceToSquared(playerPos);
       if (farDistanceSq > 110 * 110) {
         entity.dead = true;
-        if (entity.mesh?.geometry?.disposeBoundsTree)
-          entity.mesh.geometry.disposeBoundsTree();
-        this.game.renderer.scene.remove(entity.mesh);
+      }
+      
+      // 2. Chunk Despawn (Cleanup from unloaded chunks)
+      if (!entity.dead && this.game.world) {
+        const cx = this.game.world.getChunkCoord(pos.x);
+        const cz = this.game.world.getChunkCoord(pos.z);
+        const chunkKey = this.game.world.getChunkKey(cx, 0, cz);
+        if (!this.game.world.chunks.has(chunkKey)) {
+          entity.dead = true;
+        }
+      }
+
+      if (entity.dead) {
+        if (entity.mesh) {
+          if (entity.mesh.geometry) entity.mesh.geometry.dispose();
+          if (entity.mesh.material) {
+            if (Array.isArray(entity.mesh.material)) {
+              entity.mesh.material.forEach((m) => m.dispose());
+            } else {
+              entity.mesh.material.dispose();
+            }
+          }
+          this.game.renderer.scene.remove(entity.mesh);
+        }
         return;
       }
       entity.update(delta);
@@ -441,8 +465,47 @@ export class EntityManager {
     this.entities = this.entities.filter((entity) => !entity.dead);
 
     // Update Projectiles
-    this.projectiles.forEach((p) => p.update(delta));
+    this.projectiles.forEach((p) => {
+      p.update(delta);
+      if (p.dead && p.mesh) {
+        if (p.mesh.geometry) p.mesh.geometry.dispose();
+        if (p.mesh.material) p.mesh.material.dispose();
+        this.game.renderer.scene.remove(p.mesh);
+      }
+    });
     this.projectiles = this.projectiles.filter((p) => !p.dead);
+  }
+
+  reset() {
+    this.entities.forEach((entity) => {
+      if (entity.mesh) {
+        if (entity.mesh.geometry) entity.mesh.geometry.dispose();
+        if (entity.mesh.material) {
+          if (Array.isArray(entity.mesh.material)) {
+            entity.mesh.material.forEach((m) => m.dispose());
+          } else {
+            entity.mesh.material.dispose();
+          }
+        }
+        this.game.renderer.scene.remove(entity.mesh);
+      }
+    });
+
+    this.projectiles.forEach((p) => {
+      if (p.mesh) {
+        if (p.mesh.geometry) p.mesh.geometry.dispose();
+        if (p.mesh.material) p.mesh.material.dispose();
+        this.game.renderer.scene.remove(p.mesh);
+      }
+    });
+
+    this.remotePlayers.forEach((p) => {
+      if (p.group) this.game.renderer.scene.remove(p.group);
+    });
+
+    this.entities = [];
+    this.projectiles = [];
+    this.remotePlayers.clear();
   }
 
   interactNearbyEntity(position, maxDist) {

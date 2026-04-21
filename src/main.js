@@ -7,12 +7,6 @@ import {
 import { Game } from './engine/Game.js';
 import { validateBlocks } from './utils/BlockValidator.js';
 
-// Block handler modules
-import './blocks/handlers/CraftingTableHandler.js';
-import './blocks/handlers/ChestHandler.js';
-import './blocks/handlers/FurnaceHandler.js';
-import './blocks/handlers/CommandBlockHandler.js';
-
 console.log('[ArloCraft] main.js fully loading...');
 
 // Enable BVH acceleration for compatible raycasts.

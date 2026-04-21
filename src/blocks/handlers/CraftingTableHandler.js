@@ -226,33 +226,35 @@ function handleResultClick() {
   renderAll();
 }
 
-// Global pointer-up to handle drag-drops outside slots
-document.addEventListener('pointerup', (e) => {
-  if (!getOverlay()?.style.display || getOverlay().style.display === 'none')
-    return;
-  if (!_carryItem) return;
-  const target = document
-    .elementFromPoint(e.clientX, e.clientY)
-    ?.closest('.bh-slot[data-bh-source]');
-  if (target) return; // handled by slot's own pointerdown
-  // Drop carry back to origin
-  if (_carryOrigin) {
-    const c = getContainer(_carryOrigin.source);
-    if (!c[_carryOrigin.idx]) {
-      c[_carryOrigin.idx] = _carryItem;
-      _carryItem = null;
-      _carryOrigin = null;
-      window.dispatchEvent(new CustomEvent('inventory-changed'));
-      renderAll();
+if (typeof document !== 'undefined') {
+  // Global pointer-up to handle drag-drops outside slots
+  document.addEventListener('pointerup', (e) => {
+    if (!getOverlay()?.style.display || getOverlay().style.display === 'none')
+      return;
+    if (!_carryItem) return;
+    const target = document
+      .elementFromPoint(e.clientX, e.clientY)
+      ?.closest('.bh-slot[data-bh-source]');
+    if (target) return; // handled by slot's own pointerdown
+    // Drop carry back to origin
+    if (_carryOrigin) {
+      const c = getContainer(_carryOrigin.source);
+      if (!c[_carryOrigin.idx]) {
+        c[_carryOrigin.idx] = _carryItem;
+        _carryItem = null;
+        _carryOrigin = null;
+        window.dispatchEvent(new CustomEvent('inventory-changed'));
+        renderAll();
+      }
     }
-  }
-});
+  });
 
-// Close on E key or Escape
-window.addEventListener('keydown', (e) => {
-  if (getOverlay()?.style.display !== 'flex') return;
-  if (e.code === 'KeyE' || e.code === 'Escape') close();
-});
+  // Close on E key or Escape
+  window.addEventListener('keydown', (e) => {
+    if (getOverlay()?.style.display !== 'flex') return;
+    if (e.code === 'KeyE' || e.code === 'Escape') close();
+  });
+}
 
 // Register
 registerBlockHandler('crafting_table', { open, close });
