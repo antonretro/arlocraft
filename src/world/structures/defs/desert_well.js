@@ -9,12 +9,10 @@ export const desert_well = {
     for (let dx = -1; dx <= 1; dx++) {
       for (let dz = -1; dz <= 1; dz++) {
         const isCenter = dx === 0 && dz === 0;
-        blocks.push({
-          x: x + dx,
-          y: y,
-          z: z + dz,
-          id: isCenter ? 'water' : 'sandstone',
-        });
+        // Deep basin: Floor at y-2, Water at y-1 and y
+        blocks.push({ x: x + dx, y: y - 2, z: z + dz, id: 'sandstone' });
+        blocks.push({ x: x + dx, y: y - 1, z: z + dz, id: isCenter ? 'water' : 'sandstone' });
+        blocks.push({ x: x + dx, y: y, z: z + dz, id: isCenter ? 'water' : 'sandstone' });
       }
     }
     const posts = [

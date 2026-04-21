@@ -15,7 +15,8 @@ export const village_farm = {
     const cx = Math.floor(W / 2),
       cz = Math.floor(D / 2);
 
-    // Water source in centre
+    // Water source in centre (recessed for depth)
+    blocks.push({ x: ox + cx, y: oy - 1, z: oz + cz, id: 'dirt' }); // floor
     blocks.push({ x: ox + cx, y: oy, z: oz + cz, id: 'water' });
 
     // Farmland plots (4 quadrants around water)

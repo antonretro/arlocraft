@@ -945,6 +945,10 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
             m.userData.flickerBaseColor = new THREE.Color(emissiveHex);
           }
         }
+        if (id.startsWith('prismarine') || id.includes('prismarine')) {
+          // Subtle teal glow matching the sea lantern style
+          m.emissive = new THREE.Color(0x2389a3).multiplyScalar(0.24);
+        }
       }
     }
 
@@ -965,6 +969,8 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
       this.injectAnimationShader(material, 5, 4.0);
     } else if (id === 'magma') {
       this.injectAnimationShader(material, 3, 2.0);
+    } else if (id === 'prismarine') {
+      this.injectAnimationShader(material, 4, 4.0);
     }
 
     this.configureTransparentMaterial(material);

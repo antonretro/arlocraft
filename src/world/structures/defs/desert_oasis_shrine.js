@@ -9,12 +9,9 @@ export const desert_oasis_shrine = {
     for (let dx = -3; dx <= 3; dx++) {
       for (let dz = -3; dz <= 3; dz++) {
         const border = Math.abs(dx) === 3 || Math.abs(dz) === 3;
-        blocks.push({
-          x: x + dx,
-          y,
-          z: z + dz,
-          id: border ? 'sandstone' : 'water',
-        });
+        // Basin: Floor at y-1, Water at y
+        blocks.push({ x: x + dx, y: y - 1, z: z + dz, id: border ? 'sandstone' : 'sandstone' });
+        blocks.push({ x: x + dx, y, z: z + dz, id: border ? 'sandstone' : 'water' });
       }
     }
     for (let dy = 1; dy <= 3; dy++) {

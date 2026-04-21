@@ -9,12 +9,10 @@ export const village_well = {
     for (let dx = -2; dx <= 2; dx++) {
       for (let dz = -2; dz <= 2; dz++) {
         const ring = Math.abs(dx) === 2 || Math.abs(dz) === 2;
-        blocks.push({
-          x: x + dx,
-          y,
-          z: z + dz,
-          id: ring ? 'cobblestone' : 'water',
-        });
+        // Deep basin: Floor at y-2, Water at y-1 and y
+        blocks.push({ x: x + dx, y: y - 2, z: z + dz, id: ring ? 'cobblestone' : 'cobblestone' });
+        blocks.push({ x: x + dx, y: y - 1, z: z + dz, id: ring ? 'cobblestone' : 'water' });
+        blocks.push({ x: x + dx, y: y, z: z + dz, id: ring ? 'cobblestone' : 'water' });
       }
     }
     const posts = [
