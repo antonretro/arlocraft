@@ -86,11 +86,11 @@ export class EntityManager {
     this.remotePlayers.set(peerId, { group, model });
 
     // Load skin async
-    if (this.game.skinSystem && skinUsername) {
-      this.game.skinSystem
+    if (this.game.skinLoader && skinUsername) {
+      this.game.skinLoader
         .loadSkin(skinUsername)
         .then((texture) => {
-          if (texture) {
+          if (texture && model) {
             model.setTexture(texture);
           }
         })

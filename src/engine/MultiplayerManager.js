@@ -159,31 +159,45 @@ export class MultiplayerManager {
     };
 
     const entries = Array.from(blockMap.entries());
-    const CHUNK_SIZE = 1000; // Smaller chunks for reliability
-    
-    for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
-      const chunkEntries = entries.slice(i, i + CHUNK_SIZE);
-      const data = new Int32Array(chunkEntries.length * 4);
-      let ptr = 0;
-      for (const [key, id] of chunkEntries) {
-        const [x, y, z] = this.game.world.coords.keyToCoords(key);
-        data[ptr++] = x;
-        data[ptr++] = y;
-        data[ptr++] = z;
-        data[ptr++] = getPaletteIndex(id);
-      }
+    const CHUNK_SIZE = 1200; 
+    let index = 0;
 
-      this.send(peerId, {
-        type: 'world_sync_chunk',
-        data: {
-          payload: data.buffer,
-          palette: palette,
-          progress: i + chunkEntries.length,
-          total: entries.length,
-          isLast: i + CHUNK_SIZE >= entries.length
-        },
-      });
-    }
+    // Use a non-blocking generator-style loop
+    const sendNextBatch = () => {
+        if (!this.connections.has(peerId)) return; // Peer left
+
+        const limit = Math.min(index + CHUNK_SIZE, entries.length);
+        const chunkEntries = entries.slice(index, limit);
+        const data = new Int32Array(chunkEntries.length * 4);
+        let ptr = 0;
+        
+        for (const [key, id] of chunkEntries) {
+            const [x, y, z] = this.game.world.coords.keyToCoords(key);
+            data[ptr++] = x;
+            data[ptr++] = y;
+            data[ptr++] = z;
+            data[ptr++] = getPaletteIndex(id);
+        }
+
+        this.send(peerId, {
+            type: 'world_sync_chunk',
+            data: {
+                payload: data.buffer,
+                palette: palette,
+                progress: limit,
+                total: entries.length,
+                isLast: limit >= entries.length
+            },
+        });
+
+        index = limit;
+        if (index < entries.length) {
+            // Schedule next batch to keep main thread free
+            setTimeout(sendNextBatch, 16); 
+        }
+    };
+
+    sendNextBatch();
   }
 
   sendWorldDataSync(peerId) {
@@ -203,9 +217,11 @@ export class MultiplayerManager {
     if (!payload || !palette) return;
 
     const blocks = new Int32Array(payload);
-    const count = blocks.length / 4;
-
-    this.game.notifications?.show('Multiplayer', `Syncing World: ${Math.round((progress/total)*100)}%`, 'info');
+    
+    // Batch notifications to reduce UI churn
+    if (progress % 5 === 0 || isLast) {
+        this.game.notifications?.show('Multiplayer', `Syncing World: ${Math.round((progress/total)*100)}%`, 'info');
+    }
 
     for (let i = 0; i < blocks.length; i += 4) {
       const x = blocks[i];
@@ -214,22 +230,23 @@ export class MultiplayerManager {
       const id = palette[blocks[i + 3]];
 
       if (id) {
-        this.game.world.addBlock(x, y, z, id, 'sync', true, {
-          silent: true,
-          skipChunkDirtying: true,
-          skipNeighborDirtying: true,
-          skipRedstone: true,
-          skipGravity: true
-        });
+        // Direct state injection is faster than addBlock for bulk sync
+        const key = this.game.world.coords.getKey(x, y, z);
+        this.game.world.state.blockMap.set(key, id);
       }
     }
 
     if (isLast) {
       console.log('[Multiplayer] World sync complete. Rebuilding geometry...');
+      // Mark all chunks for rebuild once
       this.game.world.chunkManager.chunks.forEach(chunk => {
         chunk.dirty = true;
       });
+      this.game.world.chunkManager.flushPriorityChunkRebuilds(100);
       this.game.notifications?.show('Multiplayer', 'World Link Stabilized', 'success');
+      
+      // Force a UI refresh
+      window.dispatchEvent(new CustomEvent('ui-set-hud', { detail: true }));
     }
   }
 

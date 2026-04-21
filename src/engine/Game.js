@@ -491,11 +491,11 @@ export class Game {
   }
 
   getPlayerPosition() {
-    if (!this.physics?.playerBody) return this.lastKnownPosition.clone();
+    if (!this.physics?.playerBody) return this.lastKnownPosition;
     const pos = this.physics.playerBody.translation();
-    if (this.hasStarted && pos.x === 0 && pos.y === 0 && pos.z === 0) return this.lastKnownPosition.clone();
+    if (this.hasStarted && pos.x === 0 && pos.y === 0 && pos.z === 0) return this.lastKnownPosition;
     this.lastKnownPosition.set(pos.x, pos.y, pos.z);
-    return this.lastKnownPosition.clone();
+    return this.lastKnownPosition;
   }
 
   adjustLook(deltaYaw, deltaPitch) {

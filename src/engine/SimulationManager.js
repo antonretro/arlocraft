@@ -40,16 +40,23 @@ export class SimulationManager {
     g.entities.update(delta);
     g.particles.update(delta);
     
-    // Survival & Area Influence
+    // Survival & Area Influence (Throttled to 5Hz)
     g.survival.update(delta);
-    const areaInfluence = g.world.getAreaInfluence(playerPos);
-    if (g.updateZoneMeter) g.updateZoneMeter(areaInfluence);
-    else console.warn('[ArloCraft] Zone meter update deferred (method not found)');
+    this.zoneTick = (this.zoneTick || 0) + delta;
+    if (this.zoneTick >= 0.2) {
+        const areaInfluence = g.world.getAreaInfluence(playerPos);
+        if (g.updateZoneMeter) g.updateZoneMeter(areaInfluence);
+        this.zoneTick = 0;
+    }
 
-    // Horizons & Biomes
-    if (g.horizons) {
-      const dominantBiome = g.world.terrain.getBiomeAt(playerPos.x, playerPos.z)?.id || 'plains';
-      g.horizons.update(g.camera.instance.position, g.renderer.daylight, dominantBiome);
+    // Horizons & Biomes (Throttled to 10Hz)
+    this.biomeTick = (this.biomeTick || 0) + delta;
+    if (this.biomeTick >= 0.1) {
+        if (g.horizons) {
+            const dominantBiome = g.world.terrain.getBiomeAt(playerPos.x, playerPos.z)?.id || 'plains';
+            g.horizons.update(g.camera.instance.position, g.renderer.daylight, dominantBiome);
+        }
+        this.biomeTick = 0;
     }
 
     // World & Day/Night
@@ -58,7 +65,14 @@ export class SimulationManager {
     
     // 3. UI & Utility Sync
     if (g.minimap) g.minimap.update(delta, playerPos, g.viewYaw);
-    g.hud.updateCoordinates(playerPos, g.viewYaw, g.world);
+    
+    // Throttle coordinate updates to 10Hz (0.1s)
+    this.coordinateTick = (this.coordinateTick || 0) + delta;
+    if (this.coordinateTick >= 0.1) {
+        g.hud.updateCoordinates(playerPos, g.viewYaw, g.world);
+        this.coordinateTick = 0;
+    }
+    
     if (g.updateDebugOverlay) g.updateDebugOverlay(delta);
     
     // 4. State & Utility Updates

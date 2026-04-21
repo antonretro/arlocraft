@@ -184,20 +184,26 @@ export class World {
   }
 
   getGroundYBelow(x, y, z) {
+    // Scratch arrays/points to avoid per-frame allocation
+    if (!this._groundSearchPoints) {
+        this._groundSearchPoints = [ [0,0], [0,0], [0,0], [0,0], [0,0] ];
+    }
+    
     const radius = 0.1;
-    const searchPoints = [
-      [x, z],
-      [x - radius, z - radius],
-      [x + radius, z - radius],
-      [x - radius, z + radius],
-      [x + radius, z + radius],
-    ];
+    const pts = this._groundSearchPoints;
+    pts[0][0] = x;          pts[0][1] = z;
+    pts[1][0] = x - radius; pts[1][1] = z - radius;
+    pts[2][0] = x + radius; pts[2][1] = z - radius;
+    pts[3][0] = x - radius; pts[3][1] = z + radius;
+    pts[4][0] = x + radius; pts[4][1] = z + radius;
 
     let maxGroundY = Number.NEGATIVE_INFINITY;
     const startY = Math.floor(y + 0.1);
     const searchDepthLimit = 32;
 
-    for (const [px, pz] of searchPoints) {
+    for (let i = 0; i < 5; i++) {
+      const px = pts[i][0];
+      const pz = pts[i][1];
       const gx = Math.floor(px);
       const gz = Math.floor(pz);
       const terrainY = Math.floor(this.terrain.getColumnHeight(px, pz));
@@ -1123,11 +1129,22 @@ export class World {
   }
 
   getAreaInfluence(position) {
-    if (!this.corruptionEnabled) return { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
-    if (!position) return { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+    if (!this._areaInfluenceResult) {
+        this._areaInfluenceResult = { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+    }
+    const res = this._areaInfluenceResult;
+    
+    if (!this.corruptionEnabled || !position) {
+        res.virus = 0; res.arlo = 0;
+        return res;
+    }
+
     const px = Math.round(position.x),
       py = Math.round(position.y),
       pz = Math.round(position.z);
+    
+    res.x = px; res.y = py; res.z = pz;
+    
     const radius = 3;
     let virusHits = 0,
       arloHits = 0,
@@ -1146,13 +1163,9 @@ export class World {
       }
     }
     const base = Math.max(1, samples);
-    return {
-      x: px,
-      y: py,
-      z: pz,
-      virus: Math.min(1, virusHits / Math.max(16, base * 0.9)),
-      arlo: Math.min(1, arloHits / Math.max(4, base * 0.3)),
-    };
+    res.virus = Math.min(1, virusHits / Math.max(16, base * 0.9));
+    res.arlo = Math.min(1, arloHits / Math.max(4, base * 0.3));
+    return res;
   }
 
   dispose() {
