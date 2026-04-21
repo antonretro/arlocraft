@@ -17,6 +17,7 @@ export class Game {
     this.performanceSampler = { frames: 0, time: 0, lastAdjust: 0 };
     this.qualityTier = 'balanced';
     this.qualityOrder = ['low', 'balanced', 'high'];
+    this._lastMultiplayerPositionSyncAt = 0;
 
     this._camHead = new THREE.Vector3();
     this._camLook = new THREE.Vector3();
@@ -47,6 +48,33 @@ export class Game {
 
   saveSettings() {
     this.settingsManager.save();
+  }
+
+  isTouchDevice() {
+    return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  }
+
+  applyMobilePresetIfNeeded() {
+    if (!this.isTouchDevice() || this.settings.mobilePresetApplied) return;
+
+    this.settings.qualityTierPref = 'low';
+    this.settings.renderDistance = Math.min(
+      2,
+      Number(this.settings.renderDistance) || 2
+    );
+    this.settings.resolutionScale = Math.min(
+      0.65,
+      Number(this.settings.resolutionScale) || 0.65
+    );
+    this.settings.fpsCap = 60;
+    this.settings.shadowsEnabled = false;
+    this.settings.autoQuality = true;
+    this.settings.chunkRebuildBudget = Math.min(
+      3,
+      Number(this.settings.chunkRebuildBudget) || 3
+    );
+    this.settings.mobilePresetApplied = true;
+    this.saveSettings();
   }
 
   selectWorldSlot(slotId) {
@@ -359,6 +387,7 @@ export class Game {
   async init() {
     console.log('[ArloCraft] Engine Init...');
     await EngineBootstrap.init(this);
+    this.applyMobilePresetIfNeeded();
 
     // Startup Configuration (now safe to access this.settings)
     this.selectedStartMode = this.settings.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
@@ -381,7 +410,7 @@ export class Game {
     this.hud.init();
     this.updatePlayerSkin(this.settings.skinUsername ?? '', { persist: false });
     
-    if (this.features.touchControls && 'ontouchstart' in window) {
+    if (this.features.touchControls && this.isTouchDevice()) {
       this.touchControls = new (await import('../ui/TouchControls.js')).TouchControls(this);
     }
 
@@ -454,6 +483,18 @@ export class Game {
       inWater,
       this.viewPitch
     );
+
+    if (
+      canSimulate &&
+      this.multiplayer?.isConnected?.() &&
+      timestamp - this._lastMultiplayerPositionSyncAt >= 75
+    ) {
+      this.multiplayer.broadcastPosition(playerPos, {
+        yaw: this.viewYaw,
+        pitch: this.viewPitch,
+      });
+      this._lastMultiplayerPositionSyncAt = timestamp;
+    }
     
     this.updateCameraRotation();
 

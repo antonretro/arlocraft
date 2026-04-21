@@ -75,6 +75,17 @@ function getRenderOrder(id, material) {
   return RENDER_LAYERS.OPAQUE;
 }
 
+function usesCustomInstancedGeometry(blockData) {
+  const renderType = blockData?.renderType;
+  return (
+    renderType === 'flat' ||
+    renderType === 'slab' ||
+    renderType === 'stairs' ||
+    renderType === 'trapdoor' ||
+    renderType === 'door'
+  );
+}
+
 function isPaneConnectable(world, x, y, z) {
   const neighborId = world.getBlockAt(x, y, z);
   if (!neighborId || neighborId === 'air') return false;
@@ -180,6 +191,24 @@ function _rebuildChunkMeshesInner(chunk) {
         continue;
       }
 
+      // Handle custom-shape instancing before falling back to greedy cube meshing.
+      if (usesCustomInstancedGeometry(blockData)) {
+        const geometry = resolveChunkGeometry(chunk.world, baseId, blockData);
+        if (geometry) {
+          createInstancedMesh(
+            chunk,
+            baseId,
+            keys,
+            geometry,
+            material,
+            owned,
+            blockData,
+            false
+          );
+        }
+        continue;
+      }
+
       // Handle Deco (Instanced) vs Solid (Consolidated/Greedy)
       if (isDecoType(blockData)) {
         const nearKeys = [], farKeys = [];
@@ -256,7 +285,12 @@ function createInstancedMesh(chunk, id, keys, geometry, material, owned, blockDa
   let renderCount = 0;
   for (const key of keys) {
     const [ax, ay, az] = chunk.world.keyToCoords(key);
+    const rawId = chunk.world.state.blockMap.get(key) ?? id;
     tempPos.set(ax - worldX + 0.5, ay - worldY + 0.5, az - worldZ + 0.5);
+
+    if (blockData?.renderType === 'slab' && rawId.includes(':top')) {
+      tempPos.y += 0.5;
+    }
 
     if (isDecoType(blockData)) {
       const below = chunk.world.getBlockAt(ax, ay - 1, az);
@@ -272,6 +306,15 @@ function createInstancedMesh(chunk, id, keys, geometry, material, owned, blockDa
     }
 
     tempEuler.set(0, 0, 0);
+    if (blockData?.renderType === 'stairs') {
+      if (rawId.endsWith('_n')) tempEuler.y = Math.PI;
+      else if (rawId.endsWith('_e')) tempEuler.y = -Math.PI / 2;
+      else if (rawId.endsWith('_w')) tempEuler.y = Math.PI / 2;
+    } else if (blockData?.renderType === 'door') {
+      if (rawId.endsWith('_n')) tempEuler.y = Math.PI;
+      else if (rawId.endsWith('_e')) tempEuler.y = -Math.PI / 2;
+      else if (rawId.endsWith('_w')) tempEuler.y = Math.PI / 2;
+    }
     if (isLod) {
       tempEuler.y = Math.atan2(camPos.x - ax, camPos.z - az);
     }

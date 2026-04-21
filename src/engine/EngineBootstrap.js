@@ -75,7 +75,6 @@ export class EngineBootstrap {
     game.player = new Player(game);
     game.world = new World(game.renderer.scene, game);
     game.entities = new EntityManager(game);
-    game.world.init();
 
     game.physics = new Physics(game.camera, game.world);
     game.physics.autoJumpEnabled = game.settings.autoJump;

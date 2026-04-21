@@ -425,8 +425,41 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
   }
 
   loadTexture(src) {
-    if (this.textureCache.has(src)) return this.textureCache.get(src);
-    const texture = this.textureLoader.load(src);
+    const cropAnimatedStrip =
+      arguments[1]?.cropAnimatedStrip === true;
+    const cacheKey = cropAnimatedStrip ? `${src}#static-frame` : src;
+    if (this.textureCache.has(cacheKey)) return this.textureCache.get(cacheKey);
+
+    const texture = this.textureLoader.load(src, (loaded) => {
+      if (!cropAnimatedStrip) return;
+
+      const image = loaded.image;
+      const width = Number(image?.width) || 0;
+      const height = Number(image?.height) || 0;
+      if (!width || !height) return;
+
+      let frameSize = 0;
+      let sx = 0;
+      let sy = 0;
+
+      if (height > width && height % width === 0) {
+        frameSize = width;
+      } else if (width > height && width % height === 0) {
+        frameSize = height;
+      }
+
+      if (!frameSize) return;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = frameSize;
+      canvas.height = frameSize;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(image, sx, sy, frameSize, frameSize, 0, 0, frameSize, frameSize);
+
+      loaded.image = canvas;
+      loaded.needsUpdate = true;
+    });
     texture.magFilter = THREE.NearestFilter;
     texture.minFilter = THREE.NearestFilter;
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -439,8 +472,22 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
 
-    this.textureCache.set(src, texture);
+    this.textureCache.set(cacheKey, texture);
     return texture;
+  }
+
+  getTextureLoadOptionsForBlock(id) {
+    const lowId = String(id || '').toLowerCase();
+    return {
+      cropAnimatedStrip:
+        lowId === 'lantern' ||
+        lowId === 'soul_lantern' ||
+        lowId === 'command_block' ||
+        lowId === 'chain_command_block' ||
+        lowId === 'repeating_command_block' ||
+        lowId === 'redstone_lamp_on' ||
+        lowId === 'furnace_active',
+    };
   }
 
   createCanvasTexture(size, painter) {
@@ -742,7 +789,11 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
 
     let strippedId = normalizedId || id;
 
-    if (strippedId.endsWith('_stairs')) {
+    if (strippedId.endsWith('_door')) {
+      targetId = strippedId;
+    } else if (strippedId.endsWith('_trapdoor')) {
+      targetId = strippedId;
+    } else if (strippedId.endsWith('_stairs')) {
       targetId = strippedId.replace('_stairs', '_planks');
       if (!this.blockTextures.has(targetId))
         targetId = strippedId.replace('_stairs', '');
@@ -770,6 +821,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
       this.blocks.get(strippedId) ||
       this.blocks.get(targetId) || { id, name: id, textureId: targetId };
     const textureId = config.textureId || targetId;
+    const textureLoadOptions = this.getTextureLoadOptionsForBlock(id);
     const textures =
       this.blockTextures.get(textureId) ||
       this.blockTextures.get(targetId) ||
@@ -781,7 +833,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
 
     const load = (name) => {
       const url = textures[name];
-      if (url) return this.loadTexture(url);
+      if (url) return this.loadTexture(url, textureLoadOptions);
       const baseFallback = `${textureId}.png`;
       const suffixFallback =
         name !== 'all.png'
@@ -789,13 +841,13 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
           : baseFallback;
       const fallbackUrl =
         textures[baseFallback] || textures[suffixFallback] || textures[name];
-      if (fallbackUrl) return this.loadTexture(fallbackUrl);
+      if (fallbackUrl) return this.loadTexture(fallbackUrl, textureLoadOptions);
       return null;
     };
 
     const loadPackTexture = (fileName) => {
       const url = this.resourceManager.getTextureUrl(fileName);
-      return url ? this.loadTexture(url) : null;
+      return url ? this.loadTexture(url, textureLoadOptions) : null;
     };
 
     const allTex = load('all.png');

@@ -186,4 +186,20 @@ export class DayNightSystem {
   isNight() {
     return this.daylight < 0.28;
   }
+
+  setTime(timeOfDay, totalDays = this.totalDays) {
+    if (Number.isFinite(timeOfDay)) {
+      this.timeOfDay = ((timeOfDay % 1) + 1) % 1;
+      this._lastTime = this.timeOfDay;
+    }
+    if (Number.isFinite(totalDays)) {
+      this.totalDays = Math.max(0, Math.floor(totalDays));
+    }
+  }
+
+  setWeather(type = 'clear', intensity = 0) {
+    this.weatherType = type || 'clear';
+    this.weatherIntensity = Math.max(0, Math.min(1, Number(intensity) || 0));
+    this.renderer.setWeatherState?.(this.weatherType, this.weatherIntensity);
+  }
 }

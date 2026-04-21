@@ -245,11 +245,31 @@ export class WorldVisuals {
           new THREE.Float32BufferAttribute(norm, 3)
         );
         merged.setIndex(idx);
+        for (const group of base.groups) {
+          merged.addGroup(group.start, group.count, group.materialIndex);
+        }
+        const baseIndexCount = base.index.count;
+        for (const group of step.groups) {
+          merged.addGroup(
+            group.start + baseIndexCount,
+            group.count,
+            group.materialIndex
+          );
+        }
         return withWhiteVertexColors(merged);
       })(),
       slab: (() => {
         const geo = new THREE.BoxGeometry(1, 0.5, 1);
         geo.translate(0, -0.25, 0);
+        return withWhiteVertexColors(geo);
+      })(),
+      trapdoor: (() => {
+        const geo = new THREE.BoxGeometry(1, 0.125, 1);
+        geo.translate(0, -0.4375, 0);
+        return withWhiteVertexColors(geo);
+      })(),
+      door: (() => {
+        const geo = new THREE.BoxGeometry(1, 1, 0.125);
         return withWhiteVertexColors(geo);
       })(),
       sign: (() => {
@@ -273,6 +293,17 @@ export class WorldVisuals {
         merged.setAttribute('uv', new THREE.Float32BufferAttribute([...bUv, ...sUv], 2));
         merged.setAttribute('normal', new THREE.Float32BufferAttribute([...bNorm, ...sNorm], 3));
         merged.setIndex([...bIdx, ...sIdx]);
+        for (const group of board.groups) {
+          merged.addGroup(group.start, group.count, group.materialIndex);
+        }
+        const boardIndexCount = board.index.count;
+        for (const group of stick.groups) {
+          merged.addGroup(
+            group.start + boardIndexCount,
+            group.count,
+            group.materialIndex
+          );
+        }
         return withWhiteVertexColors(merged);
       })(),
       grass_block_top: (() => {

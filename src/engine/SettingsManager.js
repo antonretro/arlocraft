@@ -30,6 +30,7 @@ export class SettingsManager {
       stabilityMode: false,
       chunkRebuildBudget: 4,
       lowSpecPresetApplied: false,
+      mobilePresetApplied: false,
     };
 
     this.settings = this.load();
@@ -146,6 +147,10 @@ export class SettingsManager {
           parsed.lowSpecPresetApplied !== undefined
             ? Boolean(parsed.lowSpecPresetApplied)
             : defaults.lowSpecPresetApplied,
+        mobilePresetApplied:
+          parsed.mobilePresetApplied !== undefined
+            ? Boolean(parsed.mobilePresetApplied)
+            : defaults.mobilePresetApplied,
       };
     } catch {
       return { ...defaults };

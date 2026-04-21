@@ -109,6 +109,12 @@ export function resolveChunkGeometry(world, id, blockData) {
   if (blockData?.renderType === 'slab' || id.includes('_slab')) {
     return geo.slab ?? geo.solid ?? null;
   }
+  if (blockData?.renderType === 'trapdoor' || id.includes('_trapdoor')) {
+    return geo.trapdoor ?? geo.flat ?? geo.solid ?? null;
+  }
+  if (blockData?.renderType === 'door' || id.includes('_door')) {
+    return geo.door ?? geo.sign ?? geo.solid ?? null;
+  }
   if (blockData?.renderType === 'stairs' || id.includes('_stairs')) {
     return geo.stair ?? geo.solid ?? null;
   }

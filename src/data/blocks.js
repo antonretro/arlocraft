@@ -279,8 +279,7 @@ function mergeBlocks() {
           id: slabId,
           name: `${block.name} Slab`,
           renderType: 'slab',
-          slab: true,
-          transparent: true
+          slab: true
         });
 
         // Stair Variant
@@ -290,8 +289,7 @@ function mergeBlocks() {
           id: stairId,
           name: `${block.name} Stairs`,
           renderType: 'stairs',
-          stairs: true,
-          transparent: true
+          stairs: true
         });
 
         // Trapdoor Variant

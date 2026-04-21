@@ -1,59 +1,42 @@
 import React, { useEffect, useRef } from 'react';
 import { getGame } from '../UIManager';
-import { MiniMap as MiniMapCore } from '../MiniMap';
 
 export const MiniMap = () => {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
-    const miniMapRef = useRef(null);
     const game = getGame();
 
     useEffect(() => {
         if (!canvasRef.current || !containerRef.current || !game) return;
 
-        // Initialize the core logic
-        // We temporarily set the global IDs that MiniMapCore expects
-        const originalContainer = containerRef.current.id;
-        const originalCanvas = canvasRef.current.id;
-        
+        const isTouchDevice =
+          'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
         containerRef.current.id = 'minimap';
         canvasRef.current.id = 'minimap-canvas';
+        canvasRef.current.width = isTouchDevice ? 192 : 256;
+        canvasRef.current.height = isTouchDevice ? 192 : 256;
 
-        miniMapRef.current = new MiniMapCore(game);
-        miniMapRef.current.visible = game.settings?.minimapEnabled !== false;
-        
-        if (containerRef.current) {
+        if (game.minimap) {
+            game.minimap.attachDom(containerRef.current, canvasRef.current);
+            game.minimap.visible = game.settings?.minimapEnabled !== false;
             containerRef.current.style.display =
-              miniMapRef.current.visible ? 'block' : 'none';
+              game.minimap.visible ? 'block' : 'none';
         }
-
-        // Animation Loop for the Map
-        let frameId;
-        const updateMap = () => {
-            if (miniMapRef.current && game.camera) {
-                const pos = game.getPlayerPosition?.();
-                const yaw = game.camera.instance.rotation.y;
-                miniMapRef.current.update(0.016, pos, yaw);
-            }
-            frameId = requestAnimationFrame(updateMap);
-        };
 
         const handleMinimapVisibility = (e) => {
             const visible = Boolean(e.detail);
-            if (!miniMapRef.current || !containerRef.current) return;
-            miniMapRef.current.visible = visible;
+            if (!game.minimap || !containerRef.current) return;
+            game.minimap.visible = visible;
             containerRef.current.style.display = visible ? 'block' : 'none';
         };
 
         window.addEventListener('ui-set-minimap', handleMinimapVisibility);
 
-        frameId = requestAnimationFrame(updateMap);
-
         return () => {
-            cancelAnimationFrame(frameId);
             window.removeEventListener('ui-set-minimap', handleMinimapVisibility);
-            if (containerRef.current) containerRef.current.id = originalContainer;
-            if (canvasRef.current) canvasRef.current.id = originalCanvas;
+            if (containerRef.current) containerRef.current.id = '';
+            if (canvasRef.current) canvasRef.current.id = '';
         };
     }, [game]);
 

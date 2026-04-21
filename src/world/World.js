@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { normalizeBlockVariantId } from '../data/blockIds.js';
 import { BlockRegistry } from '../blocks/BlockRegistry.js';
 import { ChunkManager } from './ChunkManager.js';
 import { ExplosionSystem } from './ExplosionSystem.js';
@@ -333,8 +334,17 @@ export class World {
   }
 
   // Mutation proxies
-  addBlock(x, y, z, id, ownerKey, replace, options) {
-    return this.mutations.addBlock(x, y, z, id, ownerKey, replace, options);
+  addBlock(x, y, z, id, ownerKey, replace, options, data) {
+    return this.mutations.addBlock(
+      x,
+      y,
+      z,
+      id,
+      ownerKey,
+      replace,
+      options,
+      data
+    );
   }
   removeBlockByKey(key, options) {
     return this.mutations.removeBlockByKey(key, options);
@@ -374,6 +384,7 @@ export class World {
     this.chunkManager.clearAll();
     this.objects = [];
     this.state.blockMap.clear();
+    this.state.blockData.clear();
     this.state.changedBlocks.clear();
     this.state.blockOwners.clear();
     this.state.landmarks.clear();
@@ -447,10 +458,16 @@ export class World {
     while (distance <= maxDistance) {
       const id = this.state.blockMap.get(this.getKey(bx, by, bz));
       if (id && (includeFluids || (id !== 'water' && id !== 'lava'))) {
+        const normal = {
+          x: prevX - bx,
+          y: prevY - by,
+          z: prevZ - bz,
+        };
         return {
           id,
           cell: { x: bx, y: by, z: bz },
           previous: { x: prevX, y: prevY, z: prevZ },
+          normal,
         };
       }
       prevX = bx;
@@ -649,6 +666,34 @@ export class World {
       return false;
     const key = this.getKey(px, py, pz);
     const existingId = this.state.blockMap.get(key);
+    const isSlab = blockId.includes('_slab');
+
+    const resolveSlabVariant = () => {
+      const normalY = Number(hit.normal?.y) || 0;
+      const placeTop =
+        normalY < 0 ||
+        (normalY === 0 && camera.position.y > py + 0.5);
+      return placeTop ? `${blockId}:top` : blockId;
+    };
+
+    if (isSlab && existingId && normalizeBlockVariantId(existingId) === blockId) {
+      const placedVariant = resolveSlabVariant();
+      if (existingId !== placedVariant) {
+        const fullBlockId = blockId.replace(/_slab$/, '');
+        if (this.getBlockData(fullBlockId)) {
+          this.state.changedBlocks.set(key, fullBlockId);
+          this.addBlock(px, py, pz, fullBlockId, null, true);
+          this.chunkManager.flushPriorityChunkRebuilds(20);
+          window.dispatchEvent(
+            new CustomEvent('block-placed', {
+              detail: { id: fullBlockId, x: px, y: py, z: pz },
+            })
+          );
+          return true;
+        }
+      }
+    }
+
     if (existingId && !this.isReplaceableForPlacement(existingId)) return false;
     if (blockData?.deco && this.getBlockData(existingId)?.deco) return false;
     let finalId = blockId;
@@ -735,8 +780,13 @@ export class World {
       else finalId += ':y'; // Default vertical
     }
 
+    if (isSlab) {
+      finalId = resolveSlabVariant();
+    }
+
     if (
       blockId.includes('_stairs') ||
+      blockId.includes('_door') ||
       blockId.includes('glazed_terracotta') ||
       blockId === 'repeater' ||
       blockId === 'comparator'
