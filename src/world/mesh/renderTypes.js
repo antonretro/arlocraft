@@ -31,6 +31,12 @@ function isPlantRenderType(blockData) {
   );
 }
 
+export function isPaneType(blockData) {
+  const renderType = blockData?.renderType;
+  const id = String(blockData?.id || '').toLowerCase();
+  return renderType === 'pane' || id === 'iron_bars' || id.includes('_pane');
+}
+
 function isSolidNeighbor(world, x, y, z) {
   const neighborId = world.state.blockMap.get(world.getKey(x, y, z));
   return neighborId ? world.isBlockSolid(neighborId) : false;

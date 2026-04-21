@@ -93,7 +93,7 @@ export const HUD = () => {
       </div>
 
       {/* Top Right: Status Effects (NEW) */}
-      <div className="absolute top-4 right-4 md:top-8 md:right-8 flex flex-col items-end gap-2">
+      <div className="absolute top-40 right-4 md:top-48 md:right-8 flex flex-col items-end gap-2">
         <AnimatePresence>
           {game.gameState.activeEffects.map(effect => (
             <motion.div

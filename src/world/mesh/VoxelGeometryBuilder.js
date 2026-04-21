@@ -57,6 +57,48 @@ export class VoxelGeometryBuilder {
     return { u: 0, v: 1, w: 2, rh: true };
   }
 
+  _setTintColorFromCell(lx, lz) {
+    const cs = this.cs;
+    const safeX = Math.max(0, Math.min(cs - 1, lx));
+    const safeZ = Math.max(0, Math.min(cs - 1, lz));
+    const idx = (safeX + safeZ * cs) * 3;
+    this.tmpColor.setRGB(
+      this.chunkColorMap[idx],
+      this.chunkColorMap[idx + 1],
+      this.chunkColorMap[idx + 2]
+    );
+  }
+
+  _setTintColorFromVertexCorner(px, pz) {
+    const cs = this.cs;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let count = 0;
+
+    const sampleMinX = Math.max(0, px - 1);
+    const sampleMaxX = Math.min(cs - 1, px);
+    const sampleMinZ = Math.max(0, pz - 1);
+    const sampleMaxZ = Math.min(cs - 1, pz);
+
+    for (let sz = sampleMinZ; sz <= sampleMaxZ; sz++) {
+      for (let sx = sampleMinX; sx <= sampleMaxX; sx++) {
+        const idx = (sx + sz * cs) * 3;
+        r += this.chunkColorMap[idx];
+        g += this.chunkColorMap[idx + 1];
+        b += this.chunkColorMap[idx + 2];
+        count++;
+      }
+    }
+
+    if (count === 0) {
+      this.tmpColor.setRGB(1, 1, 1);
+      return;
+    }
+
+    this.tmpColor.setRGB(r / count, g / count, b / count);
+  }
+
   _isTransparent(rawId) {
     if (rawId === 0) return true;
     const props = this.propCache[rawId];
@@ -205,6 +247,7 @@ export class VoxelGeometryBuilder {
     const props = this.propCache[rawId] || 0;
     const isTintable = (props & 0x04) !== 0;
     let shouldTint = isTintable;
+    const useSmoothTopTint = axis === 1 && isPositive;
     if (isTintable && (rawId === this.grassId || rawId === this.grassAltId || rawId === this.pathId || rawId === this.farmlandId)) {
       if (axis !== 1 || !isPositive) shouldTint = false;
     }
@@ -214,8 +257,7 @@ export class VoxelGeometryBuilder {
       if (axis === 1) { lx = i; lz = j; } 
       else if (axis === 0) { lx = depth; lz = i; } 
       else { lx = i; lz = depth; }
-      const cIdx = (lx + lz * cs) * 3;
-      this.tmpColor.setRGB(this.chunkColorMap[cIdx], this.chunkColorMap[cIdx + 1], this.chunkColorMap[cIdx + 2]);
+      this._setTintColorFromCell(lx, lz);
     } else {
       this.tmpColor.setRGB(1, 1, 1);
     }
@@ -249,6 +291,9 @@ export class VoxelGeometryBuilder {
       this.normalsArr[this.nPtr++] = nz;
       const ao = this._calculateAO(c, axis, isPositive ? 1 : -1, (k === 1 || k === 2 ? 0 : -1), (k === 2 || k === 3 ? 0 : -1), ps);
       const aoF = 1.0 - ao * 0.18;
+      if (shouldTint && useSmoothTopTint) {
+        this._setTintColorFromVertexCorner(c[0] - 1, c[2] - 1);
+      }
       this.colorsArr[this.cPtr++] = this.tmpColor.r * aoF;
       this.colorsArr[this.cPtr++] = this.tmpColor.g * aoF;
       this.colorsArr[this.cPtr++] = this.tmpColor.b * aoF;

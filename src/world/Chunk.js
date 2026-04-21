@@ -279,10 +279,19 @@ export class Chunk {
 
   applyGeneratedBlock(x, y, z, id, options = {}) {
     const key = this.world.getKey(x, y, z);
-    if (this.world.state.changedBlocks.get(key) === null) return;
+    const hasOverride = this.world.state.changedBlocks.has(key);
+    const override = hasOverride
+      ? this.world.state.changedBlocks.get(key)
+      : undefined;
+    if (hasOverride && override === null) return;
 
-    const override = this.world.state.changedBlocks.get(key);
-    const finalId = override ?? id;
+    const finalId = hasOverride ? override : id;
+    if (options.persistChange && !hasOverride) {
+      this.world.state.changedBlocks.set(
+        key,
+        finalId === 'air' ? null : finalId
+      );
+    }
     const owner = this.noteTouchedGenerationChunk(x, y, z);
     this.world.addBlock(
       x,
@@ -344,7 +353,10 @@ export class Chunk {
   addGeneratedStructureBlock(x, y, z, id) {
     this.applyGeneratedBlock(x, y, z, id, {
       allowCorruption: true,
+      persistChange: true,
       replace: true,
+      skipParticles: id === 'air',
+      silent: true,
     });
   }
 
@@ -415,8 +427,13 @@ export class Chunk {
       this.world.shouldPlaceStructureChunk(this.cx, this.cz) ||
       this.world.shouldPlaceVillageChunk(this.cx, this.cz);
     
-    const waterLevel = Math.floor(this.world.seaLevel + (biome.waterLevelOffset ?? 0));
-    const terrainHash = this.world.hash2D(wx, wz);
+    const waterLevel = this.world.terrain.getSurfaceWaterLevelAt(wx, wz, biome);
+    const allowSurfaceWater = this.world.terrain.shouldPlaceSurfaceWaterAt(
+      wx,
+      wz,
+      terrainHeight,
+      biome
+    );
 
     // Vertical scan to ensure all blocks in this chunk's Y-range are populated
     for (let y = startY; y <= endY; y++) {
@@ -436,10 +453,15 @@ export class Chunk {
         // Vegetation Pass (Runs only if surface is in this chunk)
         if (!inForcedSpawnZone) {
           this._generateVegetation(wx, wz, terrainHeight, biome, waterLevel);
+          if (terrainHeight < waterLevel) {
+            this._generateOceanContent(wx, wz, terrainHeight, waterLevel, biome);
+          }
         }
       } else if (y <= waterLevel) {
         // Water Fill (if above terrain but below water level)
-        if (!inForcedSpawnZone) this.addGeneratedBlock(wx, y, wz, 'water');
+        if (!inForcedSpawnZone && allowSurfaceWater) {
+          this.addGeneratedBlock(wx, y, wz, 'water');
+        }
       }
     }
 
@@ -488,56 +510,168 @@ export class Chunk {
     }
   }
 
-  placeRandomStructure(x, y, z, biome) {
-    const allKeys = Object.keys(STRUCTURES).filter(
-      (k) => !EXCLUDED_FROM_RANDOM_POOL.has(k)
-    );
-    const virusRoll = this.world.hash2D(x + 811, z - 204);
-    let keys = allKeys;
-    if (!this.world.corruptionEnabled) {
-      keys = allKeys.filter((k) => k !== 'virus_tower' && k !== 'corruption_altar');
+  _generateOceanContent(wx, wz, terrainHeight, waterLevel, biome) {
+    const waterDepth = waterLevel - terrainHeight;
+    if (waterDepth < 1) return;
+
+    const warmBiome =
+      biome.id === 'desert' ||
+      biome.id === 'swamp' ||
+      biome.id === 'lush_grove' ||
+      biome.id === 'meadow';
+    const coralRoll = this.world.hash2D(wx * 19 + 71, wz * 23 - 41);
+    const kelpRoll = this.world.hash2D(wx * 31 - 17, wz * 37 + 53);
+
+    if (waterDepth <= 5 && coralRoll > (warmBiome ? 0.955 : 0.992)) {
+      this.placeCoralReefPatch(
+        wx,
+        terrainHeight + 1,
+        wz,
+        waterLevel,
+        warmBiome
+      );
+      return;
     }
 
-    const roll = this.world.hash2D(x - 17, z + 23);
-    const pick = Math.floor(roll * keys.length);
-    const structKey = keys[pick];
-    const struct = STRUCTURES[structKey];
-
-    if (!struct || !this.isLandSuitable(x, z, struct.radius || 4)) return;
-
-    const blocks = struct.blueprints(x, y, z);
-    if (!blocks) return;
-
-    // Clear area for non-additive structures
-    if (struct.clearArea) {
-      const r = struct.radius || 4;
-      for (let bx = x - r; bx <= x + r; bx++) {
-        for (let bz = z - r; bz <= z + r; bz++) {
-          for (let by = y + 1; by <= y + 6; by++) {
-            this.addGeneratedStructureBlock(bx, by, bz, 'air');
-          }
-        }
+    if (waterDepth >= 2 && kelpRoll > (biome.id === 'swamp' ? 0.76 : 0.86)) {
+      const maxKelpHeight = Math.max(1, Math.min(6, waterDepth - 1));
+      const kelpHeight =
+        1 + Math.floor(this.world.hash2D(wx + 211, wz - 307) * maxKelpHeight);
+      for (let i = 0; i < kelpHeight; i++) {
+        const y = terrainHeight + 1 + i;
+        if (y >= waterLevel) break;
+        this.addGeneratedBlock(wx, y, wz, 'kelp');
       }
     }
+  }
 
-    for (const b of blocks) {
-      this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
-    }
-    if (struct.name) {
-      this.world.registerLandmark(x, z, struct.name);
+  placeCoralReefPatch(x, y, z, waterLevel, warmBiome = false) {
+    const coralTypes = [
+      'tube_coral_block',
+      'brain_coral_block',
+      'bubble_coral_block',
+      'horn_coral_block',
+      'fire_coral_block',
+    ];
+    const radius = warmBiome ? 2 : 1;
+
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        const distSq = dx * dx + dz * dz;
+        if (distSq > radius * radius + 0.5) continue;
+
+        const roll = this.world.hash2D((x + dx) * 41 - 7, (z + dz) * 43 + 19);
+        if (roll < (warmBiome ? 0.18 : 0.42)) continue;
+
+        const coralId =
+          coralTypes[
+            Math.floor(
+              this.world.hash2D((x + dx) * 13 + 5, (z + dz) * 17 - 11) *
+                coralTypes.length
+            )
+          ];
+        const columnHeight = roll > 0.88 && y + 1 < waterLevel ? 2 : 1;
+        for (let h = 0; h < columnHeight; h++) {
+          this.addGeneratedBlock(x + dx, y + h, z + dz, coralId);
+        }
+      }
     }
   }
 
   isLandSuitable(x, z, minDryRadius = 4) {
+    let minHeight = Number.POSITIVE_INFINITY;
+    let maxHeight = Number.NEGATIVE_INFINITY;
+    let wetSamples = 0;
+
     for (let dx = -minDryRadius; dx <= minDryRadius; dx += 2) {
       for (let dz = -minDryRadius; dz <= minDryRadius; dz += 2) {
         const h = this.world.getColumnHeight(x + dx, z + dz);
-        const biome = this.world.getBiomeAt(x + dx, z + dz);
-        const wl = this.world.seaLevel;
-        if (h <= wl) return false;
+        const wl = this.world.terrain.getSurfaceWaterLevelAt(x + dx, z + dz);
+        minHeight = Math.min(minHeight, h);
+        maxHeight = Math.max(maxHeight, h);
+        if (h <= wl) wetSamples++;
       }
     }
-    return true;
+
+    if (wetSamples > 0) return false;
+
+    const maxVariance = minDryRadius >= 8 ? 5 : 4;
+    return maxHeight - minHeight <= maxVariance;
+  }
+
+  isStructureSupportCandidate(id) {
+    if (!id || id === 'air' || id === 'water' || id === 'lava') return false;
+    return this.world.isBlockSolid(id);
+  }
+
+  getStructureSupportId(x, z, baseId) {
+    const terrainY = Math.floor(this.world.getColumnHeight(x, z));
+    const terrainId = this.world.getBlockAt(x, terrainY, z);
+    const lowTerrainId = String(terrainId || '').toLowerCase();
+    const softTerrain =
+      lowTerrainId.includes('dirt') ||
+      lowTerrainId.includes('grass') ||
+      lowTerrainId.includes('sand') ||
+      lowTerrainId.includes('gravel') ||
+      lowTerrainId.includes('mud') ||
+      lowTerrainId.includes('clay') ||
+      lowTerrainId.includes('snow') ||
+      lowTerrainId.includes('path') ||
+      lowTerrainId.includes('farmland');
+    if (
+      terrainId &&
+      terrainId !== 'air' &&
+      terrainId !== 'water' &&
+      terrainId !== 'lava' &&
+      !softTerrain
+    ) {
+      return terrainId;
+    }
+
+    const lowId = String(baseId || '').toLowerCase();
+    if (lowId.includes('sandstone')) return 'sandstone';
+    if (
+      lowId.includes('stone') ||
+      lowId.includes('brick') ||
+      lowId.includes('obsidian') ||
+      lowId.includes('prismarine') ||
+      lowId.includes('deepslate')
+    ) {
+      return 'cobblestone';
+    }
+    if (
+      lowId.includes('planks') ||
+      lowId.includes('log') ||
+      lowId.includes('wood') ||
+      lowId.includes('fence')
+    ) {
+      return 'cobblestone';
+    }
+
+    const biome = this.world.getBiomeAt(x, z);
+    if (biome?.id === 'desert') return 'sandstone';
+    return 'cobblestone';
+  }
+
+  addStructureSupports(blocks) {
+    const lowestByColumn = new Map();
+
+    for (const block of blocks) {
+      if (!this.isStructureSupportCandidate(block?.id)) continue;
+      const key = `${block.x}|${block.z}`;
+      const existing = lowestByColumn.get(key);
+      if (!existing || block.y < existing.y) {
+        lowestByColumn.set(key, block);
+      }
+    }
+
+    for (const block of lowestByColumn.values()) {
+      const terrainY = Math.floor(this.world.getColumnHeight(block.x, block.z));
+      const supportId = this.getStructureSupportId(block.x, block.z, block.id);
+      for (let y = block.y - 1; y > terrainY; y--) {
+        this.addGeneratedStructureBlock(block.x, y, block.z, supportId);
+      }
+    }
   }
 
   getBlueprintBounds(blocks) {
@@ -613,6 +747,35 @@ export class Chunk {
     if (struct.name) this.world.registerLandmark(centerX, centerZ, struct.name);
   }
 
+  placeChunkLandmarksAndStructures(centerX, centerZ) {
+    const anchorY = Math.floor(this.world.getColumnHeight(centerX, centerZ));
+    if (this.world.getChunkCoord(anchorY) !== this.cy) return;
+
+    this.registerRoadLandmark(
+      this.cx * this.world.chunkSize,
+      this.cz * this.world.chunkSize
+    );
+
+    if (
+      this.world.shouldPlaceStructureChunk(this.cx, this.cz) &&
+      this.isLandSuitable(centerX, centerZ)
+    ) {
+      const structureY = this.world.getColumnHeight(centerX, centerZ) + 1;
+      const biome = this.world.getBiomeAt(centerX, centerZ);
+      this.placeRandomStructure(centerX, structureY, centerZ, biome);
+    }
+
+    if (
+      this.world.shouldPlaceVillageChunk(this.cx, this.cz) &&
+      this.isLandSuitable(centerX, centerZ, 8)
+    ) {
+      const villageY = this.world.getColumnHeight(centerX, centerZ) + 1;
+      this.placeSettlementCluster(centerX, villageY, centerZ);
+    }
+
+    this.placeUnderwaterStructure(centerX, centerZ);
+  }
+
   placeRandomStructure(x, y, z, biome) {
     const allKeys = Object.keys(STRUCTURES).filter(
       (k) => !EXCLUDED_FROM_RANDOM_POOL.has(k)
@@ -663,6 +826,7 @@ export class Chunk {
     if (!blocks || blocks.length === 0) return;
 
     this.clearBlueprintVolume(this.getBlueprintBounds(blocks), 4);
+    this.addStructureSupports(blocks);
 
     for (const b of blocks) {
       this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
@@ -970,23 +1134,7 @@ export class Chunk {
             const centerX = startX + Math.floor(this.world.chunkSize * 0.5);
             const centerZ = startZ + Math.floor(this.world.chunkSize * 0.5);
 
-            this.registerRoadLandmark(startX, startZ);
-            if (
-              this.world.shouldPlaceStructureChunk(this.cx, this.cz) &&
-              this.isLandSuitable(centerX, centerZ)
-            ) {
-              const sy = this.world.getColumnHeight(centerX, centerZ) + 1;
-              const biome = this.world.getBiomeAt(centerX, centerZ);
-              this.placeRandomStructure(centerX, sy, centerZ, biome);
-            }
-            if (
-              this.world.shouldPlaceVillageChunk(this.cx, this.cz) &&
-              this.isLandSuitable(centerX, centerZ, 8)
-            ) {
-              const vy = this.world.getColumnHeight(centerX, centerZ) + 1;
-              this.placeSettlementCluster(centerX, vy, centerZ);
-            }
-            this.placeUnderwaterStructure(centerX, centerZ);
+            this.placeChunkLandmarksAndStructures(centerX, centerZ);
             this.applyPlayerOverrides();
             this.finalizeGenerationPass();
             return;
@@ -1017,27 +1165,7 @@ export class Chunk {
         this.generateTerrainColumn(startX + lx, startZ + lz);
       }
     }
-    this.registerRoadLandmark(startX, startZ);
-    const onRoad = this.world.isHighwayAt(centerX, centerZ) || this.world.isPathAt(centerX, centerZ);
-    const structChance = onRoad ? 0.90 : 0.975; // More structures along roads
-
-    if (
-      this.world.hash2D(this.cx + 123, this.cz - 456) > structChance &&
-      this.isLandSuitable(centerX, centerZ)
-    ) {
-      const sy = this.world.getColumnHeight(centerX, centerZ) + 1;
-      const biome = this.world.getBiomeAt(centerX, centerZ);
-      this.placeRandomStructure(centerX, sy, centerZ, biome);
-    }
-    
-    if (
-      this.world.shouldPlaceVillageChunk(this.cx, this.cz) &&
-      this.isLandSuitable(centerX, centerZ, 8)
-    ) {
-      const vy = this.world.getColumnHeight(centerX, centerZ) + 1;
-      this.placeSettlementCluster(centerX, vy, centerZ);
-    }
-    this.placeUnderwaterStructure(centerX, centerZ);
+    this.placeChunkLandmarksAndStructures(centerX, centerZ);
     this.applyPlayerOverrides();
     this.finalizeGenerationPass();
     this.dirty = true;
@@ -1128,6 +1256,7 @@ export class Chunk {
       const hy = this.world.getColumnHeight(hx, hz) + 1;
 
       const blocks = struct.blueprints(hx, hy, hz);
+      this.addStructureSupports(blocks);
 
       for (const block of blocks)
         this.addGeneratedStructureBlock(block.x, block.y, block.z, block.id);
@@ -1214,7 +1343,11 @@ export class Chunk {
           mesh.material.dispose();
         }
       }
-      if (mesh.geometry && typeof mesh.geometry.dispose === 'function') {
+      if (
+        mesh.userData?.ownedGeometry &&
+        mesh.geometry &&
+        typeof mesh.geometry.dispose === 'function'
+      ) {
         mesh.geometry.dispose();
       }
       if (typeof mesh.dispose === 'function') mesh.dispose();

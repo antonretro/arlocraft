@@ -274,8 +274,20 @@ export class World {
   getTopBlockIdAt(x, z) {
     const fx = Math.floor(x),
       fz = Math.floor(z);
-    const y = this.terrain.getColumnHeight(fx, fz);
-    return this.getBlockAt(fx, y, fz);
+    const terrainY = Math.floor(this.terrain.getColumnHeight(fx, fz));
+    const waterSurfaceY = this.terrain.getWaterSurfaceYAt(fx, fz);
+    const topY =
+      waterSurfaceY !== null
+        ? Math.max(terrainY, Math.floor(waterSurfaceY))
+        : terrainY;
+
+    for (let y = topY; y >= terrainY; y--) {
+      const blockId = this.getBlockAt(fx, y, fz);
+      if (blockId && blockId !== 'air') return blockId;
+    }
+
+    if (waterSurfaceY !== null && waterSurfaceY > terrainY) return 'water';
+    return this.getBlockAt(fx, terrainY, fz);
   }
   hash2D(x, z) {
     return this.terrain.hash2D(x, z);
@@ -335,6 +347,9 @@ export class World {
   }
   registerLandmark(x, z, name, options) {
     return this.interaction.registerLandmark(x, z, name, options);
+  }
+  getLandmarksNear(x, z, radius) {
+    return this.interaction.getLandmarksNear(x, z, radius);
   }
 
   setSeed(seed) {

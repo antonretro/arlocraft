@@ -36,7 +36,16 @@ const UIApp = () => {
   useEffect(() => {
     // Bridge from Game to React
     const handleScreenChange = (e) => {
-        setScreen(e.detail);
+        const nextScreen =
+          e.detail === 'pause' || e.detail === 'settings'
+            ? game?.hasStarted
+              ? 'ingame'
+              : 'title'
+            : e.detail;
+        setScreen(nextScreen);
+        if (e.detail === 'pause') {
+            setIsPaused(true);
+        }
         if (e.detail === 'title') {
             setHudVisible(false);
             setIsPaused(false);

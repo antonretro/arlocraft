@@ -12,8 +12,51 @@ export class DayNightSystem {
     this.dayDurationSeconds = 480; // 8 minutes per day
     this.totalDays = 0;
     this._lastTime = 0.3;
+    this.daylight = 1;
+    this.weatherType = 'clear';
+    this.weatherIntensity = 0;
+    this.weatherTimer = 140;
 
     this._setupSunMoonPlanes();
+  }
+
+  _pickNextWeather(playerPos = null) {
+    const biomeId = playerPos
+      ? this.world.getBiomeAt(playerPos.x, playerPos.z)?.id || 'plains'
+      : 'plains';
+    const roll = Math.random();
+
+    if (biomeId === 'desert' || biomeId === 'badlands' || biomeId === 'canyon') {
+      this.weatherType = roll > 0.985 ? 'storm' : 'clear';
+    } else if (biomeId === 'swamp' || biomeId === 'forest' || biomeId === 'lush_grove') {
+      this.weatherType = roll > 0.82 ? 'storm' : roll > 0.42 ? 'rain' : 'clear';
+    } else if (biomeId === 'tundra' || biomeId === 'snow' || biomeId === 'alpine') {
+      this.weatherType = roll > 0.88 ? 'storm' : roll > 0.46 ? 'rain' : 'clear';
+    } else {
+      this.weatherType = roll > 0.9 ? 'storm' : roll > 0.58 ? 'rain' : 'clear';
+    }
+
+    this.weatherTimer = 90 + Math.random() * 180;
+  }
+
+  _updateWeather(delta, playerPos = null) {
+    this.weatherTimer -= delta;
+    if (this.weatherTimer <= 0) {
+      this._pickNextWeather(playerPos);
+    }
+
+    const targetIntensity =
+      this.weatherType === 'storm'
+        ? 1
+        : this.weatherType === 'rain'
+          ? 0.68
+          : 0;
+    this.weatherIntensity = THREE.MathUtils.lerp(
+      this.weatherIntensity,
+      targetIntensity,
+      Math.min(1, delta * 0.12)
+    );
+    this.renderer.setWeatherState?.(this.weatherType, this.weatherIntensity);
   }
 
   _setupSunMoonPlanes() {
@@ -63,7 +106,6 @@ export class DayNightSystem {
   }
 
   update(delta, getPlayerPosition) {
-    // Re-enabled Day/Night cycle for the stunning dynamic sky
     this.timeOfDay = (this.timeOfDay + delta / this.dayDurationSeconds) % 1.0;
     const angle = this.timeOfDay * Math.PI * 2 - Math.PI / 2;
     const sunHeight = Math.sin(angle);
@@ -74,8 +116,8 @@ export class DayNightSystem {
       sunHeight * sunDistance,
       70
     );
-
-    const daylight = 1.0; // Force full daylight
+    const daylight = THREE.MathUtils.clamp((sunHeight + 0.16) / 0.9, 0.06, 1);
+    this.daylight = daylight;
     this.renderer.setDaylightLevel(daylight);
 
     const cam = this.renderer?.camera ?? this.renderer?._lastCamera;
@@ -107,6 +149,7 @@ export class DayNightSystem {
     }
     // Force dynamic lighting update to ensure renderer sync (fog, atmosphere, sun)
     const pos = getPlayerPosition?.();
+    this._updateWeather(delta, pos);
     let depthBlend = 0;
     if (pos) {
       const surfaceY = this.world.getColumnHeight(pos.x, pos.z);
@@ -135,5 +178,9 @@ export class DayNightSystem {
 
   getDayNumber() {
     return this.totalDays + 1;
+  }
+
+  isNight() {
+    return this.daylight < 0.28;
   }
 }

@@ -47,6 +47,7 @@ export class EngineBootstrap {
     game.saveSystem = new SaveSystem(game);
     game.worldSlots = new WorldSlotManager(game.saveSystem);
     game.skinSystem = new SkinSystem();
+    game.skinSystem.loadSavedSkin();
     game.skinLoader = new SkinLoader();
     game.minimap = new MiniMap(game);
     game.resourceManager = ResourcePackManager.getInstance();
@@ -168,11 +169,33 @@ export class EngineBootstrap {
       if (skinId.startsWith('custom_')) {
         const username = skinId.replace('custom_', '');
         game.updatePlayerSkin(username);
+        game.settings.skinUsername = username;
+        game.saveSettings();
+        window.dispatchEvent(
+          new CustomEvent('skin-updated', {
+            detail: {
+              skinId,
+              avatarUrl: data || game.skinSystem.getSkinUrl(skinId),
+              name: game.skinSystem.getSkinMeta(skinId).name,
+            },
+          })
+        );
       } else {
         const url = game.skinSystem.getSkinUrl(skinId) || data;
         if (url) {
           game.skinLoader.loadSkinFromUrl(url).then(({ materials }) => {
             game._applyLoadedSkin(materials, url);
+            game.settings.skinUsername = '';
+            game.saveSettings();
+            window.dispatchEvent(
+              new CustomEvent('skin-updated', {
+                detail: {
+                  skinId,
+                  avatarUrl: game.skinSystem.getSkinMeta(skinId).faceUrl || url,
+                  name: game.skinSystem.getSkinMeta(skinId).name,
+                },
+              })
+            );
           }).catch(console.error);
         }
       }
@@ -180,10 +203,34 @@ export class EngineBootstrap {
   }
 
   static setupSkinListeners(game) {
-    if (game.settings.skinUsername) {
-      setTimeout(() => {
+    setTimeout(() => {
+      const savedSkinId = game.skinSystem.currentSkin;
+      const savedSkinUrl = game.skinSystem.getSkinUrl(savedSkinId);
+
+      if (savedSkinUrl && savedSkinId !== 'classic_steve') {
+        window.dispatchEvent(
+          new CustomEvent('skin-changed', {
+            detail: { skinId: savedSkinId, data: savedSkinUrl },
+          })
+        );
+        return;
+      }
+
+      if (game.settings.skinUsername) {
         game.updatePlayerSkin(game.settings.skinUsername, { persist: false });
-      }, 1000);
-    }
+      } else {
+        window.dispatchEvent(
+          new CustomEvent('skin-updated', {
+            detail: {
+              skinId: savedSkinId,
+              avatarUrl:
+                game.skinSystem.getSkinMeta(savedSkinId).faceUrl ||
+                game.skinSystem.getSkinUrl(savedSkinId),
+              name: game.skinSystem.getSkinMeta(savedSkinId).name,
+            },
+          })
+        );
+      }
+    }, 250);
   }
 }

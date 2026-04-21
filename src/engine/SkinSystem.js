@@ -6,14 +6,14 @@ export class SkinSystem {
       {
         id: 'classic_steve',
         name: 'Steve',
-        url: 'https://minotar.net/skin/steve',
-        faceUrl: 'https://minotar.net/helm/steve/64',
+        url: '/assets/steve.png',
+        faceUrl: '/assets/steve.png',
       },
       {
         id: 'classic_alex',
         name: 'Alex',
-        url: 'https://minotar.net/skin/alex',
-        faceUrl: 'https://minotar.net/helm/alex/64',
+        url: '/assets/alex.png',
+        faceUrl: '/assets/alex.png',
       },
     ];
     this.randomSkins = this._generateRandomSkins(10);
@@ -74,11 +74,25 @@ export class SkinSystem {
     if (classic) return classic.url;
 
     const random = this.randomSkins.find((s) => s.id === skinId);
-    if (random) return null; // Needs canvas generation
+    if (random) return random.url;
 
-    if (skinId === 'custom') return this.customSkinData;
+    if (skinId === 'custom' || String(skinId || '').startsWith('custom_')) {
+      return this.customSkinData;
+    }
 
-    return 'assets/steve.png';
+    return '/assets/steve.png';
+  }
+
+  getSkinMeta(skinId) {
+    return (
+      this.classicSkins.find((s) => s.id === skinId) ||
+      this.randomSkins.find((s) => s.id === skinId) || {
+        id: skinId,
+        name: skinId === 'custom' ? 'Custom Skin' : String(skinId || 'Steve'),
+        url: this.getSkinUrl(skinId),
+        faceUrl: this.getSkinUrl(skinId),
+      }
+    );
   }
 
   applySkin(skinId, data = null) {

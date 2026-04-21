@@ -175,13 +175,11 @@ export const village_hut = {
       for (let dz = 0; dz < gD; dz++) {
         const isEdge = dx === 0 || dx === gW - 1 || dz === 0 || dz === gD - 1;
         if (isEdge) {
-          // Fence post using cobblestone as proxy (iron_bars for visual variety)
-          blocks.push({ x: gX + dx, y: gY, z: gZ + dz, id: 'cobblestone' });
-          blocks.push({ x: gX + dx, y: gY + 1, z: gZ + dz, id: 'iron_bars' });
+          blocks.push({ x: gX + dx, y: gY, z: gZ + dz, id: 'iron_bars' });
         } else {
           // Crops: alternate wheat and carrot
           const cropId = (dx + dz) % 2 === 0 ? 'wheat_stage2' : 'carrot_stage2';
-          blocks.push({ x: gX + dx, y: gY, z: gZ + dz, id: 'dirt' });
+          blocks.push({ x: gX + dx, y: gY, z: gZ + dz, id: 'farmland' });
           blocks.push({ x: gX + dx, y: gY + 1, z: gZ + dz, id: cropId });
         }
       }

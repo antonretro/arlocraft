@@ -20,22 +20,37 @@ export const MiniMap = () => {
         canvasRef.current.id = 'minimap-canvas';
 
         miniMapRef.current = new MiniMapCore(game);
+        miniMapRef.current.visible = game.settings?.minimapEnabled !== false;
+        if (containerRef.current) {
+            containerRef.current.style.display =
+              miniMapRef.current.visible ? 'block' : 'none';
+        }
 
         // Animation Loop for the Map
         let frameId;
         const updateMap = () => {
-            if (miniMapRef.current && game.player) {
-                const pos = game.player.position;
+            if (miniMapRef.current) {
+                const pos = game.getPlayerPosition?.();
                 const yaw = game.camera.instance.rotation.y;
                 miniMapRef.current.update(0.016, pos, yaw);
             }
             frameId = requestAnimationFrame(updateMap);
         };
 
+        const handleMinimapVisibility = (e) => {
+            const visible = Boolean(e.detail);
+            if (!miniMapRef.current || !containerRef.current) return;
+            miniMapRef.current.visible = visible;
+            containerRef.current.style.display = visible ? 'block' : 'none';
+        };
+
+        window.addEventListener('ui-set-minimap', handleMinimapVisibility);
+
         frameId = requestAnimationFrame(updateMap);
 
         return () => {
             cancelAnimationFrame(frameId);
+            window.removeEventListener('ui-set-minimap', handleMinimapVisibility);
             containerRef.current.id = originalContainer;
             canvasRef.current.id = originalCanvas;
         };

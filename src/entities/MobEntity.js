@@ -69,6 +69,8 @@ export class MobEntity {
     this.contactCooldown = 0;
     this.chatCooldown = 2 + Math.random() * 3;
     this.height = size;
+    this.swimPhase = Math.random() * Math.PI * 2;
+    this.swimDepthBias = 0.8 + Math.random() * 1.4;
   }
 
   applyTexture(texture) {
@@ -384,7 +386,12 @@ export class MobEntity {
       const tx = this.mesh.position.x + (Math.random() - 0.5) * 8;
       const tz = this.mesh.position.z + (Math.random() - 0.5) * 8;
       const top = this.game.world.getTopBlockIdAt(tx, tz);
-      if (!canUseWater && top === 'water') continue;
+      const waterY = this.game.world.getWaterSurfaceYAt(tx, tz);
+      if (this.config.aquatic) {
+        if (waterY === null) continue;
+      } else if (!canUseWater && top === 'water') {
+        continue;
+      }
       this.targetPos.set(tx, this.mesh.position.y, tz);
       return;
     }
@@ -399,27 +406,67 @@ export class MobEntity {
   updateSurfaceY(delta, canUseWater) {
     const world = this.game.world;
     const halfHeight = this.height * 0.5;
-    const groundY =
-      world.getTerrainHeight(this.mesh.position.x, this.mesh.position.z) +
-      halfHeight;
+    const groundSurfaceY = world.getGroundYBelow(
+      this.mesh.position.x,
+      this.mesh.position.y + halfHeight + 1.5,
+      this.mesh.position.z
+    );
+    const groundY = groundSurfaceY + halfHeight;
     const waterY = world.getWaterSurfaceYAt(
       this.mesh.position.x,
       this.mesh.position.z
     );
 
     let targetY = groundY;
-    if (waterY !== null) {
-      if (canUseWater || !this.config.aquatic) {
+    const hasWater = waterY !== null;
+    if (hasWater) {
+      if (this.config.aquatic) {
+        const waterFloor = groundSurfaceY + halfHeight * 0.2;
+        const swimRoom = Math.max(0.6, waterY - waterFloor);
+        const desiredDepth = Math.min(
+          Math.max(0.75, swimRoom * 0.45),
+          this.swimDepthBias + swimRoom * 0.2
+        );
+        const bob = Math.sin(performance.now() * 0.0018 + this.swimPhase) * 0.3;
+        targetY = Math.max(waterFloor, waterY - desiredDepth + bob);
+      } else if (canUseWater || !this.config.aquatic) {
         targetY = Math.max(targetY, waterY + halfHeight * 0.2);
       }
     }
 
     this.surfaceTargetY = targetY;
-    this.mesh.position.y = THREE.MathUtils.lerp(
-      this.mesh.position.y,
-      targetY,
-      Math.min(1, delta * 8)
-    );
+
+    if (this.config.aquatic && hasWater) {
+      this.velocity.y = THREE.MathUtils.lerp(
+        this.velocity.y,
+        (targetY - this.mesh.position.y) * 4.5,
+        Math.min(1, delta * 4)
+      );
+      this.mesh.position.y += this.velocity.y * delta;
+      return;
+    }
+
+    const inWater = hasWater && this.mesh.position.y <= waterY + halfHeight * 0.3;
+    const floatTargetY =
+      inWater && canUseWater
+        ? Math.max(groundY, waterY + halfHeight * 0.2)
+        : groundY;
+
+    const gravity = inWater ? 10 : 22;
+    const buoyancy = inWater && canUseWater ? 14 : 0;
+
+    this.velocity.y -= gravity * delta;
+    if (buoyancy > 0 && this.mesh.position.y < floatTargetY) {
+      this.velocity.y += buoyancy * delta;
+    }
+
+    let nextY = this.mesh.position.y + this.velocity.y * delta;
+    if (nextY <= floatTargetY) {
+      nextY = floatTargetY;
+      this.velocity.y = 0;
+    }
+
+    this.mesh.position.y = nextY;
   }
 
   checkMergeEvolution() {

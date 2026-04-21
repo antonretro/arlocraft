@@ -137,6 +137,25 @@ export class WorldInteractionService {
     });
   }
 
+  getLandmarksNear(x, z, radius = 32) {
+    const results = [];
+    const maxDistSq = radius * radius;
+    for (const landmark of this.world.state.landmarks.values()) {
+      if (!landmark) continue;
+      const dx = landmark.x - x;
+      const dz = landmark.z - z;
+      if (dx * dx + dz * dz > maxDistSq) continue;
+      results.push(landmark);
+    }
+    return results.sort((left, right) => {
+      const leftDx = left.x - x;
+      const leftDz = left.z - z;
+      const rightDx = right.x - x;
+      const rightDz = right.z - z;
+      return leftDx * leftDx + leftDz * leftDz - (rightDx * rightDx + rightDz * rightDz);
+    });
+  }
+
   // --- Requirements & Inventory ---
 
   canAffordRequirements(requirements = []) {

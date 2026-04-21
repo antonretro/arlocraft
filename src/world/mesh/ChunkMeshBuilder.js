@@ -8,6 +8,7 @@ import {
 import {
   DECO_LOD_DIST_SQ,
   isDecoType,
+  isPaneType,
   resolveChunkGeometry,
   resolveLODGeometry,
   shouldSkipChunkBlockInstance,
@@ -53,10 +54,32 @@ function specializeMaterial(baseMaterial) {
   return { material, owned: true };
 }
 
+function specializePaneMaterial(baseMaterial) {
+  const source = Array.isArray(baseMaterial)
+    ? baseMaterial.find((entry) => entry?.map) ?? baseMaterial[0]
+    : baseMaterial;
+  if (!source) return null;
+
+  if (!isTintableMaterial(source)) {
+    return { material: source, owned: false };
+  }
+
+  const material = cloneMaterial(source);
+  if (isTintableMaterial(material)) material.vertexColors = true;
+  return { material, owned: true };
+}
+
 function getRenderOrder(id, material) {
   if (id === 'water') return RENDER_LAYERS.WATER;
   if (materialUsesBlendTransparency(material)) return RENDER_LAYERS.TRANSPARENT;
   return RENDER_LAYERS.OPAQUE;
+}
+
+function isPaneConnectable(world, x, y, z) {
+  const neighborId = world.getBlockAt(x, y, z);
+  if (!neighborId || neighborId === 'air') return false;
+  const neighborData = world.getBlockData(normalizeBlockVariantId(neighborId));
+  return world.isBlockSolid(neighborId) || isPaneType(neighborData);
 }
 
 function clearMeshes(chunk) {
@@ -72,7 +95,11 @@ function clearMeshes(chunk) {
         mesh.material.dispose();
       }
     }
-    if (mesh.geometry && typeof mesh.geometry.dispose === 'function') {
+    if (
+      mesh.userData?.ownedGeometry &&
+      mesh.geometry &&
+      typeof mesh.geometry.dispose === 'function'
+    ) {
       mesh.geometry.dispose();
     }
     if (typeof mesh.dispose === 'function') mesh.dispose();
@@ -140,6 +167,19 @@ function _rebuildChunkMeshesInner(chunk) {
       const { material, owned } = specialized;
       if (!material) continue;
 
+      if (isPaneType(blockData)) {
+        const paneMaterial = specializePaneMaterial(baseMaterial);
+        if (!paneMaterial?.material) continue;
+        createPaneMeshes(
+          chunk,
+          baseId,
+          keys,
+          paneMaterial.material,
+          paneMaterial.owned
+        );
+        continue;
+      }
+
       // Handle Deco (Instanced) vs Solid (Consolidated/Greedy)
       if (isDecoType(blockData)) {
         const nearKeys = [], farKeys = [];
@@ -175,6 +215,7 @@ function _rebuildChunkMeshesInner(chunk) {
         if (geo) {
           const mesh = new THREE.Mesh(geo, material);
           if (owned) mesh.userData.ownedMaterial = true;
+          mesh.userData.ownedGeometry = true;
           
           mesh.renderOrder = getRenderOrder(baseId, material);
           mesh.castShadow = !baseId.startsWith('water') && !materialUsesBlendTransparency(material);
@@ -253,4 +294,54 @@ function createInstancedMesh(chunk, id, keys, geometry, material, owned, blockDa
   const key = isLod ? `${id}_lod` : id;
   chunk.meshes.set(key, mesh);
   chunk.group.add(mesh);
+}
+
+function createPaneMeshes(chunk, id, keys, material, owned) {
+  const geo = chunk.world.sharedChunkGeometries;
+  if (!geo?.paneCenter) return;
+
+  const buckets = {
+    center: [...keys],
+    north: [],
+    south: [],
+    east: [],
+    west: [],
+  };
+
+  for (const key of keys) {
+    const [ax, ay, az] = chunk.world.keyToCoords(key);
+    const north = isPaneConnectable(chunk.world, ax, ay, az - 1);
+    const south = isPaneConnectable(chunk.world, ax, ay, az + 1);
+    const east = isPaneConnectable(chunk.world, ax + 1, ay, az);
+    const west = isPaneConnectable(chunk.world, ax - 1, ay, az);
+    const connected = north || south || east || west;
+
+    if (north || !connected) buckets.north.push(key);
+    if (south || !connected) buckets.south.push(key);
+    if (east || !connected) buckets.east.push(key);
+    if (west || !connected) buckets.west.push(key);
+  }
+
+  const variants = [
+    ['center', geo.paneCenter],
+    ['north', geo.paneNorth],
+    ['south', geo.paneSouth],
+    ['east', geo.paneEast],
+    ['west', geo.paneWest],
+  ];
+
+  for (const [suffix, geometry] of variants) {
+    const variantKeys = buckets[suffix];
+    if (!geometry || !variantKeys || variantKeys.length === 0) continue;
+    createInstancedMesh(
+      chunk,
+      `${id}__${suffix}`,
+      variantKeys,
+      geometry,
+      material,
+      owned,
+      { renderType: 'pane' },
+      false
+    );
+  }
 }

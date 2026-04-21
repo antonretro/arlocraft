@@ -87,6 +87,30 @@ export class WorldVisuals {
         geo.translate(0, 0, 0.5);
         return withWhiteVertexColors(geo);
       })(),
+      paneCenter: (() => {
+        const geo = new THREE.BoxGeometry(0.125, 1, 0.125);
+        return withWhiteVertexColors(geo);
+      })(),
+      paneNorth: (() => {
+        const geo = new THREE.BoxGeometry(0.125, 1, 0.5);
+        geo.translate(0, 0, -0.25);
+        return withWhiteVertexColors(geo);
+      })(),
+      paneSouth: (() => {
+        const geo = new THREE.BoxGeometry(0.125, 1, 0.5);
+        geo.translate(0, 0, 0.25);
+        return withWhiteVertexColors(geo);
+      })(),
+      paneEast: (() => {
+        const geo = new THREE.BoxGeometry(0.5, 1, 0.125);
+        geo.translate(0.25, 0, 0);
+        return withWhiteVertexColors(geo);
+      })(),
+      paneWest: (() => {
+        const geo = new THREE.BoxGeometry(0.5, 1, 0.125);
+        geo.translate(-0.25, 0, 0);
+        return withWhiteVertexColors(geo);
+      })(),
       deco: (() => {
         const p1 = new THREE.PlaneGeometry(1, 1);
         p1.rotateY(Math.PI / 4);

@@ -4,6 +4,7 @@ export class FluidSystem {
   constructor(world) {
     this.world = world;
     this.dirtyBlocks = []; // Queue of positions [x, y, z, id, depth]
+    this.queuedBlocks = new Map();
     this.MAX_DEPTH_WATER = 8;
     this.MAX_DEPTH_LAVA = 4;
     this.UPDATE_INTERVAL_MS = 150;
@@ -45,7 +46,38 @@ export class FluidSystem {
     }
   }
 
+  getQueueKey(x, y, z, id) {
+    return `${x}|${y}|${z}|${id}`;
+  }
+
+  markAffectedChunkKeys(chunkKeys, x, y, z) {
+    const { coords, chunkSize } = this.world;
+    const cx = coords.getChunkCoord(x);
+    const cy = coords.getChunkCoord(y);
+    const cz = coords.getChunkCoord(z);
+    const addChunk = (tx, ty, tz) => {
+      chunkKeys.add(coords.getChunkKey(tx, ty, tz));
+    };
+
+    addChunk(cx, cy, cz);
+
+    const lx = ((x % chunkSize) + chunkSize) % chunkSize;
+    const ly = ((y % chunkSize) + chunkSize) % chunkSize;
+    const lz = ((z % chunkSize) + chunkSize) % chunkSize;
+
+    if (lx === 0) addChunk(cx - 1, cy, cz);
+    if (lx === chunkSize - 1) addChunk(cx + 1, cy, cz);
+    if (ly === 0) addChunk(cx, cy - 1, cz);
+    if (ly === chunkSize - 1) addChunk(cx, cy + 1, cz);
+    if (lz === 0) addChunk(cx, cy, cz - 1);
+    if (lz === chunkSize - 1) addChunk(cx, cy, cz + 1);
+  }
+
   scheduleSpread(x, y, z, id, depth) {
+    const key = this.getQueueKey(x, y, z, id);
+    const existingDepth = this.queuedBlocks.get(key);
+    if (existingDepth !== undefined && existingDepth <= depth) return;
+    this.queuedBlocks.set(key, depth);
     this.dirtyBlocks.push({ x, y, z, id, depth });
   }
 
@@ -63,16 +95,31 @@ export class FluidSystem {
 
     for (const block of nextBatch) {
       const { x, y, z, id, depth } = block;
+      const queueKey = this.getQueueKey(x, y, z, id);
+      const queuedDepth = this.queuedBlocks.get(queueKey);
+      if (queuedDepth !== depth) {
+        continue;
+      }
+      this.queuedBlocks.delete(queueKey);
       
       const cx = this.world.coords.getChunkCoord(x);
       const cy = this.world.coords.getChunkCoord(y);
       const cz = this.world.coords.getChunkCoord(z);
       const ownerKey = this.world.coords.getChunkKey(cx, cy, cz);
       
-      // use silent placement to avoid immediate rebuilds
-      this.world.mutations.setBlock(x, y, z, id, ownerKey, { silent: true });
-      
-      affectedChunks.add(ownerKey);
+      const currentId = this.world.state.blockMap.get(
+        this.world.coords.getKey(x, y, z)
+      );
+      if (currentId !== id) {
+        // Use silent placement and skip recursive fluid re-scheduling.
+        this.world.mutations.setBlock(x, y, z, id, ownerKey, {
+          silent: true,
+          skipFluidScheduling: true,
+          skipChunkDirtying: true,
+          skipNeighborDirtying: true,
+        });
+        this.markAffectedChunkKeys(affectedChunks, x, y, z);
+      }
       
       this.processSpread(block);
     }

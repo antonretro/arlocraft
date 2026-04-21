@@ -15,6 +15,7 @@ export class SettingsManager {
       shadowsEnabled: false,
       fogDensityScale: 1.0,
       perfPanelVisible: false,
+      minimapEnabled: true,
       resolutionScale: 0.75,
       graphicsAPI: 'webgl2',
       audioMuted: false,
@@ -93,6 +94,10 @@ export class SettingsManager {
           parsed.perfPanelVisible !== undefined
             ? Boolean(parsed.perfPanelVisible)
             : defaults.perfPanelVisible,
+        minimapEnabled:
+          parsed.minimapEnabled !== undefined
+            ? Boolean(parsed.minimapEnabled)
+            : defaults.minimapEnabled,
         resolutionScale: Number.isFinite(parsed.resolutionScale)
           ? parsed.resolutionScale
           : defaults.resolutionScale,

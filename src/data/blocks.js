@@ -43,6 +43,7 @@ function inferRenderType(block) {
   if (hasPairId) return 'paired_plant';
   const id = String(block.id || '');
   if (block.flat) return 'flat';
+  if (id === 'iron_bars' || id.includes('_pane')) return 'pane';
   if (block.slab || id.includes('_slab')) return 'slab';
   if (id.includes('_stairs')) return 'stairs';
   if (block.deco) return 'plant';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { getGame } from '../UIManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -32,6 +32,17 @@ export const MainMenu = ({ setScreen }) => {
   const [skinSearchQuery, setSkinSearchQuery] = useState('');
   const [localPlayerName, setLocalPlayerName] = useState(() => game?.settings?.playerName || 'Arlo');
   const [settings, setSettings] = useState(() => game?.settingsManager?.getAll() ?? {});
+  const [selectedSkinId, setSelectedSkinId] = useState(
+    () => game?.skinSystem?.currentSkin || 'classic_steve'
+  );
+
+  useEffect(() => {
+    const handleSkinChange = (e) => {
+      if (e.detail?.skinId) setSelectedSkinId(e.detail.skinId);
+    };
+    window.addEventListener('skin-changed', handleSkinChange);
+    return () => window.removeEventListener('skin-changed', handleSkinChange);
+  }, []);
 
   const updateSetting = (key, value) => {
     game.settingsManager.set(key, value);
@@ -300,8 +311,9 @@ export const MainMenu = ({ setScreen }) => {
                       className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-arlo-blue/50 transition-colors text-sm"
                       value={skinSearchQuery}
                       onChange={(e) => setSkinSearchQuery(e.target.value)}
-                      onKeyDown={(e) => {
+                        onKeyDown={(e) => {
                         if (e.key === 'Enter' && skinSearchQuery.trim()) {
+                           setSelectedSkinId(`custom_${skinSearchQuery.trim().replace(/\s+/g, '_')}`);
                            game.skinSystem.applySkinByUsername(skinSearchQuery);
                            setSkinSearchQuery('');
                         }
@@ -310,6 +322,7 @@ export const MainMenu = ({ setScreen }) => {
                     <button 
                       onClick={() => {
                         if (skinSearchQuery.trim()) {
+                          setSelectedSkinId(`custom_${skinSearchQuery.trim().replace(/\s+/g, '_')}`);
                           game.skinSystem.applySkinByUsername(skinSearchQuery);
                           setSkinSearchQuery('');
                         }
@@ -326,11 +339,12 @@ export const MainMenu = ({ setScreen }) => {
                 <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Standard Replicas</label>
                 <div className="grid grid-cols-5 gap-2 overflow-y-auto max-h-40 p-1 scrollbar-thin">
                   {[...game.skinSystem.classicSkins, ...game.skinSystem.randomSkins].map(skin => {
-                    const isActive = game.skinSystem.currentSkin === skin.id;
+                    const isActive = selectedSkinId === skin.id;
                     return (
                       <button
                         key={skin.id}
                         onClick={() => {
+                          setSelectedSkinId(skin.id);
                           game.skinSystem.applySkin(skin.id);
                         }}
                         className={`aspect-square p-2 rounded-xl border transition-all 
@@ -348,7 +362,9 @@ export const MainMenu = ({ setScreen }) => {
               </div>
               <div className="mt-auto px-2">
                 <span className="text-[10px] font-bold opacity-30 uppercase tracking-widest">Active Voyager</span>
-                <p className="text-sm font-bold text-arlo-blue leading-none">{game.skinSystem.currentSkin.toUpperCase()}</p>
+                <p className="text-sm font-bold text-arlo-blue leading-none">
+                  {game.skinSystem.getSkinMeta(selectedSkinId).name}
+                </p>
               </div>
             </motion.div>
           )}
@@ -417,9 +433,9 @@ export const MainMenu = ({ setScreen }) => {
                             updateSetting('fov', v);
                           }}
                         />
-                         <ToggleSetting 
-                          label="Auto Quality Adaptation" 
-                          desc="Dynamically scale resolution for optimal FPS" 
+                        <ToggleSetting 
+                          label="Auto Performance Scaling" 
+                          desc="Adjusts render resolution automatically to hold your FPS target." 
                           active={settings.autoQuality}
                           onToggle={() => {
                             updateSetting('autoQuality', !settings.autoQuality);
@@ -477,9 +493,13 @@ export const MainMenu = ({ setScreen }) => {
 
                         <div className="border-t border-white/5 pt-6 flex flex-col gap-6">
                           <span className="text-[10px] font-bold text-arlo-blue uppercase tracking-[0.2em] px-1">Engine Stability Controls</span>
+                          <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3 text-[11px] leading-relaxed text-white/45">
+                            Auto Performance Scaling helps average FPS by lowering resolution when needed.
+                            Smooth Chunk Streaming reduces the size of chunk-mesh spikes while you move through the world.
+                          </div>
                           <ToggleSetting 
-                            label="Stability Mode" 
-                            desc="Smooths out frame-time spikes during world generation" 
+                            label="Smooth Chunk Streaming" 
+                            desc="Cuts chunk-pop stutters by rebuilding terrain more gently." 
                             active={settings.stabilityMode}
                             onToggle={() => updateSetting('stabilityMode', !settings.stabilityMode)}
                           />
@@ -493,7 +513,7 @@ export const MainMenu = ({ setScreen }) => {
                             onClick={applyPerformancePreset}
                             className="w-full py-4 bg-arlo-blue/10 hover:bg-arlo-blue/20 border border-arlo-blue/20 rounded-xl text-arlo-blue text-xs font-bold uppercase tracking-widest transition-all"
                           >
-                            Maximize Stability (One-Click Preset)
+                            Apply Safe Performance Preset
                           </button>
                         </div>
                       </motion.div>
@@ -762,19 +782,38 @@ const TabButton = ({ id, label, icon, active, onClick }) => (
   </button>
 );
 
-const RangeSetting = ({ label, value, min, max, onChange }) => {
+const RangeSetting = ({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  disabled = false,
+  formatDisplay,
+}) => {
   const [val, setVal] = useState(value);
+  useEffect(() => setVal(value), [value]);
+
   return (
-    <div className="flex flex-col gap-2">
+    <div
+      className={`flex flex-col gap-2 transition-opacity duration-300 ${
+        disabled ? 'opacity-30 pointer-events-none' : ''
+      }`}
+    >
       <div className="flex justify-between items-center">
         <span className="text-sm font-bold opacity-70 tracking-wide">{label}</span>
-        <span className="text-xs font-mono text-arlo-blue">{val}</span>
+        <span className="text-xs font-mono text-arlo-blue">
+          {formatDisplay ? formatDisplay(val) : val}
+        </span>
       </div>
       <input 
         type="range" 
         min={min} 
         max={max} 
+        step={step}
         value={val}
+        disabled={disabled}
         onChange={(e) => {
           const v = parseInt(e.target.value);
           setVal(v);

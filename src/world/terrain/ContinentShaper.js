@@ -12,11 +12,11 @@ export const MIN_TERRAIN_Y = -64;
 export const MAX_TERRAIN_Y = 65;
 
 // Terrain zone targets (relative to SEA_LEVEL)
-export const OCEAN_FLOOR_OFFSET = -14;
+export const OCEAN_FLOOR_OFFSET = -20;
 export const BEACH_OFFSET = 1;
-export const PLAINS_MAX_OFFSET = 6;
-export const HILLS_MAX_OFFSET = 20;
-export const MOUNTAIN_MAX_OFFSET = 40;
+export const PLAINS_MAX_OFFSET = 10;
+export const HILLS_MAX_OFFSET = 28;
+export const MOUNTAIN_MAX_OFFSET = 54;
 
 // Spawn-zone flattening
 export const SPAWN_FLAT_RADIUS = 20;
@@ -61,8 +61,9 @@ export function getContinentMask(noise, x, z, seed) {
       0.5 +
     0.5;
 
-  // Blend: 70 % large shape, 30 % coastal detail
-  return clamp(base * 0.7 + detail * 0.3, 0, 1);
+  // Blend with a little extra coastal definition so the world has more bays,
+  // peninsulas, and less uniformly-rounded landmasses.
+  return clamp(base * 0.62 + detail * 0.38, 0, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -80,24 +81,49 @@ export function getRawTerrainHeight(router, noise, x, z, seed) {
   const continent = getContinentMask(noise, x, z, seed);
   const routerH = router.getTerrainHeight(x, z) - 63; // centred at 0
   const detailSignal = clamp(routerH / 30, -1, 1);
+  const regional =
+    noise.simplex2D(x * 0.0022 + seed * 0.00009, z * 0.0022 - seed * 0.00012) *
+      0.5 +
+    0.5;
+  const crag =
+    Math.abs(
+      noise.simplex2D(
+        x * 0.0065 - 410 + seed * 0.00017,
+        z * 0.0065 + 880 - seed * 0.00015
+      )
+    ) || 0;
+  const basin =
+    noise.simplex2D(x * 0.0013 + 1900, z * 0.0013 - 1400) * 0.5 + 0.5;
+  const regionalBias = (regional - 0.5) * 6;
 
   let height;
 
   if (continent < 0.35) {
     const oceanDepth = lerp(OCEAN_FLOOR_OFFSET, -2, continent / 0.35);
-    height = SEA_LEVEL + oceanDepth + detailSignal * 3;
+    height = SEA_LEVEL + oceanDepth + detailSignal * 4 + regionalBias * 0.35;
   } else if (continent < 0.5) {
     const t = (continent - 0.35) / 0.15;
     const coastBase = lerp(-2, BEACH_OFFSET, smoothstep(t));
-    height = SEA_LEVEL + coastBase + detailSignal * 2;
+    height = SEA_LEVEL + coastBase + detailSignal * 3 + regionalBias * 0.25;
   } else if (continent < 0.65) {
     const t = (continent - 0.5) / 0.15;
     const plainsBase = lerp(BEACH_OFFSET, PLAINS_MAX_OFFSET, smoothstep(t));
-    height = SEA_LEVEL + plainsBase + detailSignal * 4;
+    height =
+      SEA_LEVEL +
+      plainsBase +
+      detailSignal * 5 +
+      regionalBias * 0.7 -
+      Math.max(0, basin - 0.72) * 3;
   } else if (continent < 0.82) {
     const t = (continent - 0.65) / 0.17;
     const hillBase = lerp(PLAINS_MAX_OFFSET, HILLS_MAX_OFFSET, smoothstep(t));
-    height = SEA_LEVEL + hillBase + detailSignal * 8;
+    height =
+      SEA_LEVEL +
+      hillBase +
+      detailSignal * 9 +
+      regionalBias * 1.1 +
+      crag * 4 -
+      Math.max(0, basin - 0.7) * 5;
   } else {
     const t = clamp((continent - 0.82) / 0.18, 0, 1);
     const mountBase = lerp(
@@ -105,7 +131,13 @@ export function getRawTerrainHeight(router, noise, x, z, seed) {
       MOUNTAIN_MAX_OFFSET,
       smoothstep(t)
     );
-    height = SEA_LEVEL + mountBase + detailSignal * 12;
+    height =
+      SEA_LEVEL +
+      mountBase +
+      detailSignal * 14 +
+      regionalBias * 1.6 +
+      crag * 10 -
+      Math.max(0, basin - 0.66) * 7;
   }
 
   return clamp(Math.round(height), MIN_TERRAIN_Y, MAX_TERRAIN_Y);

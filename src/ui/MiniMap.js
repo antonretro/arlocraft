@@ -51,6 +51,11 @@ export class MiniMap {
   }
 
   getColorForBlock(id) {
+    const lowId = String(id || '').toLowerCase();
+    if (lowId.includes('kelp')) return '#2f8f66';
+    if (lowId.includes('coral')) return '#ff7aa8';
+    if (lowId.includes('leaves')) return '#32713c';
+    if (lowId.includes('wood') || lowId.includes('log')) return '#75573a';
     return this.colors[id] ?? '#5b6570';
   }
 

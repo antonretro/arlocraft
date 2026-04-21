@@ -1,5 +1,16 @@
 import * as THREE from 'three';
 
+function disposeMaterialResources(material) {
+    const materials = Array.isArray(material) ? material : [material];
+    for (const entry of materials) {
+        if (!entry) continue;
+        entry.map?.dispose?.();
+        entry.alphaMap?.dispose?.();
+        entry.emissiveMap?.dispose?.();
+        entry.dispose?.();
+    }
+}
+
 /**
  * Player Entity
  * Owns the 3D representation, animation state, and skin application for the local player.
@@ -143,9 +154,13 @@ export class Player {
         const partNames = ['head', 'torso', 'armL', 'armR', 'legL', 'legR'];
         for (const name of partNames) {
             if (materials[name]) {
+                const previous = this.parts[name].material;
                 this.parts[name].material = materials[name];
                 const matArray = Array.isArray(materials[name]) ? materials[name] : [materials[name]];
                 matArray.forEach(m => { m.needsUpdate = true; });
+                if (previous && previous !== materials[name]) {
+                    disposeMaterialResources(previous);
+                }
             }
         }
         

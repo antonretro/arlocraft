@@ -46,6 +46,22 @@ export class ChunkManager {
     return this.world.game?.qualityTier ?? 'balanced';
   }
 
+  pickAmbientWaterMob(wx, wz, biomeId, waterDepth = 0) {
+    if (waterDepth >= 5 && this.world.hash2D(wx * 0.37 + 7, wz * 0.41 - 3) > 0.74) {
+      return this.world.hash2D(wx * 0.19 + 5, wz * 0.23 - 11) > 0.55
+        ? 'glow_squid'
+        : 'void_jelly';
+    }
+
+    if (biomeId === 'desert' || biomeId === 'lush_grove' || biomeId === 'swamp') {
+      return 'tropical_fish';
+    }
+    if (biomeId === 'alpine' || biomeId === 'tundra' || biomeId === 'snow' || biomeId === 'highlands') {
+      return 'salmon';
+    }
+    return 'cod';
+  }
+
   getVerticalStreamingWindow(playerPosition, centerCy) {
     const configuredVertical = Math.max(
       1,
@@ -220,11 +236,23 @@ export class ChunkManager {
       const rz = Math.floor(this.world.hash2D(cz, cx) * this.world.chunkSize);
       const wx = cx * this.world.chunkSize + rx;
       const wz = cz * this.world.chunkSize + rz;
-      const wy = this.world.getTerrainHeight(wx, wz) + 1.2;
+      const terrainY = this.world.getTerrainHeight(wx, wz);
+      const waterSurfaceY = this.world.getWaterSurfaceYAt(wx, wz);
+      const biomeId = this.world.getBiomeAt(wx, wz).id;
+      const waterDepth =
+        waterSurfaceY === null ? 0 : Math.max(0, Math.floor(waterSurfaceY - terrainY));
+      const inWater = waterSurfaceY !== null && waterDepth >= 1;
+      const wy = inWater ? waterSurfaceY - 0.9 : terrainY + 1.2;
 
-      const isNight = this.world.dayNightSystem?.isNight?.() ?? false;
+      const isNight = this.world.game?.dayNight?.isNight?.() ?? false;
       const inCorruptedArea =
         this.world.isCorruptedAt?.(wx, wz) || this.world.corruptionEnabled;
+
+      if (inWater) {
+        const aquaticId = this.pickAmbientWaterMob(wx, wz, biomeId, waterDepth);
+        this.world.game.entities.spawn(aquaticId, wx + 0.5, wy, wz + 0.5);
+        return;
+      }
 
       // Spawn hostile in dark/night/corrupted areas, otherwise passive friendlies
       if (isNight || inCorruptedArea) {

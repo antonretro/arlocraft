@@ -73,6 +73,14 @@ const TOOL_MAP = {
 };
 const GRASS_PREVIEW_TINT = 0x79c05a;
 
+function disposeMaterialResources(material) {
+  const materials = Array.isArray(material) ? material : [material];
+  for (const entry of materials) {
+    if (!entry) continue;
+    if (typeof entry.dispose === 'function') entry.dispose();
+  }
+}
+
 /**
  * Animated First-Person Viewmodel (Player Hand).
  * Handles arm mesh, held items, and procedural animations for walking/swinging.
@@ -106,13 +114,18 @@ export class PlayerHand {
     this.toolById = new Map(TOOLS.map((tool) => [tool.id, tool]));
     this.canvas = document.createElement('canvas'); // For pixel reading
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+    this.textureLoader = new THREE.TextureLoader();
+    this.textureCache = new Map();
+    this.pendingTextureLoads = new Map();
     this.geometryCache = new Map(); // Cache for merged voxel geometries
     this.lastParentRot = new THREE.Euler();
     this.swayOffset = new THREE.Vector2();
+    this.disposed = false;
   }
 
   disposeHeldObject(object) {
     if (!object) return;
+    object.userData.disposed = true;
 
     while (object.children?.length > 0) {
       const child = object.children[0];
@@ -120,16 +133,165 @@ export class PlayerHand {
       this.disposeHeldObject(child);
     }
 
-    if (typeof object.geometry?.dispose === 'function') {
+    if (
+      object.userData?.ownedGeometry &&
+      typeof object.geometry?.dispose === 'function'
+    ) {
       object.geometry.dispose();
     }
 
-    if (Array.isArray(object.material)) {
-      for (const mat of object.material) {
-        if (typeof mat?.dispose === 'function') mat.dispose();
+    if (object.userData?.ownedMaterial) {
+      disposeMaterialResources(object.material);
+    }
+  }
+
+  loadTexture(url) {
+    if (!url) return Promise.resolve(null);
+    if (this.textureCache.has(url)) {
+      return Promise.resolve(this.textureCache.get(url));
+    }
+    if (this.pendingTextureLoads.has(url)) {
+      return this.pendingTextureLoads.get(url);
+    }
+
+    const pending = new Promise((resolve, reject) => {
+      this.textureLoader.load(
+        url,
+        (texture) => {
+          texture.magFilter = THREE.NearestFilter;
+          texture.minFilter = THREE.NearestFilter;
+          texture.colorSpace = THREE.SRGBColorSpace;
+          this.textureCache.set(url, texture);
+          this.pendingTextureLoads.delete(url);
+          resolve(texture);
+        },
+        undefined,
+        (error) => {
+          this.pendingTextureLoads.delete(url);
+          reject(error);
+        }
+      );
+    });
+
+    this.pendingTextureLoads.set(url, pending);
+    return pending;
+  }
+
+  resolveTextureUrl(texture) {
+    if (!texture) return null;
+    return (
+      texture.image?.currentSrc ||
+      texture.image?.src ||
+      texture.source?.data?.currentSrc ||
+      texture.source?.data?.src ||
+      null
+    );
+  }
+
+  populateVoxelMesh(group, texture, url) {
+    if (!group || group.userData?.disposed || this.disposed || !texture?.image) {
+      return;
+    }
+
+    const img = texture.image;
+    this.canvas.width = img.width;
+    this.canvas.height = img.height;
+    this.ctx.clearRect(0, 0, img.width, img.height);
+    this.ctx.drawImage(img, 0, 0);
+
+    const imageData = this.ctx.getImageData(0, 0, img.width, img.height);
+    const data = imageData.data;
+    const w = img.width;
+    const h = img.height;
+
+    const frontMat = new THREE.MeshLambertMaterial({
+      map: texture,
+      transparent: true,
+      alphaTest: 0.5,
+    });
+    const backMat = new THREE.MeshLambertMaterial({
+      map: texture,
+      transparent: true,
+      alphaTest: 0.5,
+    });
+
+    const front = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), frontMat);
+    front.position.z = 0.025;
+    front.userData.ownedGeometry = true;
+    front.userData.ownedMaterial = true;
+    group.add(front);
+
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), backMat);
+    back.rotation.y = Math.PI;
+    back.position.z = -0.025;
+    back.userData.ownedGeometry = true;
+    back.userData.ownedMaterial = true;
+    group.add(back);
+
+    let rSum = 0;
+    let gSum = 0;
+    let bSum = 0;
+    let count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] >= 128) {
+        rSum += data[i];
+        gSum += data[i + 1];
+        bSum += data[i + 2];
+        count++;
       }
-    } else if (typeof object.material?.dispose === 'function') {
-      object.material.dispose();
+    }
+    const edgeColor =
+      count > 0
+        ? new THREE.Color(
+            rSum / count / 255,
+            gSum / count / 255,
+            bSum / count / 255
+          ).multiplyScalar(0.6)
+        : new THREE.Color(0x555555);
+    const sideMat = new THREE.MeshLambertMaterial({ color: edgeColor });
+
+    if (this.geometryCache.has(url)) {
+      const cachedGeo = this.geometryCache.get(url);
+      const sideMesh = new THREE.Mesh(cachedGeo, sideMat);
+      sideMesh.userData.ownedMaterial = true;
+      group.add(sideMesh);
+      return;
+    }
+
+    const pixelW = 0.7 / w;
+    const pixelH = 0.7 / h;
+    const edgeGeometries = [];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = (y * w + x) * 4;
+        const alpha = data[idx + 3];
+        if (alpha < 128) continue;
+
+        const up = y > 0 ? data[((y - 1) * w + x) * 4 + 3] : 0;
+        const down = y < h - 1 ? data[((y + 1) * w + x) * 4 + 3] : 0;
+        const left = x > 0 ? data[(y * w + (x - 1)) * 4 + 3] : 0;
+        const right = x < w - 1 ? data[(y * w + (x + 1)) * 4 + 3] : 0;
+
+        if (up < 128 || down < 128 || left < 128 || right < 128) {
+          const posX = (x / w - 0.5) * 0.7 + pixelW * 0.5;
+          const posY = (0.5 - y / h) * 0.7 - pixelH * 0.5;
+          const geo = new THREE.BoxGeometry(pixelW, pixelH, 0.04);
+          geo.translate(posX, posY, 0);
+          edgeGeometries.push(geo);
+        }
+      }
+    }
+
+    if (edgeGeometries.length > 0) {
+      const mergedGeo = BufferGeometryUtils.mergeGeometries(edgeGeometries);
+      const sideMesh = new THREE.Mesh(mergedGeo, sideMat);
+      sideMesh.userData.ownedMaterial = true;
+      group.add(sideMesh);
+
+      this.geometryCache.set(url, mergedGeo);
+      edgeGeometries.forEach((geo) => geo.dispose());
+    } else {
+      sideMat.dispose();
     }
   }
 
@@ -215,110 +377,15 @@ export class PlayerHand {
 
   createVoxelMesh(url) {
     const group = new THREE.Group();
-    const loader = new THREE.TextureLoader();
-
-    loader.load(url, (texture) => {
-      const img = texture.image;
-      this.canvas.width = img.width;
-      this.canvas.height = img.height;
-      this.ctx.clearRect(0, 0, img.width, img.height);
-      this.ctx.drawImage(img, 0, 0);
-
-      const imageData = this.ctx.getImageData(0, 0, img.width, img.height);
-      const data = imageData.data;
-      const w = img.width;
-      const h = img.height;
-
-      const boxGeo = new THREE.BoxGeometry(1 / w, 1 / h, 1 / 16); // 1-pixel depth relative to size
-      texture.magFilter = THREE.NearestFilter;
-      texture.minFilter = THREE.NearestFilter;
-      const mat = new THREE.MeshLambertMaterial({
-        map: texture,
-        transparent: true,
-        alphaTest: 0.5,
+    if (!url) return group;
+    this.loadTexture(url)
+      .then((texture) => {
+        if (!texture || group.userData?.disposed || this.disposed) return;
+        this.populateVoxelMesh(group, texture, url);
+      })
+      .catch((error) => {
+        console.warn('[ArloCraft] Failed to load held-item texture:', url, error);
       });
-
-      const front = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), mat);
-      front.position.z = 0.025;
-      group.add(front);
-
-      const back = front.clone();
-      back.rotation.y = Math.PI;
-      back.position.z = -0.025;
-      group.add(back);
-
-      // Pixel Extrusion (Minecraft style 3D depth) - Optimized with Merging
-      const pixelW = 0.7 / w;
-      const pixelH = 0.7 / h;
-      // Sample average color from opaque pixels for edge tint
-      let rSum = 0,
-        gSum = 0,
-        bSum = 0,
-        count = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        if (data[i + 3] >= 128) {
-          rSum += data[i];
-          gSum += data[i + 1];
-          bSum += data[i + 2];
-          count++;
-        }
-      }
-      const edgeColor =
-        count > 0
-          ? new THREE.Color(
-              rSum / count / 255,
-              gSum / count / 255,
-              bSum / count / 255
-            ).multiplyScalar(0.6)
-          : new THREE.Color(0x555555);
-      const sideMat = new THREE.MeshLambertMaterial({ color: edgeColor });
-
-      // Check cache first
-      if (this.geometryCache.has(url)) {
-        const cachedGeo = this.geometryCache.get(url);
-        const sideMesh = new THREE.Mesh(cachedGeo, sideMat);
-        group.add(sideMesh);
-        return;
-      }
-
-      const edgeGeometries = [];
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const idx = (y * w + x) * 4;
-          const alpha = data[idx + 3];
-          if (alpha < 128) continue;
-
-          const up = y > 0 ? data[((y - 1) * w + x) * 4 + 3] : 0;
-          const down = y < h - 1 ? data[((y + 1) * w + x) * 4 + 3] : 0;
-          const left = x > 0 ? data[(y * w + (x - 1)) * 4 + 3] : 0;
-          const right = x < w - 1 ? data[(y * w + (x + 1)) * 4 + 3] : 0;
-
-          if (up < 128 || down < 128 || left < 128 || right < 128) {
-            const posX = (x / w - 0.5) * 0.7 + pixelW * 0.5;
-            const posY = (0.5 - y / h) * 0.7 - pixelH * 0.5;
-
-            const geo = new THREE.BoxGeometry(pixelW, pixelH, 0.04);
-            geo.translate(posX, posY, 0);
-            edgeGeometries.push(geo);
-          }
-        }
-      }
-
-      if (edgeGeometries.length > 0) {
-        const mergedGeo = BufferGeometryUtils.mergeGeometries(edgeGeometries);
-        const sideMesh = new THREE.Mesh(mergedGeo, sideMat);
-        group.add(sideMesh);
-
-        // Store in cache for next time
-        this.geometryCache.set(url, mergedGeo);
-
-        // Cleanup individual geometries
-        edgeGeometries.forEach((g) => g.dispose());
-      }
-    });
-
-    group.userData.ownedGeometry = true;
-    group.userData.ownedMaterial = true;
 
     // Apply pending tint if set
     if (group.userData.pendingTint) {
@@ -349,6 +416,7 @@ export class PlayerHand {
         );
       }
     }
+    this.heldItemMesh = null;
 
     if (!itemId) return;
 
@@ -414,26 +482,22 @@ export class PlayerHand {
         BLOCK_TEXTURES.get(texName);
 
       if (url || isDeco) {
-        let texture;
-        if (url) {
-          texture = new THREE.TextureLoader().load(url);
-        } else {
+        let previewUrl = url;
+        if (!previewUrl) {
           // Fallback to block texture if no item texture found
           const mat = registry.getMaterial(normalizedId);
           // Handle multi-texture materials (pick a side face usually)
-          texture = Array.isArray(mat) ? mat[4].map || mat[0].map : mat.map;
+          const texture = Array.isArray(mat) ? mat[4].map || mat[0].map : mat.map;
           if (!texture && Array.isArray(mat)) {
             // Find any texture in the array
-            texture = mat.find((m) => m.map)?.map;
+            previewUrl = this.resolveTextureUrl(mat.find((m) => m.map)?.map);
+          } else {
+            previewUrl = this.resolveTextureUrl(texture);
           }
         }
 
-        if (texture) {
-          texture.magFilter = THREE.NearestFilter;
-          texture.minFilter = THREE.NearestFilter;
-          texture.colorSpace = THREE.SRGBColorSpace;
-
-          const mesh = this.createVoxelMesh(url || texture.image.src);
+        if (previewUrl) {
+          const mesh = this.createVoxelMesh(previewUrl);
           mesh.position.set(0, 0.25, -0.1);
 
           const tid = textureKey.toLowerCase();
@@ -602,5 +666,36 @@ export class PlayerHand {
     armMaterials.forEach((m) => {
       m.needsUpdate = true;
     });
+  }
+
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+
+    while (this.itemSlot.children.length > 0) {
+      const child = this.itemSlot.children[0];
+      this.itemSlot.remove(child);
+      this.disposeHeldObject(child);
+    }
+
+    for (const geometry of this.geometryCache.values()) {
+      geometry?.dispose?.();
+    }
+    this.geometryCache.clear();
+
+    for (const texture of this.textureCache.values()) {
+      texture?.dispose?.();
+    }
+    this.textureCache.clear();
+    this.pendingTextureLoads.clear();
+
+    if (this.arm.material === this.armMaterial) {
+      this.armMaterial?.dispose?.();
+    }
+    this.armGeometry?.dispose?.();
+
+    if (this.group.parent) {
+      this.group.parent.remove(this.group);
+    }
   }
 }

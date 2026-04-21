@@ -799,22 +799,33 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     const isFarmlandBlock = targetId === 'farmland' || id === 'farmland';
     const isPathBlock =
       targetId === 'dirt_path' || id === 'path_block' || id === 'dirt_path';
+    const isGrassBlock = targetId === 'grass_block' || id === 'grass_block';
     const dirtTex = loadPackTexture('dirt.png');
+    const grassSideTex =
+      load('side.png') || loadPackTexture('grass_block_side.png') || allTex;
+    const grassTopTex =
+      load('top.png') || loadPackTexture('grass_block_top.png') || allTex;
     const sideTex = isFarmlandBlock
       ? load('side.png') || dirtTex || allTex
       : isPathBlock
         ? load('side.png') || dirtTex || allTex
-        : load('side.png') || allTex;
+        : isGrassBlock
+          ? grassSideTex
+          : load('side.png') || allTex;
     const topTex = isFarmlandBlock
       ? load('top.png') || loadPackTexture('farmland.png') || allTex
       : isPathBlock
         ? load('top.png') || loadPackTexture('dirt_path_top.png') || allTex
-        : load('top.png') || allTex;
+        : isGrassBlock
+          ? grassTopTex
+          : load('top.png') || allTex;
     const bottomTex = isFarmlandBlock
       ? load('bottom.png') || dirtTex || allTex
       : isPathBlock
         ? load('bottom.png') || dirtTex || allTex
-        : load('bottom.png') || allTex;
+        : isGrassBlock
+          ? load('bottom.png') || dirtTex || allTex
+          : load('bottom.png') || allTex;
     const decoTex = allTex || sideTex || bottomTex || topTex;
     const frontTex = load('front.png') || sideTex || decoTex;
     const backTex = load('back.png') || sideTex || decoTex;

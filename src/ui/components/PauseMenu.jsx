@@ -245,8 +245,8 @@ export const PauseMenu = ({ setIsPaused }) => {
                         formatDisplay={(v) => v > 200 ? 'Uncapped' : `${v} FPS`}
                       />
                       <ToggleSetting 
-                        label="Auto Quality Adaptation" 
-                        desc="Dynamically scale resolution for optimal FPS" 
+                        label="Auto Performance Scaling" 
+                        desc="Adjusts render resolution automatically to hold your FPS target." 
                         active={settings.autoQuality}
                         onToggle={() => {
                           updateSetting('autoQuality', !settings.autoQuality);
@@ -288,9 +288,13 @@ export const PauseMenu = ({ setIsPaused }) => {
 
                       <div className="border-t border-white/5 pt-6 flex flex-col gap-4">
                         <span className="text-[10px] font-bold text-arlo-blue uppercase tracking-[0.2em] px-1">Engine Stability Controls</span>
+                        <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3 text-[11px] leading-relaxed text-white/45">
+                          Auto Performance Scaling keeps average FPS up by reducing resolution when needed.
+                          Smooth Chunk Streaming is about reducing chunk rebuild spikes and pop-in hitches while exploring.
+                        </div>
                         <ToggleSetting 
-                          label="Stability Mode" 
-                          desc="Smooths out frame-time spikes during world generation" 
+                          label="Smooth Chunk Streaming" 
+                          desc="Rebuilds terrain more gently so exploration feels steadier." 
                           active={settings.stabilityMode}
                           onToggle={() => updateSetting('stabilityMode', !settings.stabilityMode)}
                         />
@@ -305,7 +309,7 @@ export const PauseMenu = ({ setIsPaused }) => {
                           onClick={applyPerformancePreset}
                           className="w-full py-4 bg-arlo-blue/10 hover:bg-arlo-blue/20 border border-arlo-blue/20 rounded-xl text-arlo-blue text-xs font-bold uppercase tracking-widest transition-all"
                         >
-                          Maximize Stability (One-Click Preset)
+                          Apply Safe Performance Preset
                         </button>
                       </div>
                     </motion.div>

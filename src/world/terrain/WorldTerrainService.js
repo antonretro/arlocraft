@@ -148,11 +148,54 @@ export class WorldTerrainService {
     return { x: Math.floor(x + 0.5), y: height, z: Math.floor(z + 0.5) };
   }
 
+  getSurfaceWaterLevelAt(x, z, biome = null) {
+    const resolvedBiome = biome ?? this.getBiomeAt(x, z);
+    return Math.floor(
+      this.world.seaLevel + (resolvedBiome?.waterLevelOffset ?? 0)
+    );
+  }
+
+  shouldPlaceSurfaceWaterAt(x, z, terrainHeight, biome = null) {
+    const resolvedBiome = biome ?? this.getBiomeAt(x, z);
+    const waterLevel = this.getSurfaceWaterLevelAt(x, z, resolvedBiome);
+    if (terrainHeight >= waterLevel) return false;
+
+    const waterDepth = waterLevel - terrainHeight;
+    const biomeId = resolvedBiome?.id ?? 'plains';
+    const lenientBiome =
+      biomeId === 'swamp' || biomeId === 'desert' || biomeId === 'lush_grove';
+    const maxDepth = lenientBiome ? 4 : 2;
+    if (waterDepth > maxDepth) return false;
+
+    let higherNeighbors = 0;
+    let muchHigherNeighbors = 0;
+    let lowestNeighbor = Number.POSITIVE_INFINITY;
+    let highestNeighbor = Number.NEGATIVE_INFINITY;
+
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if (dx === 0 && dz === 0) continue;
+        const neighborHeight = this.getColumnHeight(x + dx, z + dz);
+        lowestNeighbor = Math.min(lowestNeighbor, neighborHeight);
+        highestNeighbor = Math.max(highestNeighbor, neighborHeight);
+        if (neighborHeight >= terrainHeight) higherNeighbors++;
+        if (neighborHeight >= terrainHeight + 3) muchHigherNeighbors++;
+      }
+    }
+
+    // Reject cliff pockets and hanging ledges where only one cell dips low.
+    if (!lenientBiome && higherNeighbors < 5) return false;
+    if (muchHigherNeighbors >= 3) return false;
+    if (!lenientBiome && highestNeighbor - lowestNeighbor > 4) return false;
+
+    return true;
+  }
+
   getWaterSurfaceYAt(x, z) {
     const biome = this.getBiomeAt(x, z);
-    const waterLevel = this.world.seaLevel;
-    const terrainHeight = this.getTerrainHeight(x, z);
-    if (terrainHeight >= waterLevel) return null;
+    const waterLevel = this.getSurfaceWaterLevelAt(x, z, biome);
+    const terrainHeight = this.getColumnHeight(x, z);
+    if (!this.shouldPlaceSurfaceWaterAt(x, z, terrainHeight, biome)) return null;
     return waterLevel + 0.5;
   }
 
@@ -190,7 +233,9 @@ export class WorldTerrainService {
     }
 
     // 4. Final Fallback for unloaded chunks: assume water if between terrain and surface
-    const terrainHeight = this.getTerrainHeight(x, z);
+    const terrainHeight = this.getColumnHeight(x, z);
+    const biome = this.getBiomeAt(x, z);
+    if (!this.shouldPlaceSurfaceWaterAt(x, z, terrainHeight, biome)) return false;
     return y > terrainHeight;
   }
 
@@ -266,31 +311,81 @@ export class WorldTerrainService {
     const b = biome ?? this.getBiomeAt(x, z);
     if (height <= this.world.seaLevel + 1) return false;
     if ((b.treeDensity ?? 0) <= 0) return false;
-    const openZone =
-      this.valueNoise2D(x + 1433, z - 977, 190) > 0.67 &&
-      this.valueNoise2D(x - 621, z + 299, 72) > 0.55;
-    if (openZone) return false;
+    const isOpenZone = (px, pz) =>
+      this.valueNoise2D(px + 1433, pz - 977, 190) > 0.67 &&
+      this.valueNoise2D(px - 621, pz + 299, 72) > 0.55;
+    if (isOpenZone(x, z)) return false;
     // --- JITTERED GRID TREE PLACEMENT ---
     // Prevents clumping by ensuring at most 1 tree per NxN cell with mandatory gaps.
-    const gridSize = 6;
+    const gridSize = 7;
+    const minSpacingSq = 8 * 8;
     const cellX = Math.floor(x / gridSize);
     const cellZ = Math.floor(z / gridSize);
 
     // Compute the "chosen" point for this cell based on its coordinates
     // Use a 2-block inner padding to ensure trees have a radius of empty space
-    const cellHashX = this.hash2D(cellX * 131, cellZ * 71);
-    const cellHashZ = this.hash2D(cellX * 17, cellZ * 91);
-    const chosenX =
-      cellX * gridSize + 2 + Math.floor(cellHashX * (gridSize - 4));
-    const chosenZ =
-      cellZ * gridSize + 2 + Math.floor(cellHashZ * (gridSize - 4));
+    const getTreeCandidateForCell = (targetCellX, targetCellZ) => {
+      const cellHashX = this.hash2D(targetCellX * 131, targetCellZ * 71);
+      const cellHashZ = this.hash2D(targetCellX * 17, targetCellZ * 91);
+      return {
+        x: targetCellX * gridSize + 2 + Math.floor(cellHashX * (gridSize - 4)),
+        z: targetCellZ * gridSize + 2 + Math.floor(cellHashZ * (gridSize - 4)),
+      };
+    };
+    const { x: chosenX, z: chosenZ } = getTreeCandidateForCell(cellX, cellZ);
 
     // Only allow tree if this is the chosen coordinate for its grid cell
     if (Math.floor(x) !== chosenX || Math.floor(z) !== chosenZ) return false;
 
     const density = this.hash2D(x + 11, z - 9);
     const threshold = 1 - Math.max(0, Math.min(0.8, b.treeDensity ?? 0.08));
-    return density > threshold;
+    if (density <= threshold) return false;
+
+    const localPriority = this.hash2D(cellX * 211 + 31, cellZ * 157 - 47);
+    for (let neighborCellX = cellX - 1; neighborCellX <= cellX + 1; neighborCellX++) {
+      for (let neighborCellZ = cellZ - 1; neighborCellZ <= cellZ + 1; neighborCellZ++) {
+        if (neighborCellX === cellX && neighborCellZ === cellZ) continue;
+
+        const neighborCandidate = getTreeCandidateForCell(
+          neighborCellX,
+          neighborCellZ
+        );
+        const dx = neighborCandidate.x - chosenX;
+        const dz = neighborCandidate.z - chosenZ;
+        if (dx * dx + dz * dz >= minSpacingSq) continue;
+
+        const neighborBiome = this.getBiomeAt(
+          neighborCandidate.x,
+          neighborCandidate.z
+        );
+        if ((neighborBiome?.treeDensity ?? 0) <= 0) continue;
+        if (isOpenZone(neighborCandidate.x, neighborCandidate.z)) continue;
+
+        const neighborDensity = this.hash2D(
+          neighborCandidate.x + 11,
+          neighborCandidate.z - 9
+        );
+        const neighborThreshold =
+          1 - Math.max(0, Math.min(0.8, neighborBiome.treeDensity ?? 0.08));
+        if (neighborDensity <= neighborThreshold) continue;
+
+        const neighborPriority = this.hash2D(
+          neighborCellX * 211 + 31,
+          neighborCellZ * 157 - 47
+        );
+        if (
+          neighborPriority > localPriority ||
+          (neighborPriority === localPriority &&
+            (neighborCandidate.x > chosenX ||
+              (neighborCandidate.x === chosenX &&
+                neighborCandidate.z > chosenZ)))
+        ) {
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
   shouldPlaceVirus(x, z, height) {

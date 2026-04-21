@@ -47,7 +47,7 @@ export class WorldMutationService {
     }
 
     if (existing && replace)
-      this.removeBlockByKey(key, { skipChangeTracking: true });
+      this.removeBlockByKey(key, { ...options, skipChangeTracking: true });
 
     this.world.state.blockMap.set(key, id);
     this.world.state.blockOwners.set(key, owner);
@@ -57,11 +57,15 @@ export class WorldMutationService {
     const ownerChunk = this.world.chunkManager.getChunk(cx, cy, cz);
     if (ownerChunk) {
       ownerChunk.blockKeys.add(key);
-      ownerChunk.dirty = true;
-      this.world.chunkManager.priorityDirtyChunkKeys.add(ownerChunk.key);
+      if (!options?.skipChunkDirtying) {
+        ownerChunk.dirty = true;
+        this.world.chunkManager.priorityDirtyChunkKeys.add(ownerChunk.key);
+      }
     }
 
-    this.world.chunkManager.updateNeighborsDirty(gx, gy, gz);
+    if (!options?.skipNeighborDirtying) {
+      this.world.chunkManager.updateNeighborsDirty(gx, gy, gz);
+    }
 
     if (id === 'virus' || id === 'arlo') {
       const radius = this.world.config.virus?.influenceRadiusBlocks ?? 3;
@@ -74,7 +78,10 @@ export class WorldMutationService {
       );
     }
 
-    if (id === 'water' || id === 'lava') {
+    if (
+      (id === 'water' || id === 'lava') &&
+      !options?.skipFluidScheduling
+    ) {
       const initialDepth =
         options.fluidDepth !== undefined ? options.fluidDepth : 0;
       this.world.fluids?.scheduleSpread(gx, gy, gz, id, initialDepth);
@@ -122,7 +129,7 @@ export class WorldMutationService {
 
     // Spawn breaking particles (Skip for liquids and air/void)
     const isLiquid = id === 'water' || id.includes('water_') || id === 'lava' || id.includes('lava_');
-    if (!isLiquid && id !== 'air') {
+    if (!options.skipParticles && !isLiquid && id !== 'air') {
       const blockConfig = this.world.game?.blockRegistry?.blocks?.get(id);
       let particleColor = blockConfig?.color
         ? parseInt(blockConfig.color)

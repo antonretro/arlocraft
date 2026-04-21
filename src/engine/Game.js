@@ -432,6 +432,23 @@ export class Game {
     const playerPos = this.getPlayerPosition();
     const playerVel = this.physics.velocity;
     const speed = Math.sqrt(playerVel.x * playerVel.x + playerVel.z * playerVel.z);
+    const inWater = this.world.isPositionInWater(
+      playerPos.x,
+      playerPos.y + this.physics.eyeHeight * 0.45,
+      playerPos.z
+    );
+    const grounded = this.physics.isGrounded?.() ?? false;
+
+    this.player.mesh.position.set(playerPos.x, playerPos.y, playerPos.z);
+    this.player.mesh.rotation.y = this.viewYaw + Math.PI;
+    this.player.update(
+      delta,
+      playerVel,
+      grounded,
+      this.physics.isSprinting,
+      inWater,
+      this.viewPitch
+    );
     
     this.updateCameraRotation();
 
@@ -544,6 +561,7 @@ export class Game {
 
   toggleMinimap() {
     this.settings.minimapEnabled = !this.settings.minimapEnabled;
+    this.saveSettings();
     window.dispatchEvent(new CustomEvent('ui-set-minimap', { detail: this.settings.minimapEnabled }));
     this.audio.play('ui-click');
   }
@@ -568,6 +586,20 @@ export class Game {
       const normalized = String(username || 'Steve').trim();
       const { materials } = await this.skinLoader.loadSkin(normalized);
       this._applyLoadedSkin(materials);
+      window.dispatchEvent(
+        new CustomEvent('skin-updated', {
+          detail: {
+            skinId: normalized === 'Steve' ? 'classic_steve' : `custom_${normalized}`,
+            avatarUrl:
+              normalized === 'Steve'
+                ? '/assets/steve.png'
+                : normalized === 'Alex'
+                  ? '/assets/alex.png'
+                  : `https://minotar.net/helm/${normalized}/64`,
+            name: normalized,
+          },
+        })
+      );
       if (options.persist !== false) {
         this.settings.skinUsername = normalized;
         this.saveSettings();

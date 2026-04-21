@@ -28,10 +28,15 @@ export class Renderer {
     this.fogDensityScale = 1.0;
     this.areaInfluence = { virus: 0, arlo: 0 };
     this.lastCloudUpdateMs = performance.now();
+    this.baseCloudOpacity = 0.85;
+    this.weatherType = 'clear';
+    this.weatherIntensity = 0;
+    this.weatherWind = new THREE.Vector2(0.9, 0.35);
 
     this.setupLights();
     this.setupSky();
     this.setupClouds();
+    this.setupWeatherEffects();
     this.setupPostProcessing();
 
     window.addEventListener('resize', () => {
@@ -354,6 +359,32 @@ export class Renderer {
     this.cloudMat = cloudMat1;
   }
 
+  setupWeatherEffects() {
+    const dropCount = 280;
+    this.weatherDropCount = dropCount;
+    this.weatherDropPositions = new Float32Array(dropCount * 6);
+    this.weatherDropSeeds = Array.from({ length: dropCount }, (_, index) => ({
+      x: ((index * 16807) % 2147483647) / 2147483647,
+      y: ((index * 48271) % 2147483647) / 2147483647,
+      z: ((index * 69621) % 2147483647) / 2147483647,
+    }));
+
+    const rainGeo = new THREE.BufferGeometry();
+    rainGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(this.weatherDropPositions, 3)
+    );
+    const rainMat = new THREE.LineBasicMaterial({
+      color: 0xb8d8ff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    this.rainLines = new THREE.LineSegments(rainGeo, rainMat);
+    this.rainLines.visible = false;
+    this.scene.add(this.rainLines);
+  }
+
   updateEnvironmentLighting(
     daylight,
     playerPos = null,
@@ -379,14 +410,17 @@ export class Renderer {
 
     // Atmosphere logic
     let state = 'DAY';
-    if (daylight < 0.28) state = 'NIGHT';
-    else if (daylight < 0.45) state = 'DAWN';
-    else if (daylight > 0.85) state = 'DAY';
+    if (daylight < 0.24) state = 'NIGHT';
+    else if (daylight < 0.45) {
+      state = this.sun.position.y >= 0 ? 'DAWN' : 'DUSK';
+    }
 
     const colors = ATMOSPHERIC_COLORS[state];
     const top = new THREE.Color(colors.top);
     const bottom = new THREE.Color(colors.bottom);
     const sunCol = new THREE.Color(colors.sun);
+    const rainFactor = Math.max(0, Math.min(1, this.weatherIntensity || 0));
+    const stormFactor = this.weatherType === 'storm' ? rainFactor : 0;
 
     // Apply depth-based darkening
     let depthBlend = forcedDepthBlend !== null ? forcedDepthBlend : 0;
@@ -402,6 +436,13 @@ export class Renderer {
       top.lerp(caveTint, depthBlend);
     }
 
+    if (rainFactor > 0) {
+      const rainTint = new THREE.Color(0x6f8fb8);
+      const rainFloor = new THREE.Color(0x7da9c9);
+      top.lerp(rainTint, 0.32 * rainFactor + 0.12 * stormFactor);
+      bottom.lerp(rainFloor, 0.28 * rainFactor + 0.1 * stormFactor);
+    }
+
     if (this.skyDome?.material?.uniforms) {
       const uniforms = this.skyDome.material.uniforms;
       if (uniforms.top) uniforms.top.value.copy(top);
@@ -413,35 +454,40 @@ export class Renderer {
           ? new THREE.Color(0xff4400)
           : state === 'DAWN'
             ? new THREE.Color(0xff8833)
-            : new THREE.Color(0xffd0a0);
+            : new THREE.Color(0x8ecfff);
       const horizonStr =
         state === 'DAWN' || state === 'DUSK'
           ? 0.95
           : state === 'DAY'
             ? 0.22
             : 0.08; 
-      if (uniforms.horizon) uniforms.horizon.value.copy(horizonGlowColor);
-      if (uniforms.horizonStrength) uniforms.horizonStrength.value = horizonStr;
+      if (uniforms.horizon) {
+        uniforms.horizon.value.copy(horizonGlowColor.lerp(new THREE.Color(0x9fb8cc), rainFactor * 0.5));
+      }
+      if (uniforms.horizonStrength) {
+        uniforms.horizonStrength.value = horizonStr * (1 - rainFactor * 0.45);
+      }
     }
     this.scene.background.copy(bottom);
 
     const fogCol = bottom.clone().lerp(new THREE.Color(0xffffff), 0.05);
     this.scene.fog.color.copy(fogCol);
     this.scene.fog.density =
-      computeFogDensity(daylight, this.submerged) *
+      computeFogDensity(Math.max(0.04, daylight - rainFactor * 0.16), this.submerged) *
+      (1 + rainFactor * 0.35 + stormFactor * 0.2) *
       (this.fogDensityScale || 1.0);
 
     // Enforce visibility floor
-    const intensityFactor = 0.4 + clamped * 1.1;
+    const intensityFactor = (0.4 + clamped * 1.1) * (1 - rainFactor * 0.22);
     this.sun.intensity = intensityFactor;
     this.sun.color.copy(sunCol);
 
-    this.hemiLight.intensity = 0.8 + clamped * 0.6;
+    this.hemiLight.intensity = (0.8 + clamped * 0.6) * (1 - rainFactor * 0.18);
     this.hemiLight.color.set(top);
     this.hemiLight.groundColor.set(0x6d6253);
 
     if (this.ambientFill) {
-      this.ambientFill.intensity = 0.35 + clamped * 0.2;
+      this.ambientFill.intensity = (0.35 + clamped * 0.2) * (1 - rainFactor * 0.12);
       this.ambientFill.color.copy(sunCol).lerp(new THREE.Color(0xffffff), 0.35);
     }
 
@@ -456,7 +502,7 @@ export class Renderer {
 
     // Stars & Moon Visibility
     if (this.stars) {
-      const starOp = Math.max(0, (0.35 - daylight) * 2.5);
+      const starOp = Math.max(0, (0.35 - daylight) * 2.5) * (1 - rainFactor * 0.75);
       if (this.stars.material.uniforms && this.stars.material.uniforms.opacity) {
         this.stars.material.uniforms.opacity.value = starOp;
       } else {
@@ -465,7 +511,7 @@ export class Renderer {
       this.stars.visible = starOp > 0.01;
     }
     if (this.moonMesh && this.moonGlow) {
-      const moonOp = Math.max(0, (0.32 - daylight) * 1.8);
+      const moonOp = Math.max(0, (0.32 - daylight) * 1.8) * (1 - rainFactor * 0.4);
       this.moonMesh.material.opacity = moonOp;
       this.moonGlow.material.opacity = moonOp * 0.4;
       this.moonMesh.visible = moonOp > 0.01;
@@ -530,6 +576,11 @@ export class Renderer {
     this.fogDensityScale = Math.max(0, Math.min(2, Number(scale) || 1.0));
   }
 
+  setWeatherState(type = 'clear', intensity = 0) {
+    this.weatherType = type;
+    this.weatherIntensity = Math.max(0, Math.min(1, Number(intensity) || 0));
+  }
+
   setUnderwaterState(submerged) {
     this.submerged = Boolean(submerged);
     if (submerged) {
@@ -587,6 +638,8 @@ export class Renderer {
     // Scroll cloud layers with Parallax: using ultra-safe access
     if (this.cloudLayer1?.mat?.uniforms?.uOffset) {
       this.cloudLayer1.mat.uniforms.uOffset.value.x += delta * (this.cloudLayer1.speed || 0.001);
+      this.cloudLayer1.mat.uniforms.cloudOpacity.value =
+        Math.min(1, this.baseCloudOpacity + this.weatherIntensity * 0.2);
       
       if (this.cloudLayer1.mesh) {
         this.cloudLayer1.mesh.position.x = camera.position.x;
@@ -596,10 +649,53 @@ export class Renderer {
     
     if (this.cloudLayer2?.mat?.uniforms?.uOffset) {
       this.cloudLayer2.mat.uniforms.uOffset.value.x += delta * (this.cloudLayer2.speed || 0.0005);
+      this.cloudLayer2.mat.uniforms.cloudOpacity.value =
+        Math.min(0.8, this.baseCloudOpacity * 0.54 + this.weatherIntensity * 0.18);
       
       if (this.cloudLayer2.mesh) {
         this.cloudLayer2.mesh.position.x = camera.position.x;
         this.cloudLayer2.mesh.position.z = camera.position.z;
+      }
+    }
+
+    if (this.rainLines?.geometry?.attributes?.position && camera) {
+      const rainActive =
+        !this.submerged &&
+        this.weatherIntensity > 0.08 &&
+        (this.weatherType === 'rain' || this.weatherType === 'storm');
+      this.rainLines.visible = rainActive;
+      this.rainLines.material.opacity = rainActive
+        ? 0.12 + this.weatherIntensity * 0.22
+        : 0;
+
+      if (rainActive) {
+        const range = 28 + this.weatherIntensity * 10;
+        const dropLength = this.weatherType === 'storm' ? 2.6 : 1.9;
+        const rainSpeed = this.weatherType === 'storm' ? 1.8 : 1.2;
+        const positions = this.weatherDropPositions;
+        const centerX = camera.position.x;
+        const centerY = camera.position.y + 10;
+        const centerZ = camera.position.z;
+
+        for (let i = 0; i < this.weatherDropCount; i++) {
+          const seed = this.weatherDropSeeds[i];
+          const idx = i * 6;
+          const drift = timeSec * this.weatherWind.x * 0.8;
+          const sway = timeSec * this.weatherWind.y * 0.45;
+          const px = centerX + (seed.x - 0.5) * range + drift;
+          const pz = centerZ + (seed.z - 0.5) * range + sway;
+          const fall = ((timeSec * rainSpeed + seed.y * 9.0) % 1) * 18;
+          const topY = centerY + 8 - fall;
+
+          positions[idx] = px;
+          positions[idx + 1] = topY;
+          positions[idx + 2] = pz;
+          positions[idx + 3] = px + this.weatherWind.x * 0.18;
+          positions[idx + 4] = topY - dropLength;
+          positions[idx + 5] = pz + this.weatherWind.y * 0.18;
+        }
+
+        this.rainLines.geometry.attributes.position.needsUpdate = true;
       }
     }
 
@@ -658,6 +754,7 @@ export class Renderer {
 
     // Cloud Opacity
     if (settings.cloudOpacity !== undefined) {
+      this.baseCloudOpacity = settings.cloudOpacity;
       if (this.cloudMat?.uniforms?.cloudOpacity) {
         this.cloudMat.uniforms.cloudOpacity.value = settings.cloudOpacity;
       }
