@@ -381,6 +381,19 @@ export class Game {
 
     this.onResize();
     this.animate();
+    
+    // Stability: Auto-pause on tab switch/blur to prevent engine drift/unloading
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.hasStarted && !this.isPaused) {
+        this.pauseGame();
+      }
+    });
+    window.addEventListener('blur', () => {
+      if (this.hasStarted && !this.isPaused) {
+        this.pauseGame();
+      }
+    });
+
     window.addEventListener('resize', () => this.onResize());
     
     this.ui.setMenuScreen('title');

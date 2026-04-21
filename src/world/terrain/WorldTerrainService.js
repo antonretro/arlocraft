@@ -272,18 +272,18 @@ export class WorldTerrainService {
     if (openZone) return false;
     // --- JITTERED GRID TREE PLACEMENT ---
     // Prevents clumping by ensuring at most 1 tree per NxN cell with mandatory gaps.
-    const gridSize = 5;
+    const gridSize = 6;
     const cellX = Math.floor(x / gridSize);
     const cellZ = Math.floor(z / gridSize);
 
     // Compute the "chosen" point for this cell based on its coordinates
-    // Use a 1-block inner padding to ensure trees in adjacent cells are never neighbors
+    // Use a 2-block inner padding to ensure trees have a radius of empty space
     const cellHashX = this.hash2D(cellX * 131, cellZ * 71);
     const cellHashZ = this.hash2D(cellX * 17, cellZ * 91);
     const chosenX =
-      cellX * gridSize + 1 + Math.floor(cellHashX * (gridSize - 2));
+      cellX * gridSize + 2 + Math.floor(cellHashX * (gridSize - 4));
     const chosenZ =
-      cellZ * gridSize + 1 + Math.floor(cellHashZ * (gridSize - 2));
+      cellZ * gridSize + 2 + Math.floor(cellHashZ * (gridSize - 4));
 
     // Only allow tree if this is the chosen coordinate for its grid cell
     if (Math.floor(x) !== chosenX || Math.floor(z) !== chosenZ) return false;
