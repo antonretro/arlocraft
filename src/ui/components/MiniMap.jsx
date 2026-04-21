@@ -9,7 +9,7 @@ export const MiniMap = () => {
     const game = getGame();
 
     useEffect(() => {
-        if (!canvasRef.current || !game) return;
+        if (!canvasRef.current || !containerRef.current || !game) return;
 
         // Initialize the core logic
         // We temporarily set the global IDs that MiniMapCore expects
@@ -21,6 +21,7 @@ export const MiniMap = () => {
 
         miniMapRef.current = new MiniMapCore(game);
         miniMapRef.current.visible = game.settings?.minimapEnabled !== false;
+        
         if (containerRef.current) {
             containerRef.current.style.display =
               miniMapRef.current.visible ? 'block' : 'none';
@@ -29,7 +30,7 @@ export const MiniMap = () => {
         // Animation Loop for the Map
         let frameId;
         const updateMap = () => {
-            if (miniMapRef.current) {
+            if (miniMapRef.current && game.camera) {
                 const pos = game.getPlayerPosition?.();
                 const yaw = game.camera.instance.rotation.y;
                 miniMapRef.current.update(0.016, pos, yaw);
@@ -51,8 +52,8 @@ export const MiniMap = () => {
         return () => {
             cancelAnimationFrame(frameId);
             window.removeEventListener('ui-set-minimap', handleMinimapVisibility);
-            containerRef.current.id = originalContainer;
-            canvasRef.current.id = originalCanvas;
+            if (containerRef.current) containerRef.current.id = originalContainer;
+            if (canvasRef.current) canvasRef.current.id = originalCanvas;
         };
     }, [game]);
 
