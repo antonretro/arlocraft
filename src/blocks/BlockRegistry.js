@@ -316,20 +316,24 @@ export class BlockRegistry {
           '#include <begin_vertex>',
           `
                     #include <begin_vertex>
-                    // Wind swaying logic: optimized for greedy-meshed chunks
+                    // Wind swaying logic: Multi-frequency for organic 'fluffy' motion
                     float t = uTime * uWindParams.x;
-                    
-                    // Clamped height factor: prevents large meshes from exploding
-                    // We use a small, normalized sway that doesn't scale out of control
                     float factor = clamp(transformed.y + 0.5, 0.0, 1.2) * uSwayFactor; 
-                    
-                    // Complex phase to prevent 'rigid' swaying of large chunks
                     float phase = (position.x + position.y + position.z) * uWindParams.z;
-                    float swayX = sin(t + phase) * uWindParams.y * 0.5 * factor;
-                    float swayZ = cos(t * 0.8 + phase) * uWindParams.y * 0.5 * factor;
                     
-                    transformed.x += swayX;
-                    transformed.z += swayZ;
+                    // Large-scale Sway
+                    float swayX = sin(t + phase) * uWindParams.y * 0.45 * factor;
+                    float swayZ = cos(t * 0.8 + phase) * uWindParams.y * 0.45 * factor;
+                    
+                    // High-frequency Flutter (The 'Stunning' leaf shimmer)
+                    float flutter = sin(t * 12.0 + phase * 20.0) * 0.012 * factor;
+                    
+                    // Low-frequency Billowing (Breathing effect to break rigid lines)
+                    float billow = sin(t * 0.65 + phase * 0.5) * 0.022 * factor;
+                    
+                    transformed.x += swayX + flutter;
+                    transformed.z += swayZ + flutter;
+                    transformed.y += billow + (flutter * 0.5);
                     `
         );
       material.userData.shader = shader;
