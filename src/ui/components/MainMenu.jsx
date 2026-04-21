@@ -35,6 +35,7 @@ export const MainMenu = ({ setScreen }) => {
   const [selectedSkinId, setSelectedSkinId] = useState(
     () => game?.skinSystem?.currentSkin || 'classic_steve'
   );
+  const [multiplayerId, setMultiplayerId] = useState(() => game?.multiplayer?.peer?.id || null);
 
   useEffect(() => {
     const handleSkinChange = (e) => {
@@ -43,6 +44,26 @@ export const MainMenu = ({ setScreen }) => {
     window.addEventListener('skin-changed', handleSkinChange);
     return () => window.removeEventListener('skin-changed', handleSkinChange);
   }, []);
+
+  useEffect(() => {
+    if (subScreen === 'multiplayer' && game.multiplayer) {
+      if (!game.multiplayer.peer) {
+        game.multiplayer.init();
+      } else {
+        setMultiplayerId(game.multiplayer.peer.id);
+      }
+      
+      const prevOnConnected = game.multiplayer.onConnected;
+      game.multiplayer.onConnected = (id) => {
+        setMultiplayerId(id);
+        if (prevOnConnected) prevOnConnected(id);
+      };
+
+      return () => {
+        game.multiplayer.onConnected = prevOnConnected;
+      };
+    }
+  }, [subScreen, game.multiplayer]);
 
   const updateSetting = (key, value) => {
     game.settingsManager.set(key, value);
@@ -605,7 +626,7 @@ export const MainMenu = ({ setScreen }) => {
                  <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Your Identity</label>
                  <div className="bg-white/5 p-4 rounded-xl flex items-center justify-between">
                     <span className="text-xs font-mono opacity-60">
-                      {game.multiplayer?.peer?.id || 'Connecting to network...'}
+                      {multiplayerId || 'Connecting to network...'}
                     </span>
                     <button 
                       onClick={() => navigator.clipboard.writeText(game.multiplayer?.peer?.id)}
