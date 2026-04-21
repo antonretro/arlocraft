@@ -42,13 +42,6 @@ export class Game {
     // Bootstrap initialized in init()
     this.simulation = new SimulationManager(this);
 
-    // Startup Configuration
-    this.selectedStartMode = this.settings.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
-    this.selectedWorldSlot = this.settings.selectedWorldSlot ?? 'slot-1';
-    
-    this.setMenuMode(this.selectedStartMode, false);
-    this.ui.setMenuScreen('title');
-
     this.init().catch(e => console.error('[ArloCraft] Init Failure:', e));
   }
 
@@ -366,6 +359,14 @@ export class Game {
   async init() {
     console.log('[ArloCraft] Engine Init...');
     await EngineBootstrap.init(this);
+
+    // Startup Configuration (now safe to access this.settings)
+    this.selectedStartMode = this.settings.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
+    this.selectedWorldSlot = this.settings.selectedWorldSlot ?? 'slot-1';
+
+    this.setMenuMode(this.selectedStartMode, false);
+    this.ui.setMenuScreen('title');
+
     await this.resourceManager.ready();
     await this.world.init();
     await this.physics.init();
