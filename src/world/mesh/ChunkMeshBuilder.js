@@ -149,14 +149,14 @@ function collectBlocksByBaseId(chunk) {
 }
 
 function getStairShape(world, x, y, z, baseId, rawId) {
-    const dir = rawId.split('_').pop(); // n, s, e, w
+    const dir = rawId.split(':').shift().split('_').pop(); // n, s, e, w
     
     // Check neighbor stairs to determine if we are a corner
     // This is a simplified version of Minecraft's stair logic
     const getDir = (ox, oy, oz) => {
         const id = world.state.blockMap.get(world.getKey(ox, oy, oz));
         if (!id || !id.includes('_stairs')) return null;
-        return id.split('_').pop();
+        return id.split(':').shift().split('_').pop();
     };
 
     const n = getDir(x, y, z - 1);

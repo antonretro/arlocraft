@@ -15,7 +15,10 @@ export function normalizeBlockVariantId(id) {
   }
   
   const dirMatch = base.match(/^(.*)_[nswe]$/);
-  if (dirMatch) return dirMatch[1];
+  if (dirMatch) base = dirMatch[1];
+
+  const shapeMatch = base.match(/^(.*)__(inner|outer)$/);
+  if (shapeMatch) return shapeMatch[1];
 
   return base;
 }
