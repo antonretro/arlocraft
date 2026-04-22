@@ -293,12 +293,13 @@ export class BlockRegistry {
     }
     if (material.userData?.windInjected) return;
     material.userData.windInjected = true;
-
     const speed = options.speed || 1.15;
     const scale = options.scale || 0.12;
     const frequency = options.frequency || 2.5;
 
+    const prevOnBeforeCompile = material.onBeforeCompile;
     material.onBeforeCompile = (shader) => {
+      if (typeof prevOnBeforeCompile === 'function') prevOnBeforeCompile(shader);
       shader.uniforms.uTime = { value: 0 };
       shader.uniforms.uWindParams = {
         value: new THREE.Vector3(speed, scale, frequency),
@@ -361,7 +362,9 @@ export class BlockRegistry {
       : 0.22;
 
     material.userData.faceAoEnhanced = true;
+    const prevOnBeforeCompile = material.onBeforeCompile;
     material.onBeforeCompile = (shader) => {
+      if (typeof prevOnBeforeCompile === 'function') prevOnBeforeCompile(shader);
       shader.uniforms.uFaceAoStrength = { value: strength };
       shader.uniforms.uFaceAoEdgeWidth = { value: edgeWidth };
 
@@ -1058,7 +1061,9 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     material.userData.animationInjected = true;
     material.userData.isAnimated = true;
 
+    const prevOnBeforeCompile = material.onBeforeCompile;
     material.onBeforeCompile = (shader) => {
+      if (typeof prevOnBeforeCompile === 'function') prevOnBeforeCompile(shader);
       shader.uniforms.uTimeAnimation = { value: 0 };
       shader.uniforms.uFrameCount = { value: frameCount };
       shader.uniforms.uFrameSpeed = { value: frameSpeed };
