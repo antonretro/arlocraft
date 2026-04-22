@@ -99,6 +99,8 @@ export class BlockRegistry {
     };
     this.missingTexture = this.createMissingTexture();
     this.resourceManager = ResourcePackManager.getInstance();
+    this._loadedPreload = 0;
+    this._totalPreload = 0;
   }
 
   createMissingTexture() {
@@ -1110,5 +1112,40 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         }
       }
     }
+  async preloadEssentialBlocks() {
+    const essentialIds = [
+      'grass_block', 'dirt', 'stone', 'cobblestone', 'bedrock',
+      'oak_log', 'oak_planks', 'oak_leaves',
+      'sand', 'gravel', 'water', 'lava',
+      'iron_ore', 'coal_ore', 'gold_ore', 'diamond_ore',
+      'crafting_table', 'furnace', 'chest', 'glass'
+    ];
+    
+    this._totalPreload = essentialIds.length;
+    this._loadedPreload = 0;
+    
+    console.log(`[ArloCraft] Warming up engine: Preloading ${essentialIds.length} essential blocks...`);
+    
+    for (const id of essentialIds) {
+      try {
+        await this.getMaterial(id);
+      } catch (e) {
+        console.warn(`[ArloCraft] Preload failed for ${id}:`, e);
+      }
+      this._loadedPreload++;
+      const progress = Math.round((this._loadedPreload / this._totalPreload) * 100);
+      window.dispatchEvent(new CustomEvent('engine-loading-progress', { 
+        detail: { 
+          progress, 
+          currentAsset: id,
+          total: this._totalPreload,
+          loaded: this._loadedPreload
+        } 
+      }));
+      // Small delay to make the loading screen visible
+      await new Promise(r => setTimeout(r, 40));
+    }
+    
+    console.log('[ArloCraft] Engine Warm-up complete.');
   }
 }

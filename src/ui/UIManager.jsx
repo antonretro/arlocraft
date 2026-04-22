@@ -7,6 +7,7 @@ import { Inventory } from './components/Inventory';
 import { SignEditor } from './components/SignEditor';
 import { CommandEditor } from './components/CommandEditor';
 import { MainMenuPanorama } from './components/MainMenuPanorama';
+import { EngineLoading } from './components/EngineLoading';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../css/index.css';
 
@@ -17,7 +18,7 @@ export const getGame = () => _game;
 
 const UIApp = () => {
   const game = _game;
-  const [screen, setScreen] = useState('title');
+  const [screen, setScreen] = useState('engine-loading');
   const [isPaused, setIsPaused] = useState(false);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [hudVisible, setHudVisible] = useState(false);
@@ -113,6 +114,10 @@ const UIApp = () => {
     <div className="relative w-full h-screen font-outfit select-none overflow-hidden">
       {/* Core Screen Transitions */}
       <AnimatePresence mode="wait">
+        {screen === 'engine-loading' && (
+          <EngineLoading onComplete={() => setScreen('title')} />
+        )}
+
         {screen === 'title' && (
           <motion.div
             key="title"

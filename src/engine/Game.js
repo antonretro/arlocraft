@@ -397,6 +397,7 @@ export class Game {
     this.ui.setMenuScreen('title');
 
     await this.resourceManager.ready();
+    await this.world.blockRegistry.preloadEssentialBlocks();
     await this.world.init();
     await this.physics.init();
 
