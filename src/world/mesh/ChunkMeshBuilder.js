@@ -127,13 +127,53 @@ const tempScale = new THREE.Vector3(1, 1, 1);
 function collectBlocksByBaseId(chunk) {
   const byBaseId = new Map();
   for (const key of chunk.blockKeys) {
-    const id = chunk.world.state.blockMap.get(key);
-    if (!id) continue;
-    const baseId = id.startsWith('water') ? 'water' : normalizeBlockVariantId(id);
+    const rawId = chunk.world.state.blockMap.get(key);
+    if (!rawId) continue;
+    
+    let baseId = rawId.startsWith('water') ? 'water' : normalizeBlockVariantId(rawId);
+    const blockData = chunk.world.getBlockData(baseId);
+    
+    // Specialize Base ID for Instanced Variants
+    if (blockData?.renderType === 'slab') {
+        if (rawId.endsWith(':top')) baseId += ':top';
+    } else if (blockData?.renderType === 'stairs') {
+        const [x, y, z] = chunk.world.keyToCoords(key);
+        const shape = getStairShape(chunk.world, x, y, z, baseId, rawId);
+        if (shape !== 'straight') baseId += `__${shape}`;
+    }
+
     if (!byBaseId.has(baseId)) byBaseId.set(baseId, []);
     byBaseId.get(baseId).push(key);
   }
   return byBaseId;
+}
+
+function getStairShape(world, x, y, z, baseId, rawId) {
+    const dir = rawId.split('_').pop(); // n, s, e, w
+    
+    // Check neighbor stairs to determine if we are a corner
+    // This is a simplified version of Minecraft's stair logic
+    const getDir = (ox, oy, oz) => {
+        const id = world.state.blockMap.get(world.getKey(ox, oy, oz));
+        if (!id || !id.includes('_stairs')) return null;
+        return id.split('_').pop();
+    };
+
+    const n = getDir(x, y, z - 1);
+    const s = getDir(x, y, z + 1);
+    const e = getDir(x + 1, y, z);
+    const w = getDir(x - 1, y, z);
+
+    // Inner Corner Logic (very simplified)
+    if (dir === 'n' && (e === 's' || w === 's')) return 'inner';
+    if (dir === 's' && (e === 'n' || w === 'n')) return 'inner';
+    if (dir === 'e' && (n === 'w' || s === 'w')) return 'inner';
+    if (dir === 'w' && (n === 'e' || s === 'e')) return 'inner';
+
+    // Outer Corner Logic (very simplified)
+    if (dir === 'n' && (e === 'n' || w === 'n')) return 'straight'; // Already straight
+    
+    return 'straight';
 }
 
 export function rebuildChunkInstancedMeshes(chunk) {
@@ -307,13 +347,20 @@ function createInstancedMesh(chunk, id, keys, geometry, material, owned, blockDa
 
     tempEuler.set(0, 0, 0);
     if (blockData?.renderType === 'stairs') {
-      if (rawId.endsWith('_n')) tempEuler.y = Math.PI;
-      else if (rawId.endsWith('_e')) tempEuler.y = -Math.PI / 2;
-      else if (rawId.endsWith('_w')) tempEuler.y = Math.PI / 2;
+      if (rawId.includes('_n')) tempEuler.y = Math.PI;
+      else if (rawId.includes('_e')) tempEuler.y = -Math.PI / 2;
+      else if (rawId.includes('_w')) tempEuler.y = Math.PI / 2;
     } else if (blockData?.renderType === 'door') {
-      if (rawId.endsWith('_n')) tempEuler.y = Math.PI;
-      else if (rawId.endsWith('_e')) tempEuler.y = -Math.PI / 2;
-      else if (rawId.endsWith('_w')) tempEuler.y = Math.PI / 2;
+      const isOpen = rawId.includes(':open');
+      const dir = rawId.includes('_n') ? 'n' : (rawId.includes('_e') ? 'e' : (rawId.includes('_w') ? 'w' : 's'));
+      
+      if (dir === 'n') tempEuler.y = Math.PI;
+      else if (dir === 'e') tempEuler.y = -Math.PI / 2;
+      else if (dir === 'w') tempEuler.y = Math.PI / 2;
+      
+      if (isOpen) tempEuler.y += Math.PI / 2;
+    } else if (blockData?.renderType === 'trapdoor') {
+      if (rawId.includes(':open')) tempEuler.x = -Math.PI / 2;
     }
     if (isLod) {
       tempEuler.y = Math.atan2(camPos.x - ax, camPos.z - az);

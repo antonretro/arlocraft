@@ -258,9 +258,74 @@ export class WorldVisuals {
         }
         return withWhiteVertexColors(merged);
       })(),
+      stair_inner: (() => {
+          // Inner corner: 3/4 of the block is covered
+          const base = new THREE.BoxGeometry(1, 0.5, 1);
+          base.translate(0, -0.25, 0);
+          
+          const step1 = new THREE.BoxGeometry(1, 0.5, 0.5);
+          step1.translate(0, 0.25, 0.25);
+          
+          const step2 = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+          step2.translate(-0.25, 0.25, -0.25);
+          
+          const merged = new THREE.BufferGeometry();
+          const pos = [...base.attributes.position.array, ...step1.attributes.position.array, ...step2.attributes.position.array];
+          const uv = [...base.attributes.uv.array, ...step1.attributes.uv.array, ...step2.attributes.uv.array];
+          const norm = [...base.attributes.normal.array, ...step1.attributes.normal.array, ...step2.attributes.normal.array];
+          const idx = [
+              ...Array.from(base.index.array),
+              ...Array.from(step1.index.array).map(i => i + base.attributes.position.count),
+              ...Array.from(step2.index.array).map(i => i + base.attributes.position.count + step1.attributes.position.count)
+          ];
+          merged.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+          merged.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+          merged.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
+          merged.setIndex(idx);
+          
+          let offset = 0;
+          [base, step1, step2].forEach(b => {
+              b.groups.forEach(g => merged.addGroup(g.start + offset, g.count, g.materialIndex));
+              offset += b.index.count;
+          });
+          return withWhiteVertexColors(merged);
+      })(),
+      stair_outer: (() => {
+          // Outer corner: 1/4 of the block is covered as a top step
+          const base = new THREE.BoxGeometry(1, 0.5, 1);
+          base.translate(0, -0.25, 0);
+          
+          const step = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+          step.translate(0.25, 0.25, 0.25);
+          
+          const merged = new THREE.BufferGeometry();
+          const pos = [...base.attributes.position.array, ...step.attributes.position.array];
+          const uv = [...base.attributes.uv.array, ...step.attributes.uv.array];
+          const norm = [...base.attributes.normal.array, ...step.attributes.normal.array];
+          const idx = [
+              ...Array.from(base.index.array),
+              ...Array.from(step.index.array).map(i => i + base.attributes.position.count)
+          ];
+          merged.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+          merged.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+          merged.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
+          merged.setIndex(idx);
+          
+          let offset = 0;
+          [base, step].forEach(b => {
+              b.groups.forEach(g => merged.addGroup(g.start + offset, g.count, g.materialIndex));
+              offset += b.index.count;
+          });
+          return withWhiteVertexColors(merged);
+      })(),
       slab: (() => {
         const geo = new THREE.BoxGeometry(1, 0.5, 1);
         geo.translate(0, -0.25, 0);
+        return withWhiteVertexColors(geo);
+      })(),
+      slab_top: (() => {
+        const geo = new THREE.BoxGeometry(1, 0.5, 1);
+        geo.translate(0, 0.25, 0);
         return withWhiteVertexColors(geo);
       })(),
       trapdoor: (() => {

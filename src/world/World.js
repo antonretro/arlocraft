@@ -1043,6 +1043,36 @@ export class World {
       return true;
     }
 
+    // Door/Trapdoor Toggling
+    const blockData = this.getBlockData(blockId);
+    if (blockData?.renderType === 'door' || blockData?.renderType === 'trapdoor') {
+        const isOpen = blockId.includes(':open');
+        const baseId = blockId.replace(':open', '');
+        const nextId = isOpen ? baseId : baseId + ':open';
+        
+        const cx = this.getChunkCoord(cell.x);
+        const cy = this.getChunkCoord(cell.y);
+        const cz = this.getChunkCoord(cell.z);
+        const ownerKey = this.getChunkKey(cx, cy, cz);
+
+        this.addBlock(cell.x, cell.y, cell.z, nextId, ownerKey, true);
+        
+        if (blockData.pairId) {
+            const pairY = cell.y + Number(blockData.pairOffsetY);
+            const pairKey = this.getKey(cell.x, pairY, cell.z);
+            const currentPairId = this.state.blockMap.get(pairKey);
+            if (currentPairId) {
+                const pBaseId = currentPairId.replace(':open', '');
+                const pNextId = isOpen ? pBaseId : pBaseId + ':open';
+                this.addBlock(cell.x, pairY, cell.z, pNextId, ownerKey, true);
+            }
+        }
+        
+        this.game.audio?.play('action-success');
+        this.chunkManager.flushPriorityChunkRebuilds(20);
+        return true;
+    }
+
     if (blockId === 'barrel') {
       window.dispatchEvent(new CustomEvent('inventory-toggle', { 
         detail: true,

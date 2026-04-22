@@ -1,4 +1,5 @@
 import { blockIdToDisplayName, normalizeBlockVariantId } from './blockIds.js';
+import { MOBS } from './mobs.js';
 
 const configModules = import.meta.glob('./block_configs/*/config.json', {
   eager: true,
@@ -309,7 +310,19 @@ function mergeBlocks() {
           id: doorId,
           name: `${block.name} Door`,
           renderType: 'door',
-          transparent: true
+          transparent: true,
+          pairId: `${doorId}_top`,
+          pairOffsetY: 1
+        });
+        
+        merged.set(`${doorId}_top`, {
+          ...block,
+          id: `${doorId}_top`,
+          name: `${block.name} Door (Top)`,
+          renderType: 'door',
+          transparent: true,
+          pairId: doorId,
+          pairOffsetY: -1
         });
       }
     }

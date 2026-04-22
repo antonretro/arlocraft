@@ -107,6 +107,7 @@ export function resolveChunkGeometry(world, id, blockData) {
   if (hasFaceSuffix(id, ':pz')) return geo.face_pz ?? geo.solid ?? null;
 
   if (blockData?.renderType === 'slab' || id.includes('_slab')) {
+    if (hasFaceSuffix(id, ':top')) return geo.slab_top ?? geo.slab ?? geo.solid ?? null;
     return geo.slab ?? geo.solid ?? null;
   }
   if (blockData?.renderType === 'trapdoor' || id.includes('_trapdoor')) {
@@ -116,6 +117,8 @@ export function resolveChunkGeometry(world, id, blockData) {
     return geo.door ?? geo.sign ?? geo.solid ?? null;
   }
   if (blockData?.renderType === 'stairs' || id.includes('_stairs')) {
+    if (id.includes('__inner')) return geo.stair_inner ?? geo.stair ?? geo.solid ?? null;
+    if (id.includes('__outer')) return geo.stair_outer ?? geo.stair ?? geo.solid ?? null;
     return geo.stair ?? geo.solid ?? null;
   }
   
