@@ -47,7 +47,8 @@ varying vec4 vTint;`
 // the dirt stays brown while the grass overlay takes the biome colour.
 float texelSat = max(blockTexel.r, max(blockTexel.g, blockTexel.b)) - min(blockTexel.r, min(blockTexel.g, blockTexel.b));
 float tintAmount = vTint.a > 0.5 ? 1.0 - smoothstep(0.05, 0.14, texelSat) : 1.0;
-blockTexel.rgb *= mix(vec3(1.0), vTint.rgb, tintAmount);
+// Tints are sRGB colours while the texel is already linear.
+blockTexel.rgb *= mix(vec3(1.0), pow(vTint.rgb, vec3(2.2)), tintAmount);
 diffuseColor *= blockTexel;`
       )
       .replace(

@@ -1,31 +1,54 @@
 /**
  * Minecraft-style biome colours. Grass and foliage colours come from the
  * pack's colormap images (textures/colormap/grass.png, foliage.png),
- * looked up by temperature and humidity like in Minecraft, with a few
+ * looked up by each biome's temperature and downfall like in Minecraft, with a few
  * biomes using fixed colours (swamps, badlands, dark forest).
  */
 const SIZE = 256;
 
-// terrain temperature -> Minecraft temperature
-const TEMP_POINTS = [
-  [-0.8, 0],
-  [-0.35, 0.25],
-  [0, 0.75],
-  [0.4, 0.95],
-  [0.8, 1],
-];
-
-function lerpPoints(v, points) {
-  if (v <= points[0][0]) return points[0][1];
-  for (let i = 1; i < points.length; i++) {
-    const [x1, y1] = points[i];
-    if (v <= x1) {
-      const [x0, y0] = points[i - 1];
-      return y0 + ((v - x0) / (x1 - x0)) * (y1 - y0);
-    }
-  }
-  return points[points.length - 1][1];
-}
+// Minecraft's temperature and downfall for each biome. The colour maps are
+// indexed by these, not by raw terrain climate, so a biome always gets its
+// familiar colour and borders blend through the 4-block lattice.
+const BIOME_CLIMATE = {
+  plains: [0.8, 0.4],
+  sunflower_plains: [0.8, 0.4],
+  meadow: [0.5, 0.8],
+  forest: [0.7, 0.8],
+  flower_forest: [0.7, 0.8],
+  birch_forest: [0.6, 0.6],
+  dark_forest: [0.7, 0.8],
+  lush_grove: [0.75, 0.85],
+  taiga: [0.25, 0.8],
+  snowy_taiga: [-0.5, 0.4],
+  snowy_plains: [0, 0.5],
+  ice_spikes: [0, 0.5],
+  snow: [0, 0.5],
+  tundra: [0.05, 0.3],
+  grove: [-0.2, 0.8],
+  snowy_slopes: [-0.3, 0.9],
+  snowy_peaks: [-0.7, 0.9],
+  void_peaks: [-0.7, 0.9],
+  alpine: [0.1, 0.5],
+  stony_peaks: [1, 0.3],
+  highlands: [0.4, 0.5],
+  windswept_hills: [0.2, 0.3],
+  desert: [2, 0],
+  savanna: [2, 0],
+  badlands: [2, 0],
+  canyon: [2, 0],
+  jungle: [0.95, 0.9],
+  sparse_jungle: [0.95, 0.8],
+  swamp: [0.8, 0.9],
+  mangrove_swamp: [0.8, 0.9],
+  cherry_grove: [0.5, 0.8],
+  beach: [0.8, 0.4],
+  stony_shore: [0.2, 0.3],
+  river: [0.5, 0.5],
+  ocean: [0.5, 0.5],
+  warm_ocean: [0.5, 0.5],
+  frozen_ocean: [0, 0.5],
+};
+const DEFAULT_CLIMATE = [0.8, 0.4];
 
 // Minecraft's fixed leaf colours for trees that ignore the biome.
 export const FIXED_FOLIAGE = {
@@ -38,6 +61,7 @@ const GRASS_OVERRIDES = {
   mangrove_swamp: 0x6a7039,
   badlands: 0x90814d,
   dark_forest: 0x507a32,
+  cherry_grove: 0xb6db61,
 };
 const FOLIAGE_OVERRIDES = {
   swamp: 0x6a7039,
@@ -80,33 +104,33 @@ export class Colormaps {
   }
 
   /**
-   * `temperature` and `humidity` are terrain climate values (about -1.5..1.5).
-   * Minecraft indexes the map with temperature and humidity * temperature.
+   * Looks up a colour map with Minecraft's biome temperature and downfall.
+   * Like Minecraft, temperature drops a little with height above y=16.
    */
-  sample(map, temperature, humidity) {
+  sample(map, biomeId, y = 0) {
     if (!map) return null;
-    // Map terrain climate onto Minecraft's scales (plains ~0.8 temperature
-    // and 0.4 downfall, snowy ~0, deserts/savannas >= 1).
-    const t = Math.min(1, Math.max(0, lerpPoints(temperature, TEMP_POINTS)));
-    const h = Math.min(1, Math.max(0, 0.45 + humidity * 0.6)) * t;
+    const [temperature, downfall] = BIOME_CLIMATE[biomeId] ?? DEFAULT_CLIMATE;
+    const cooled = temperature - Math.max(0, y - 16) * 0.0016;
+    const t = Math.min(1, Math.max(0, cooled));
+    const h = Math.min(1, Math.max(0, downfall)) * t;
     const x = Math.round((1 - t) * (SIZE - 1));
-    const y = Math.round((1 - h) * (SIZE - 1));
-    const i = (y * SIZE + x) * 4;
+    const row = Math.round((1 - h) * (SIZE - 1));
+    const i = (row * SIZE + x) * 4;
     return (map[i] << 16) | (map[i + 1] << 8) | map[i + 2];
   }
 
-  grassColor(biomeId, temperature, humidity, fallback) {
+  grassColor(biomeId, y, fallback) {
     return (
       GRASS_OVERRIDES[biomeId] ??
-      this.sample(this.grass, temperature, humidity) ??
+      this.sample(this.grass, biomeId, y) ??
       fallback
     );
   }
 
-  foliageColor(biomeId, temperature, humidity, fallback) {
+  foliageColor(biomeId, y, fallback) {
     return (
       FOLIAGE_OVERRIDES[biomeId] ??
-      this.sample(this.foliage, temperature, humidity) ??
+      this.sample(this.foliage, biomeId, y) ??
       fallback
     );
   }

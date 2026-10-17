@@ -111,21 +111,10 @@ export class WorldTerrainService {
     const z = lz * 4;
     const h = this.getTerrainHeight(x, z);
     const biome = this.getBiomeAt(x, z);
-    const { temperature, humidity } = this.sampler.climate(x, z, h);
     color =
       kind === 'grass'
-        ? this.colormaps.grassColor(
-            biome.id,
-            temperature,
-            humidity,
-            biome.color
-          )
-        : this.colormaps.foliageColor(
-            biome.id,
-            temperature,
-            humidity,
-            biome.color
-          );
+        ? this.colormaps.grassColor(biome.id, h, biome.color)
+        : this.colormaps.foliageColor(biome.id, h, biome.color);
     if (this._latticeCache.size > 200000) this._latticeCache.clear();
     this._latticeCache.set(key, color);
     return color;

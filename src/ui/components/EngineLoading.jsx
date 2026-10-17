@@ -3,20 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export const EngineLoading = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
-  const [currentAsset, setCurrentAsset] = useState('Initializing Engine...');
-  const [isFinished, setIsFinished] = useState(false);
+  const [currentAsset, setCurrentAsset] = useState('Starting up…');
 
   useEffect(() => {
     const handleProgress = (e) => {
       const { progress, currentAsset } = e.detail;
       setProgress(progress);
-      setCurrentAsset(`Loading texture: ${currentAsset}`);
+      setCurrentAsset(`Loading ${currentAsset}`);
       
       if (progress >= 100) {
-        setTimeout(() => {
-          setIsFinished(true);
-          setTimeout(onComplete, 800);
-        }, 500);
+        setTimeout(onComplete, 400);
       }
     };
 
@@ -47,7 +43,7 @@ export const EngineLoading = ({ onComplete }) => {
             rotateY: { duration: 4, repeat: Infinity, ease: "linear" },
             y: { duration: 2, repeat: Infinity, ease: "easeInOut" }
           }}
-          className="w-20 h-20 bg-arlo-blue/20 border-2 border-arlo-blue/40 rounded-2xl flex items-center justify-center shadow-[0_0_40px_rgba(0,195,227,0.2)]"
+          className="w-20 h-20 rounded-xl flex items-center justify-center border-4 border-black/50 shadow-[inset_0_-10px_0_rgba(0,0,0,0.25)]" style={{ background: "linear-gradient(180deg,#5fae3c 0 30%,#866043 30% 100%)" }}
         >
           <div className="w-10 h-10 border border-arlo-blue/60 rounded-lg flex items-center justify-center">
             <div className="w-4 h-4 bg-arlo-blue rounded-sm animate-pulse" />
@@ -56,16 +52,16 @@ export const EngineLoading = ({ onComplete }) => {
 
         <div className="flex flex-col items-center gap-4 w-full">
           <div className="flex flex-col items-center gap-1">
-             <h2 className="text-2xl font-bold tracking-[0.2em] text-white uppercase ni-title">ArloCraft</h2>
-             <span className="text-[10px] font-bold text-arlo-blue tracking-[0.4em] uppercase opacity-60">Engine Warm-up</span>
+             <h2 className="logo-title !text-3xl">ARLOCRAFT</h2>
+             <span className="text-xs font-bold text-white/50 mt-3">Getting the world ready…</span>
           </div>
           
           {/* Progress Bar Container */}
-          <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
+          <div className="w-full h-3 bg-black/60 rounded-md overflow-hidden border-2 border-black relative">
             <motion.div 
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
-              className="absolute top-0 left-0 h-full bg-gradient-to-r from-arlo-blue to-purple-500 shadow-[0_0_15px_rgba(0,195,227,0.5)]"
+              className="absolute top-0 left-0 h-full bg-[#5fae3c]"
             />
           </div>
 
@@ -85,34 +81,8 @@ export const EngineLoading = ({ onComplete }) => {
           </div>
         </div>
 
-        {/* Loading Details List (Waterfall effect) */}
-        <div className="flex flex-col gap-1 w-full opacity-20">
-            <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-            <div className="text-[8px] text-center uppercase tracking-widest text-white/40 py-2">
-                Initializing Voxel Buffer • Calibrating Shaders • Indexing Resource Pack
-            </div>
-            <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-        </div>
       </div>
 
-      {/* Finishing Animation Overlay */}
-      <AnimatePresence>
-        {isFinished && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="absolute inset-0 z-[1100] bg-white flex items-center justify-center"
-          >
-             <motion.h1 
-               initial={{ scale: 0.8, opacity: 0 }}
-               animate={{ scale: 1, opacity: 1 }}
-               className="text-black font-black text-4xl tracking-[0.5em] uppercase"
-             >
-                Ready
-             </motion.h1>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Package, Puzzle, Trash2, Upload } from 'lucide-react';
+import { Package, Puzzle, Trash2, Upload } from 'lucide-react';
 import { ResourcePackManager } from '../../world/ResourcePackManager.js';
 import { ModLoader } from '../../mods/ModLoader.js';
 
@@ -18,7 +18,7 @@ const MOD_EXAMPLE = `{
 }`;
 
 /** Texture pack and mod manager. Changes apply after a reload. */
-export const PacksPanel = ({ onBack }) => {
+export const PacksPanel = () => {
   const [packName, setPackName] = useState(null);
   const [mods, setMods] = useState([]);
   const [status, setStatus] = useState(null);
@@ -47,15 +47,8 @@ export const PacksPanel = ({ onBack }) => {
   };
 
   return (
-    <div className="flex flex-col gap-4 h-full overflow-y-auto pr-1">
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-white/50 hover:text-white text-sm"
-      >
-        <ArrowLeft size={16} /> Back
-      </button>
-
-      <section className="glass-card p-4 flex flex-col gap-3">
+    <div className="flex flex-col gap-4 min-h-0 overflow-y-auto -mx-1 px-1 scrollbar-thin">
+      <section className="rounded-xl border-2 border-white/5 bg-white/[0.04] p-4 flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <Package className="text-orange-300" size={20} />
           <div className="flex-1">
@@ -99,13 +92,13 @@ export const PacksPanel = ({ onBack }) => {
         />
         <button
           onClick={() => packInput.current?.click()}
-          className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 border border-orange-400/30 font-bold text-orange-200"
+          className="block-btn block-btn-gold justify-center"
         >
           <Upload size={16} /> Choose texture pack…
         </button>
       </section>
 
-      <section className="glass-card p-4 flex flex-col gap-3">
+      <section className="rounded-xl border-2 border-white/5 bg-white/[0.04] p-4 flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <Puzzle className="text-sky-300" size={20} />
           <div className="flex-1">
@@ -156,7 +149,7 @@ export const PacksPanel = ({ onBack }) => {
         />
         <button
           onClick={() => modInput.current?.click()}
-          className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/30 font-bold text-sky-200"
+          className="block-btn block-btn-blue justify-center"
         >
           <Upload size={16} /> Install mod…
         </button>
@@ -178,7 +171,7 @@ export const PacksPanel = ({ onBack }) => {
       {needsReload && (
         <button
           onClick={() => window.location.reload()}
-          className="py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold"
+          className="block-btn block-btn-green justify-center"
         >
           Reload to apply
         </button>

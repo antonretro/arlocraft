@@ -1,863 +1,591 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getGame } from '../UIManager';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Users, 
-  Gamepad2, 
-  Settings, 
-  Palette, 
-  Library, 
-  Globe, 
-  ChevronRight,
-  Clipboard,
-  CheckCircle2,
-  AlertCircle,
+import {
+  Play,
+  Globe,
+  Settings,
+  Shirt,
+  Package,
+  Pencil,
   Trash2,
   Plus,
-  Monitor,
-  Volume2,
-  Gamepad
+  Dices,
+  Sword,
+  Hammer,
+  Map as MapIcon,
+  Eye,
+  CheckCircle2,
+  AlertCircle,
+  Copy,
 } from 'lucide-react';
 import { BUILD_LABEL } from '../../data/buildInfo.js';
 import { PacksPanel } from './PacksPanel.jsx';
+import { SettingsPanel } from './SettingsPanel.jsx';
+import { BlockButton, Panel, ScreenHeader, Choice } from './kit.jsx';
+
+const SPLASHES = [
+  'Now with redstone!',
+  'Code your command blocks!',
+  'Punch a tree!',
+  '100% voxels!',
+  'Mods welcome!',
+  'Also try VoxelForge!',
+  'Diamonds below y=0!',
+  'Runs in your browser!',
+  'Watch out for creepers!',
+  'Villages with wells!',
+  'Bring a friend!',
+];
+
+const MODES = [
+  { value: 'SURVIVAL', label: 'Survival', icon: <Sword size={18} />, desc: 'Gather, craft and survive the night' },
+  { value: 'CREATIVE', label: 'Creative', icon: <Hammer size={18} />, desc: 'Every block, flying, no danger' },
+  { value: 'ADVENTURE', label: 'Adventure', icon: <MapIcon size={18} />, desc: 'Explore, but blocks stay put' },
+  { value: 'SPECTATOR', label: 'Spectator', icon: <Eye size={18} />, desc: 'Fly through everything and watch' },
+];
+
+const MODE_LABEL = Object.fromEntries(MODES.map((m) => [m.value, m.label]));
+
+function timeAgo(iso) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return 'Never played';
+  const mins = Math.round((Date.now() - t) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return new Date(t).toLocaleDateString();
+}
 
 export const MainMenu = ({ setScreen }) => {
   const game = getGame();
-  const [subScreen, setSubScreen] = useState('main'); // main, multiplayer, worlds, settings, skins
-  const [settingTab, setSettingTab] = useState('video'); // video, audio, controls, social
-  const [joinCode, setJoinCode] = useState('');
-  const [status, setStatus] = useState({ type: 'idle', message: '' });
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newWorldData, setNewWorldData] = useState({ name: '', seed: '', mode: 'SURVIVAL' });
-  const [isRenaming, setIsRenaming] = useState(null); // slotId
-  const [renameValue, setRenameValue] = useState('');
-  const [skinSearchQuery, setSkinSearchQuery] = useState('');
-  const [localPlayerName, setLocalPlayerName] = useState(() => game?.settings?.playerName || 'Arlo');
-  const [settings, setSettings] = useState(() => game?.settingsManager?.getAll() ?? {});
-  const [selectedSkinId, setSelectedSkinId] = useState(
-    () => game?.skinSystem?.currentSkin || 'classic_steve'
-  );
-  const [multiplayerId, setMultiplayerId] = useState(() => game?.multiplayer?.peer?.id || null);
+  const [subScreen, setSubScreen] = useState('main');
+  const [creating, setCreating] = useState(false);
+  const [, refreshSlots] = useState(0);
+  const splash = useMemo(() => SPLASHES[Math.floor(Math.random() * SPLASHES.length)], []);
 
-  useEffect(() => {
-    const handleSkinChange = (e) => {
-      if (e.detail?.skinId) setSelectedSkinId(e.detail.skinId);
-    };
-    window.addEventListener('skin-changed', handleSkinChange);
-    return () => window.removeEventListener('skin-changed', handleSkinChange);
-  }, []);
+  const slots = game.worldSlots.getAll().map((id) => ({
+    id,
+    summary: game.worldSlots.getSummary(id),
+  }));
+  const lastPlayed = slots
+    .filter((s) => s.summary)
+    .sort((a, b) => (Date.parse(b.summary.savedAt) || 0) - (Date.parse(a.summary.savedAt) || 0))[0];
 
-  useEffect(() => {
-    if (subScreen === 'multiplayer' && game.multiplayer) {
-      if (!game.multiplayer.peer) {
-        game.multiplayer.init();
-      } else {
-        setMultiplayerId(game.multiplayer.peer.id);
-      }
-      
-      const prevOnConnected = game.multiplayer.onConnected;
-      game.multiplayer.onConnected = (id) => {
-        setMultiplayerId(id);
-        if (prevOnConnected) prevOnConnected(id);
-      };
-
-      return () => {
-        game.multiplayer.onConnected = prevOnConnected;
-      };
-    }
-  }, [subScreen, game.multiplayer]);
-
-  const updateSetting = (key, value) => {
-    game.settingsManager.set(key, value);
-    setSettings({ ...game.settingsManager.getAll() });
+  const playSlot = (slotId) => {
+    game.selectedWorldSlot = slotId;
+    game.loadWorldLocal(slotId);
+    game.startGame({ fromSave: true });
   };
 
-  const applyPerformancePreset = () => {
-    // MAX STABILITY PRESET
-    updateSetting('renderDistance', 5);
-    updateSetting('resolutionScale', 0.65);
-    updateSetting('autoQuality', true);
-    updateSetting('stabilityMode', true);
-    updateSetting('chunkRebuildBudget', 1);
-    updateSetting('lowSpecPresetApplied', true);
-
-    game.world.setRenderDistance(5);
-    game.renderer.setResolutionScale(0.65);
+  const startCreate = () => {
+    const firstEmpty = slots.find((s) => !s.summary);
+    if (!firstEmpty) return false;
+    game.selectedWorldSlot = firstEmpty.id;
+    setCreating(true);
+    return true;
   };
 
-  const handleJoin = async () => {
-    if (!joinCode.trim()) {
-      setStatus({ type: 'error', message: 'Please enter a valid Join Code.' });
-      return;
-    }
-    
-    setStatus({ type: 'loading', message: 'Connecting to host...' });
-    
-    try {
-      await game.multiplayer.connectToPeer(joinCode.trim());
-      setStatus({ type: 'success', message: 'Connected! Syncing world...' });
-      // The MultiplayerManager will trigger the game start via events
-    } catch (err) {
-      setStatus({ type: 'error', message: err.message });
-    }
-  };
-
-  const containerVariants = {
-    hidden: { opacity: 0, x: -20 },
-    visible: { opacity: 1, x: 0, transition: { staggerChildren: 0.1 } }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, x: -20 },
-    visible: { opacity: 1, x: 0 }
-  };
+  const back = () => setSubScreen('main');
 
   return (
-    <div className="w-full max-w-6xl px-8 flex flex-col md:flex-row items-center justify-between gap-12">
-      {/* Brand Section */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-2"
-      >
-        <span className="text-arlo-blue font-bold tracking-widest text-sm uppercase">The Voyage of Discovery</span>
-        <h1 className="ni-title text-shadow-glow">ARLOCRAFT</h1>
-        <p className="text-white/40 max-w-xs text-sm mt-4 leading-relaxed">
-          Embark on a modular journey through infinite voxel horizons. Built with THREE.JS.
-        </p>
-      </motion.div>
+    <div className="w-full h-full overflow-y-auto">
+      <div className="min-h-full w-full max-w-6xl mx-auto px-5 md:px-10 py-10 flex flex-col md:flex-row items-center justify-center gap-10 md:gap-16">
+        {/* Logo */}
+        <motion.div
+          initial={{ opacity: 0, y: -16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative flex flex-col items-center md:items-start gap-4 shrink-0"
+        >
+          <div className="relative">
+            <h1 className="logo-title">
+              ARLO
+              <br />
+              CRAFT
+            </h1>
+            <span className="splash-text absolute right-0 -bottom-8 translate-x-1/4">{splash}</span>
+          </div>
+          <p className="text-white/60 text-sm max-w-xs text-center md:text-left mt-12 leading-relaxed">
+            Build, explore and survive in an endless block world. Wire up redstone, script command blocks and
+            play with friends, right in your browser.
+          </p>
+        </motion.div>
 
-      {/* Action Panel */}
-      <div className="w-full max-w-md h-[480px] relative">
-        <AnimatePresence mode="wait">
-          {subScreen === 'main' && (
-            <motion.div
-              key="main"
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              exit="hidden"
-              className="flex flex-col gap-3"
-            >
-              <MenuButton 
-                onClick={() => setSubScreen('worlds')}
-                icon={<Gamepad2 size={20}/>}
-                label="Singleplayer" 
-                desc="Continue your solo adventure"
-                color="blue"
+        {/* Screens */}
+        <div className="w-full max-w-md">
+          <AnimatePresence mode="wait">
+            {subScreen === 'main' && (
+              <Panel key="main">
+                {lastPlayed && (
+                  <BlockButton
+                    color="green"
+                    big
+                    icon={<Play size={20} fill="currentColor" />}
+                    onClick={() => playSlot(lastPlayed.id)}
+                  >
+                    <span className="flex flex-col items-start leading-tight min-w-0">
+                      <span>Continue</span>
+                      <span className="text-xs font-semibold text-white/75 truncate max-w-[16rem]">
+                        {lastPlayed.summary.name} · {timeAgo(lastPlayed.summary.savedAt)}
+                      </span>
+                    </span>
+                  </BlockButton>
+                )}
+                <BlockButton
+                  color={lastPlayed ? undefined : 'green'}
+                  big={!lastPlayed}
+                  icon={<MapIcon size={18} />}
+                  onClick={() => setSubScreen('worlds')}
+                >
+                  {lastPlayed ? 'All worlds' : 'Play'}
+                </BlockButton>
+                <BlockButton color="blue" icon={<Globe size={18} />} onClick={() => setSubScreen('multiplayer')}>
+                  Play with friends
+                </BlockButton>
+                <div className="grid grid-cols-2 gap-3">
+                  <BlockButton icon={<Shirt size={18} />} onClick={() => setSubScreen('skins')}>
+                    Character
+                  </BlockButton>
+                  <BlockButton icon={<Package size={18} />} onClick={() => setSubScreen('packs')}>
+                    Packs & mods
+                  </BlockButton>
+                </div>
+                <BlockButton icon={<Settings size={18} />} onClick={() => setSubScreen('settings')}>
+                  Settings
+                </BlockButton>
+              </Panel>
+            )}
+
+            {subScreen === 'worlds' && (
+              <WorldsScreen
+                key="worlds"
+                slots={slots}
+                onBack={back}
+                onPlay={playSlot}
+                onCreate={startCreate}
+                onChanged={() => refreshSlots((n) => n + 1)}
               />
-              <MenuButton 
-                onClick={() => setSubScreen('multiplayer')}
-                icon={<Globe size={20}/>}
-                label="Multiplayer" 
-                desc="Join friends across the P2P bridge"
-                color="purple"
-              />
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <IconButton onClick={() => setSubScreen('skins')} icon={<Palette/>} label="Skins" color="green" />
-                <IconButton
-                  onClick={() => setSubScreen('packs')}
-                  icon={<Library/>}
-                  label="Packs & Mods"
-                  color="orange"
-                  caption="Texture packs and mods"
-                />
-              </div>
-              <MenuButton 
-                onClick={() => setSubScreen('settings')}
-                icon={<Settings size={20}/>}
-                label="Options" 
-                desc="Gameplay & Graphics"
-              />
-            </motion.div>
-          )}
+            )}
 
-          {subScreen === 'packs' && (
-            <motion.div
-              key="packs"
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              exit="hidden"
-              className="h-full"
-            >
-              <PacksPanel onBack={() => setSubScreen('main')} />
-            </motion.div>
-          )}
+            {subScreen === 'multiplayer' && <MultiplayerScreen key="multi" onBack={back} />}
 
-          {subScreen === 'worlds' && (
-            <motion.div
-              key="worlds"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="glass-card p-6 flex flex-col gap-6"
-            >
-              <div className="flex items-center gap-4">
-                <button onClick={() => setSubScreen('main')} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                  <ChevronRight className="rotate-180" />
-                </button>
-                <h2 className="text-xl font-bold">World Selection</h2>
-              </div>
+            {subScreen === 'skins' && <CharacterScreen key="skins" onBack={back} />}
 
-              <div className="flex flex-col gap-2 overflow-y-auto max-h-72 pr-2 scrollbar-thin">
-                {game.worldSlots.getAll().map(slotId => {
-                  const summary = game.worldSlots.getSummary(slotId);
-                  return (
-                    <div key={slotId} className="group relative">
-                      <button 
-                        onClick={() => {
-                          game.selectedWorldSlot = slotId;
-                          if (summary) {
-                            game.loadWorldLocal(slotId);
-                            game.startGame({ fromSave: true });
-                          } else {
-                            setShowCreateModal(true);
-                          }
-                        }}
-                        className={`w-full flex flex-col gap-1 p-4 border rounded-xl transition-all text-left
-                          ${summary ? 'bg-white/5 border-white/5 hover:bg-white/10' : 'bg-white/[0.02] border-dashed border-white/10 hover:border-arlo-blue/40'}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          {isRenaming === slotId ? (
-                            <input 
-                              autoFocus
-                              className="bg-black/40 border border-arlo-blue/50 rounded px-2 py-0.5 text-sm outline-none"
-                              value={renameValue}
-                              onChange={(e) => setRenameValue(e.target.value)}
-                              onBlur={() => {
-                                if (renameValue.trim()) game.worldSlots.setSlotName(slotId, renameValue.trim());
-                                setIsRenaming(null);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                   if (renameValue.trim()) game.worldSlots.setSlotName(slotId, renameValue.trim());
-                                   setIsRenaming(null);
-                                }
-                              }}
-                            />
-                          ) : (
-                            <span className="font-bold text-sm tracking-wide">{summary ? summary.name : 'Empty Slot'}</span>
-                          )}
-                          {summary && <span className="text-[10px] text-arlo-blue font-bold px-2 py-0.5 bg-arlo-blue/10 rounded tracking-widest uppercase">{summary.mode}</span>}
-                        </div>
-                        <span className="text-[10px] opacity-40">
-                          {summary ? `Saves: ${new Date(summary.savedAt).toLocaleDateString()} • Seed: ${summary.seed}` : 'Forge a new horizon here'}
-                        </span>
-                      </button>
-                      
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {summary && (
-                          <>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setRenameValue(summary.name);
-                                setIsRenaming(slotId);
-                              }}
-                              className="p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-lg"
-                            >
-                              <Palette size={14}/>
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (confirm('Are you sure you want to delete this world?')) {
-                                  game.deleteWorldSlot(slotId);
-                                  setSubScreen('main');
-                                }
-                              }}
-                              className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg"
-                            >
-                              <Trash2 size={14}/>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            {subScreen === 'packs' && (
+              <Panel key="packs" className="max-h-[80vh]">
+                <ScreenHeader title="Packs & mods" subtitle="Changes apply after a reload" onBack={back} />
+                <PacksPanel />
+              </Panel>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
 
-              <button 
-                onClick={() => {
-                  const firstEmpty = game.worldSlots.getAll().find(s => !game.worldSlots.exists(s));
-                  if (firstEmpty) {
-                    game.selectedWorldSlot = firstEmpty;
-                    setShowCreateModal(true);
-                  } else {
-                    alert('All world slots are full! Delete one to forge anew.');
-                  }
-                }}
-                className="glass-btn glass-btn-blue flex items-center justify-center gap-3 mt-auto"
-              >
-                <Plus size={18}/>
-                <span className="font-bold text-sm tracking-widest uppercase">Forge New World</span>
-              </button>
-            </motion.div>
-          )}
-
-          {subScreen === 'skins' && (
-            <motion.div
-              key="skins"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="glass-card p-6 flex flex-col gap-6"
-            >
-              <div className="flex items-center gap-4">
-                <button onClick={() => setSubScreen('main')} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                  <ChevronRight className="rotate-180" />
-                </button>
-                <h2 className="text-xl font-bold">Identity & Skin</h2>
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Voyage Signature (Display Name)</label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      placeholder="Enter identity..."
-                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-arlo-blue/50 transition-colors text-sm"
-                      value={localPlayerName}
-                      onChange={(e) => {
-                        setLocalPlayerName(e.target.value);
-                        game.settingsManager.set('playerName', e.target.value);
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Identity Recall (Skin Lookup)</label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      placeholder="Username (e.g. Grian, Notch)..."
-                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-arlo-blue/50 transition-colors text-sm"
-                      value={skinSearchQuery}
-                      onChange={(e) => setSkinSearchQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                        if (e.key === 'Enter' && skinSearchQuery.trim()) {
-                           setSelectedSkinId(`custom_${skinSearchQuery.trim().replace(/\s+/g, '_')}`);
-                           game.skinSystem.applySkinByUsername(skinSearchQuery);
-                           setSkinSearchQuery('');
-                        }
-                      }}
-                    />
-                    <button 
-                      onClick={() => {
-                        if (skinSearchQuery.trim()) {
-                          setSelectedSkinId(`custom_${skinSearchQuery.trim().replace(/\s+/g, '_')}`);
-                          game.skinSystem.applySkinByUsername(skinSearchQuery);
-                          setSkinSearchQuery('');
-                        }
-                      }}
-                      className="glass-btn glass-btn-blue !px-4"
-                    >
-                      Recall
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 overflow-hidden">
-                <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Standard Replicas</label>
-                <div className="grid grid-cols-5 gap-2 overflow-y-auto max-h-40 p-1 scrollbar-thin">
-                  {[...game.skinSystem.classicSkins, ...game.skinSystem.randomSkins].map(skin => {
-                    const isActive = selectedSkinId === skin.id;
-                    return (
-                      <button
-                        key={skin.id}
-                        onClick={() => {
-                          setSelectedSkinId(skin.id);
-                          game.skinSystem.applySkin(skin.id);
-                        }}
-                        className={`aspect-square p-2 rounded-xl border transition-all 
-                          ${isActive ? 'bg-arlo-blue/20 border-arlo-blue' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
-                      >
-                        <img 
-                          src={skin.faceUrl || skin.url || `${import.meta.env.BASE_URL || '/'}assets/skins/default_face.png`} 
-                          className="w-full h-full object-contain pixelated rounded-md"
-                          alt={skin.name}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="mt-auto px-2">
-                <span className="text-[10px] font-bold opacity-30 uppercase tracking-widest">Active Voyager</span>
-                <p className="text-sm font-bold text-arlo-blue leading-none">
-                  {game.skinSystem.getSkinMeta(selectedSkinId).name}
-                </p>
-              </div>
-            </motion.div>
-          )}
-
-          {subScreen === 'settings' && (
-            <motion.div
-              key="settings"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="glass-card w-[95%] max-w-4xl h-[85vh] md:h-[520px] fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col md:flex-row overflow-hidden z-[100]"
-            >
-              {/* Settings Header (Mobile) */}
-              <div className="flex md:hidden items-center justify-between px-6 py-4 border-b border-white/5 bg-white/5">
-                  <button onClick={() => setSubScreen('main')} className="p-2 hover:bg-white/10 rounded-lg">
-                    <ChevronRight className="rotate-180" />
-                  </button>
-                  <h2 className="text-lg font-bold">Options</h2>
-                  <div className="w-8" /> 
-              </div>
-
-              {/* Sidebar / Tabs Container */}
-              <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
-                {/* Settings Sidebar */}
-                <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/5 flex flex-row md:flex-col p-2 md:p-4 gap-1 md:gap-2 bg-black/20 overflow-x-auto md:overflow-x-visible">
-                  <TabButton id="video" label="Visuals" icon={<Monitor size={16}/>} active={settingTab === 'video'} onClick={setSettingTab} />
-                  <TabButton id="audio" label="Audio" icon={<Volume2 size={16}/>} active={settingTab === 'audio'} onClick={setSettingTab} />
-                  <TabButton id="controls" label="Controls" icon={<Gamepad size={16}/>} active={settingTab === 'controls'} onClick={setSettingTab} />
-                  <TabButton id="social" label="Social" icon={<Users size={16}/>} active={settingTab === 'social'} onClick={setSettingTab} />
-                </div>
-
-                {/* Main Content Area */}
-                <div className="flex-1 flex flex-col min-w-0">
-                    {/* Desktop Header */}
-                    <div className="hidden md:flex items-center justify-between px-8 py-6 border-b border-white/5 bg-white/5">
-                        <div className="flex items-center gap-4">
-                        <button onClick={() => setSubScreen('main')} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                            <ChevronRight className="rotate-180" />
-                        </button>
-                        <h2 className="text-xl font-bold tracking-tight">Voyage Configuration</h2>
-                        </div>
-                        <span className="text-[10px] font-bold opacity-30 uppercase tracking-[0.2em]">Build: {game.currentVersionId}</span>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-6 md:p-8 scrollbar-thin">
-                  <AnimatePresence mode="wait">
-                    {settingTab === 'video' && (
-                      <motion.div key="video" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-8">
-                        <ToggleSetting 
-                          label="Atmospheric Shadows" 
-                          desc="Dynamic block-level voxel shadowing" 
-                          active={settings.shadowsEnabled}
-                          onToggle={() => {
-                            const val = !settings.shadowsEnabled;
-                            game.renderer.toggleShadows(val);
-                            updateSetting('shadowsEnabled', val);
-                          }}
-                        />
-                        <RangeSetting 
-                          label="Field of View" 
-                          value={settings.fov} 
-                          min={50} max={110} 
-                          onChange={(v) => {
-                            game.camera.instance.fov = v;
-                            game.camera.instance.updateProjectionMatrix();
-                            updateSetting('fov', v);
-                          }}
-                        />
-                        <ToggleSetting 
-                          label="Auto Performance Scaling" 
-                          desc="Adjusts render resolution automatically to hold your FPS target." 
-                          active={settings.autoQuality}
-                          onToggle={() => {
-                            updateSetting('autoQuality', !settings.autoQuality);
-                          }}
-                        />
-                        <RangeSetting 
-                          id="setting-fps"
-                          label="Performance Governor"
-                          value={settings.fpsCap}
-                          min={30}
-                          max={240}
-                          step={30}
-                          unit="FPS"
-                          onChange={(val) => {
-                            const cap = val > 200 ? 999 : val;
-                            updateSetting('fpsCap', cap);
-                          }}
-                          formatDisplay={(v) => v > 200 ? 'Uncapped' : `${v} FPS`}
-                        />
-                        <RangeSetting 
-                          label="Resolution Quality" 
-                          value={Math.round((settings.resolutionScale || 0.65) * 100)} 
-                          min={20} max={200} 
-                          disabled={settings.autoQuality}
-                          onChange={(v) => {
-                            const scale = v / 100;
-                            game.renderer.setResolutionScale(scale);
-                            game.settings.autoQuality = false; 
-                            updateSetting('resolutionScale', scale);
-                          }}
-                        />
-                        <RangeSetting 
-                          label="Render Distance" 
-                          value={settings.renderDistance || 8} 
-                          min={2} max={16} 
-                          disabled={settings.autoQuality}
-                          onChange={(v) => {
-                            game.world.setRenderDistance(v);
-                            game.settings.autoQuality = false;
-                            updateSetting('renderDistance', v);
-                          }}
-                        />
-                         <RangeSetting 
-                          label="Cloud Density" 
-                          value={Math.round((settings.cloudOpacity || 0.85) * 100)} 
-                          min={0} max={100} 
-                          onChange={(v) => {
-                            const op = v / 100;
-                            if (game.renderer.cloudMat) {
-                                game.renderer.cloudMat.uniforms.cloudOpacity.value = op;
-                            }
-                            updateSetting('cloudOpacity', op);
-                          }}
-                        />
-
-                        <div className="border-t border-white/5 pt-6 flex flex-col gap-6">
-                          <span className="text-[10px] font-bold text-arlo-blue uppercase tracking-[0.2em] px-1">Engine Stability Controls</span>
-                          <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3 text-[11px] leading-relaxed text-white/45">
-                            Auto Performance Scaling helps average FPS by lowering resolution when needed.
-                            Smooth Chunk Streaming reduces the size of chunk-mesh spikes while you move through the world.
-                          </div>
-                          <ToggleSetting 
-                            label="Smooth Chunk Streaming" 
-                            desc="Cuts chunk-pop stutters by rebuilding terrain more gently." 
-                            active={settings.stabilityMode}
-                            onToggle={() => updateSetting('stabilityMode', !settings.stabilityMode)}
-                          />
-                          <RangeSetting 
-                            label="Chunk Rebuild Budget" 
-                            value={settings.chunkRebuildBudget} 
-                            min={1} max={16} 
-                            onChange={(v) => updateSetting('chunkRebuildBudget', v)}
-                          />
-                          <button 
-                            onClick={applyPerformancePreset}
-                            className="w-full py-4 bg-arlo-blue/10 hover:bg-arlo-blue/20 border border-arlo-blue/20 rounded-xl text-arlo-blue text-xs font-bold uppercase tracking-widest transition-all"
-                          >
-                            Apply Safe Performance Preset
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {settingTab === 'audio' && (
-                      <motion.div key="audio" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-8">
-                        <RangeSetting 
-                          label="Master Volume" 
-                          value={Math.round((settings.audioMaster || 0.82) * 100)} 
-                          min={0} max={100} 
-                          onChange={(v) => {
-                            updateSetting('audioMaster', v / 100);
-                            game.audio.applyFromSettings(game.settingsManager.getAll());
-                          }}
-                        />
-                      </motion.div>
-                    )}
-
-                    {settingTab === 'controls' && (
-                      <motion.div key="controls" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-8 text-center text-white/40 py-12">
-                        <Gamepad size={48} className="mx-auto mb-4 opacity-20" />
-                        <p className="text-sm">Neural link sensitivity and remapping available in the next arlo patch.</p>
-                      </motion.div>
-                    )}
-
-                    {settingTab === 'social' && (
-                      <motion.div key="social" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-8 text-center text-white/40 py-12">
-                        <Users size={48} className="mx-auto mb-4 opacity-20" />
-                        <p className="text-sm">Multiplayer visibility and peer permissions.</p>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
+      <AnimatePresence>
+        {subScreen === 'settings' && (
+          <motion.div
+            key="settings"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-3 md:p-8"
+          >
+            <div className="w-full max-w-4xl">
+              <SettingsPanel onBack={back} />
             </div>
           </motion.div>
-          )}
+        )}
+        {creating && (
+          <CreateWorldModal
+            key="create"
+            onCancel={() => setCreating(false)}
+            onCreate={({ name, seed, mode }) => {
+              if (name) game.worldSlots.setSlotName(game.selectedWorldSlot, name);
+              if (seed) game.world.setSeed(seed);
+              else game.randomizeSeed();
+              game.selectedStartMode = mode;
+              game.startGame({ skipSeedApply: true });
+              setScreen('ingame');
+              setCreating(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
-          {subScreen === 'multiplayer' && (
-            <motion.div
-              key="multi"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="glass-card p-6 flex flex-col gap-6"
-            >
-              <div className="flex items-center gap-4">
-                <button onClick={() => setSubScreen('main')} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                  <ChevronRight className="rotate-180" />
-                </button>
-                <h2 className="text-xl font-bold">Multiplayer Tunnel</h2>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Join Remote World</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={joinCode}
-                    onChange={(e) => setJoinCode(e.target.value)}
-                    placeholder="Enter Join Code..."
-                    className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-arlo-blue/50 transition-colors text-sm"
-                  />
-                  <button 
-                    onClick={handleJoin}
-                    disabled={status.type === 'loading'}
-                    className="glass-btn glass-btn-blue !px-4"
-                  >
-                    Connect
-                  </button>
-                </div>
-              </div>
-
-              {status.message && (
-                <div className={`p-4 rounded-xl flex items-center gap-3 text-sm ${
-                  status.type === 'error' ? 'bg-red-500/10 text-red-200 border border-red-500/20' : 
-                  status.type === 'success' ? 'bg-green-500/10 text-green-200 border border-green-500/20' :
-                  'bg-blue-500/10 text-blue-200 border border-blue-500/20'
-                }`}>
-                  {status.type === 'error' ? <AlertCircle size={18}/> : 
-                   status.type === 'success' ? <CheckCircle2 size={18}/> : 
-                   <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
-                  {status.message}
-                </div>
-              )}
-
-              <div className="mt-auto p-4 rounded-xl bg-arlo-blue/5 border border-arlo-blue/10">
-                <p className="text-[10px] text-white/40 leading-relaxed italic">
-                  To host a world and get a Join Code, simply start a Singleplayer world. Your friends can then use your code to join you.
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Modal extracted to solve wait-mode child conflicts */}
-        <AnimatePresence>
-          {showCreateModal && (
-            <motion.div 
-              key="create-modal-overlay"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-6"
-            >
-              <motion.div 
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                className="glass-card max-w-sm w-full p-8 flex flex-col gap-6 border-arlo-blue/20"
-              >
-                <div className="flex flex-col gap-1">
-                  <h3 className="text-xl font-bold text-arlo-blue tracking-tight">Forge New World</h3>
-                  <p className="text-[10px] opacity-40 uppercase tracking-widest font-bold">Slot: {game.selectedWorldSlot?.toUpperCase()}</p>
-                </div>
-
-                <div className="flex flex-col gap-5">
-                   <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">World Name</label>
-                      <input 
-                        type="text" 
-                        placeholder="Arlo's Odyssey..."
-                        className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-arlo-blue/50 transition-colors"
-                        value={newWorldData.name}
-                        onChange={(e) => setNewWorldData({...newWorldData, name: e.target.value})}
-                      />
-                   </div>
-                   <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">World Seed (Optional)</label>
-                      <input 
-                        type="text" 
-                        placeholder="Random"
-                        className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-arlo-blue/50 transition-colors"
-                        value={newWorldData.seed}
-                        onChange={(e) => setNewWorldData({...newWorldData, seed: e.target.value})}
-                      />
-                   </div>
-                   <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Simulation Mode</label>
-                      <div className="grid grid-cols-2 gap-2">
-                         {['SURVIVAL', 'CREATIVE', 'ADVENTURE', 'SPECTATOR'].map(m => (
-                           <button
-                             key={m}
-                             onClick={() => setNewWorldData({...newWorldData, mode: m})}
-                             className={`px-3 py-2 rounded-lg text-[10px] font-bold transition-all border
-                               ${newWorldData.mode === m 
-                                 ? 'bg-arlo-blue/20 border-arlo-blue text-arlo-blue shadow-[0_0_10px_rgba(0,195,227,0.2)]' 
-                                 : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'}`}
-                           >
-                             {m}
-                           </button>
-                         ))}
-                      </div>
-                   </div>
-                </div>
-
-                <div className="flex gap-3 mt-4">
-                  <button 
-                    onClick={() => setShowCreateModal(false)}
-                    className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-bold text-sm transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={() => {
-                      if (newWorldData.name.trim()) {
-                        game.worldSlots.setSlotName(game.selectedWorldSlot, newWorldData.name.trim());
-                      }
-                      if (newWorldData.seed.trim()) {
-                         game.world.setSeed(newWorldData.seed.trim());
-                      } else {
-                         game.randomizeSeed();
-                      }
-                      
-                      game.selectedStartMode = newWorldData.mode;
-                      game.startGame({ skipSeedApply: true });
-                      setScreen('ingame');
-                      setShowCreateModal(false);
-                    }}
-                    className="flex-1 glass-btn glass-btn-blue !px-4"
-                  >
-                    Forge
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
+      <div className="fixed bottom-3 left-4 text-[10px] font-bold tracking-widest uppercase text-white/30 pointer-events-none">
+        ArloCraft {game.currentVersionId} · {BUILD_LABEL}
       </div>
-
-      {/* Version Footer */}
-      <div className="absolute bottom-8 left-8 flex flex-col gap-0.5 opacity-20 hover:opacity-100 transition-opacity pointer-events-none">
-          <span className="text-[10px] font-bold tracking-[0.3em] uppercase">ArloCraft {game.currentVersionId} · {BUILD_LABEL}</span>
-          <span className="text-[8px] font-medium opacity-60 uppercase tracking-widest">© 2026 Anton Retro • All Rights Reserved</span>
-      </div>
-
     </div>
   );
 };
 
-const MenuButton = ({ label, desc, icon, onClick, color = 'default' }) => {
-  const colorClasses = {
-    default: 'border-white/10 hover:bg-white/10',
-    blue: 'border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20 text-blue-100',
-    purple: 'border-purple-500/20 bg-purple-500/10 hover:bg-purple-500/20 text-purple-100',
+const WorldsScreen = ({ slots, onBack, onPlay, onCreate, onChanged }) => {
+  const game = getGame();
+  const [renaming, setRenaming] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [full, setFull] = useState(false);
+  const saved = slots.filter((s) => s.summary);
+
+  const commitRename = (slotId) => {
+    if (renameValue.trim()) game.worldSlots.setSlotName(slotId, renameValue.trim().slice(0, 32));
+    setRenaming(null);
+    onChanged();
   };
 
   return (
-    <motion.button
-      variants={{ hidden: { opacity: 0, x: -20 }, visible: { opacity: 1, x: 0 } }}
-      whileHover={{ x: 4 }}
-      onClick={onClick}
-      className={`w-full group glass-card p-4 flex items-center gap-4 text-left transition-all ${colorClasses[color]}`}
-    >
-      <div className={`p-3 rounded-xl bg-white/5 group-hover:scale-110 transition-transform ${color === 'default' ? '' : 'bg-transparent'}`}>
-        {icon}
+    <Panel className="max-h-[80vh]">
+      <ScreenHeader
+        title="Your worlds"
+        subtitle={`${saved.length} of ${slots.length} save slots used`}
+        onBack={onBack}
+      />
+
+      <div className="flex flex-col gap-2.5 overflow-y-auto -mx-1 px-1 scrollbar-thin">
+        {saved.length === 0 && (
+          <div className="rounded-xl border-2 border-dashed border-white/10 p-6 text-center text-sm text-white/50">
+            No worlds yet. Make your first one below!
+          </div>
+        )}
+        {saved.map(({ id, summary }) => (
+          <div
+            key={id}
+            className="flex items-center gap-3 rounded-xl border-2 border-white/5 bg-white/[0.04] p-3"
+          >
+            <button
+              onClick={() => onPlay(id)}
+              title="Play"
+              className="w-12 h-12 shrink-0 rounded-lg grid place-items-center bg-[#5fae3c] border-2 border-black/40 shadow-[inset_0_-3px_0_rgba(0,0,0,0.3)] hover:brightness-110"
+            >
+              <Play size={20} fill="currentColor" />
+            </button>
+            <div className="flex-1 min-w-0">
+              {renaming === id ? (
+                <input
+                  autoFocus
+                  className="field !py-1.5"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => commitRename(id)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') commitRename(id);
+                    if (e.key === 'Escape') setRenaming(null);
+                  }}
+                />
+              ) : (
+                <div className="font-bold truncate">{summary.name}</div>
+              )}
+              <div className="text-xs text-white/50 truncate">
+                {MODE_LABEL[summary.mode] ?? summary.mode} · {timeAgo(summary.savedAt)} · seed {summary.seed}
+              </div>
+            </div>
+            {confirmDelete === id ? (
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  onClick={() => {
+                    game.deleteWorldSlot(id);
+                    setConfirmDelete(null);
+                    onChanged();
+                  }}
+                  className="block-btn block-btn-red !px-3 !py-2 text-xs"
+                >
+                  Delete
+                </button>
+                <button onClick={() => setConfirmDelete(null)} className="block-btn block-btn-ghost !px-3 !py-2 text-xs">
+                  Keep
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-1 shrink-0">
+                <button
+                  title="Rename"
+                  onClick={() => {
+                    setRenameValue(summary.name);
+                    setRenaming(id);
+                  }}
+                  className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/10"
+                >
+                  <Pencil size={16} />
+                </button>
+                <button
+                  title="Delete"
+                  onClick={() => setConfirmDelete(id)}
+                  className="p-2 rounded-lg text-red-300/70 hover:text-red-300 hover:bg-red-500/15"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
-      <div className="flex flex-col">
-        <span className="font-bold tracking-wide">{label}</span>
-        <span className="text-xs opacity-40 group-hover:opacity-60 transition-opacity">{desc}</span>
-      </div>
-      <ChevronRight className="ml-auto opacity-20 group-hover:opacity-100 transition-opacity" size={18} />
-    </motion.button>
+
+      {full && (
+        <div className="text-sm rounded-xl px-3 py-2 bg-amber-500/15 text-amber-100">
+          All save slots are full. Delete a world to make room.
+        </div>
+      )}
+      <BlockButton color="green" className="justify-center" icon={<Plus size={18} />} onClick={() => setFull(!onCreate())}>
+        New world
+      </BlockButton>
+    </Panel>
   );
 };
 
-const IconButton = ({ icon, label, color, onClick, badge = null, caption = null }) => (
-  <motion.button 
-    whileHover={{ scale: 1.02 }}
-    whileTap={{ scale: 0.98 }}
-    onClick={onClick}
-    className="glass-card p-4 flex flex-col items-center justify-center gap-3 hover:bg-white/10 transition-all border-white/5"
-  >
-    <div className={`text-${color}-400`}>{icon}</div>
-    <span className="text-xs font-bold uppercase tracking-widest opacity-60 text-white">{label}</span>
-    {badge ? (
-      <span className="rounded-full border border-orange-400/25 bg-orange-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.22em] text-orange-200">
-        {badge}
-      </span>
-    ) : null}
-    {caption ? (
-      <span className="text-center text-[10px] leading-relaxed text-white/45">
-        {caption}
-      </span>
-    ) : null}
-  </motion.button>
-);
+const CreateWorldModal = ({ onCancel, onCreate }) => {
+  const [name, setName] = useState('');
+  const [seed, setSeed] = useState('');
+  const [mode, setMode] = useState('SURVIVAL');
 
-const TabButton = ({ id, label, icon, active, onClick }) => (
-  <button 
-    onClick={() => onClick(id)}
-    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${active ? 'bg-arlo-blue/20 text-arlo-blue border border-arlo-blue/20' : 'hover:bg-white/5 text-white/60'}`}
-  >
-    {icon}
-    <span className="text-sm font-bold tracking-tight">{label}</span>
-  </button>
-);
-
-const RangeSetting = ({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  onChange,
-  disabled = false,
-  formatDisplay,
-}) => {
-  const [val, setVal] = useState(value);
-  useEffect(() => setVal(value), [value]);
+  const submit = () => onCreate({ name: name.trim(), seed: seed.trim(), mode });
 
   return (
-    <div
-      className={`flex flex-col gap-2 transition-opacity duration-300 ${
-        disabled ? 'opacity-30 pointer-events-none' : ''
-      }`}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4"
     >
-      <div className="flex justify-between items-center">
-        <span className="text-sm font-bold opacity-70 tracking-wide">{label}</span>
-        <span className="text-xs font-mono text-arlo-blue">
-          {formatDisplay ? formatDisplay(val) : val}
-        </span>
-      </div>
-      <input 
-        type="range" 
-        min={min} 
-        max={max} 
-        step={step}
-        value={val}
-        disabled={disabled}
-        onChange={(e) => {
-          const v = parseInt(e.target.value);
-          setVal(v);
-          onChange(v);
+      <motion.div
+        initial={{ scale: 0.95, y: 12 }}
+        animate={{ scale: 1, y: 0 }}
+        className="glass-card w-full max-w-lg p-6 flex flex-col gap-5 max-h-[92vh] overflow-y-auto"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.target.tagName === 'INPUT') submit();
         }}
-        className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-arlo-blue"
-      />
-    </div>
+      >
+        <ScreenHeader title="New world" onBack={onCancel} />
+
+        <label className="flex flex-col gap-2">
+          <span className="label-caps">Name</span>
+          <input
+            autoFocus
+            maxLength={32}
+            className="field"
+            placeholder="My World"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="label-caps">Seed</span>
+          <div className="flex gap-2">
+            <input
+              className="field"
+              placeholder="Leave empty for a random world"
+              value={seed}
+              onChange={(e) => setSeed(e.target.value)}
+            />
+            <button
+              title="Random seed"
+              onClick={() => setSeed(String(Math.floor(Math.random() * 1e9)))}
+              className="block-btn block-btn-ghost !px-3 shrink-0"
+            >
+              <Dices size={18} />
+            </button>
+          </div>
+        </label>
+
+        <div className="flex flex-col gap-2">
+          <span className="label-caps">Game mode</span>
+          <Choice options={MODES} value={mode} onChange={setMode} columns={2} />
+        </div>
+
+        <div className="flex gap-3">
+          <BlockButton className="flex-1 justify-center" onClick={onCancel}>
+            Cancel
+          </BlockButton>
+          <BlockButton color="green" className="flex-1 justify-center" icon={<Play size={18} />} onClick={submit}>
+            Create world
+          </BlockButton>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
-const ToggleSetting = ({ label, desc, active, onToggle }) => (
-  <button 
-    onClick={onToggle}
-    className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/5"
-  >
-    <div className="flex flex-col text-left">
-      <span className="text-sm font-bold tracking-wide">{label}</span>
-      <span className="text-[10px] opacity-40">{desc}</span>
-    </div>
-    <div className={`w-10 h-5 rounded-full transition-all relative ${active ? 'bg-arlo-blue' : 'bg-white/10'}`}>
-      <motion.div 
-        animate={{ x: active ? 20 : 2 }}
-        initial={false}
-        className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-lg"
-      />
-    </div>
-  </button>
-);
+const MultiplayerScreen = ({ onBack }) => {
+  const game = getGame();
+  const [joinCode, setJoinCode] = useState('');
+  const [status, setStatus] = useState(null);
+  const [myId, setMyId] = useState(() => game.multiplayer?.peer?.id || null);
+
+  useEffect(() => {
+    const mp = game.multiplayer;
+    if (!mp) return undefined;
+    if (!mp.peer) mp.init();
+    else setMyId(mp.peer.id);
+    const prev = mp.onConnected;
+    mp.onConnected = (id) => {
+      setMyId(id);
+      prev?.(id);
+    };
+    return () => {
+      mp.onConnected = prev;
+    };
+  }, [game.multiplayer]);
+
+  const join = async () => {
+    if (!joinCode.trim()) {
+      setStatus({ type: 'error', text: 'Type the code your friend gave you first.' });
+      return;
+    }
+    setStatus({ type: 'loading', text: 'Connecting…' });
+    try {
+      await game.multiplayer.connectToPeer(joinCode.trim());
+      setStatus({ type: 'success', text: 'Connected! Loading their world…' });
+    } catch (err) {
+      setStatus({ type: 'error', text: err.message });
+    }
+  };
+
+  return (
+    <Panel>
+      <ScreenHeader title="Play with friends" onBack={onBack} />
+
+      <div className="flex flex-col gap-2">
+        <span className="label-caps">Join a friend</span>
+        <div className="flex gap-2">
+          <input
+            className="field font-mono"
+            placeholder="Their join code"
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && join()}
+          />
+          <BlockButton color="blue" className="shrink-0" onClick={join} disabled={status?.type === 'loading'}>
+            Join
+          </BlockButton>
+        </div>
+      </div>
+
+      {status && (
+        <div
+          className={`p-3 rounded-xl flex items-center gap-3 text-sm ${
+            status.type === 'error'
+              ? 'bg-red-500/15 text-red-100'
+              : status.type === 'success'
+                ? 'bg-green-500/15 text-green-100'
+                : 'bg-sky-500/15 text-sky-100'
+          }`}
+        >
+          {status.type === 'error' ? (
+            <AlertCircle size={18} />
+          ) : status.type === 'success' ? (
+            <CheckCircle2 size={18} />
+          ) : (
+            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+          )}
+          {status.text}
+        </div>
+      )}
+
+      <div className="rounded-xl border-2 border-white/5 bg-white/[0.04] p-4 flex flex-col gap-2">
+        <span className="label-caps">Host your own world</span>
+        <p className="text-sm text-white/60 leading-relaxed">
+          Open any world, then share this code. Friends type it here to join you.
+        </p>
+        <div className="flex items-center justify-between gap-2 rounded-lg bg-black/40 px-3 py-2">
+          <span className="font-mono text-sm text-[#ffe066] truncate">{myId ?? 'Getting your code…'}</span>
+          {myId && (
+            <button
+              title="Copy"
+              onClick={() => navigator.clipboard?.writeText(myId)}
+              className="p-1.5 rounded-md hover:bg-white/10 text-white/60"
+            >
+              <Copy size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+};
+
+const CharacterScreen = ({ onBack }) => {
+  const game = getGame();
+  const [name, setName] = useState(() => game.settings?.playerName || 'Arlo');
+  const [lookup, setLookup] = useState('');
+  const [selected, setSelected] = useState(() => game.skinSystem?.currentSkin || 'classic_steve');
+
+  useEffect(() => {
+    const onSkin = (e) => e.detail?.skinId && setSelected(e.detail.skinId);
+    window.addEventListener('skin-changed', onSkin);
+    return () => window.removeEventListener('skin-changed', onSkin);
+  }, []);
+
+  const applyLookup = () => {
+    const user = lookup.trim();
+    if (!user) return;
+    setSelected(`custom_${user.replace(/\s+/g, '_')}`);
+    game.skinSystem.applySkinByUsername(user);
+    setLookup('');
+  };
+
+  const skins = [...game.skinSystem.classicSkins, ...game.skinSystem.randomSkins];
+
+  return (
+    <Panel className="max-h-[80vh]">
+      <ScreenHeader title="Character" subtitle={`Wearing: ${game.skinSystem.getSkinMeta(selected).name}`} onBack={onBack} />
+
+      <label className="flex flex-col gap-2">
+        <span className="label-caps">Your name</span>
+        <input
+          className="field"
+          maxLength={16}
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            game.settingsManager.set('playerName', e.target.value);
+          }}
+        />
+      </label>
+
+      <div className="flex flex-col gap-2">
+        <span className="label-caps">Use a Minecraft player's skin</span>
+        <div className="flex gap-2">
+          <input
+            className="field"
+            placeholder="Username, e.g. Notch"
+            value={lookup}
+            onChange={(e) => setLookup(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && applyLookup()}
+          />
+          <BlockButton color="blue" className="shrink-0" onClick={applyLookup}>
+            Use
+          </BlockButton>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 min-h-0">
+        <span className="label-caps">Skins</span>
+        <div className="grid grid-cols-5 gap-2 overflow-y-auto max-h-48 p-0.5 scrollbar-thin">
+          {skins.map((skin) => (
+            <button
+              key={skin.id}
+              title={skin.name}
+              onClick={() => {
+                setSelected(skin.id);
+                game.skinSystem.applySkin(skin.id);
+              }}
+              className={`aspect-square p-1.5 rounded-lg border-2 transition-colors ${
+                selected === skin.id ? 'bg-[#5fae3c]/25 border-[#5fae3c]' : 'bg-white/[0.04] border-white/5 hover:bg-white/10'
+              }`}
+            >
+              <img
+                src={skin.faceUrl || skin.url || `${import.meta.env.BASE_URL || '/'}assets/skins/default_face.png`}
+                className="w-full h-full object-contain pixelated rounded"
+                alt={skin.name}
+              />
+            </button>
+          ))}
+        </div>
+      </div>
+    </Panel>
+  );
+};

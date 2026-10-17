@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getGame } from '../UIManager';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Utensils, Zap } from 'lucide-react';
+
 import { ItemIcon } from './ItemIcon';
 import { MiniMap } from './MiniMap';
 
@@ -11,6 +11,7 @@ export const HUD = () => {
   const [activeSlot, setActiveSlot] = useState(0);
   const [inventory, setInventory] = useState(Array(9).fill(null));
   const [targetBlock, setTargetBlock] = useState(null);
+  const [mode, setMode] = useState(() => game.gameState.mode);
 
   useEffect(() => {
     // Listen for engine updates
@@ -37,6 +38,8 @@ export const HUD = () => {
     window.addEventListener('inventory-changed', handleInventory);
     window.addEventListener('slot-changed', handleSlot);
     window.addEventListener('effects-changed', handleEffects);
+    const handleMode = (e) => setMode(e.detail);
+    window.addEventListener('mode-changed', handleMode);
 
     let targetTimeout;
     const handleTarget = (e) => {
@@ -68,6 +71,7 @@ export const HUD = () => {
       window.removeEventListener('inventory-changed', handleInventory);
       window.removeEventListener('slot-changed', handleSlot);
       window.removeEventListener('effects-changed', handleEffects);
+      window.removeEventListener('mode-changed', handleMode);
       window.removeEventListener('target-block-changed', handleTarget);
       if (targetTimeout) clearTimeout(targetTimeout);
     };
@@ -81,15 +85,6 @@ export const HUD = () => {
       {/* Top Right: MiniMap */}
       <div className="absolute top-4 right-4 md:top-8 md:right-8 z-20">
         <MiniMap />
-      </div>
-
-      {/* Top Left: Status Readout */}
-      <div className="absolute top-4 left-4 md:top-8 md:left-8 flex items-center gap-4 glass-card p-3 md:p-4 border-white/5">
-        <PlayerAvatar />
-        <div className="flex flex-col gap-1 items-start">
-          <span className="premium-text text-arlo-blue">{game.gameState.mode} MODE</span>
-          <span className="text-[11px] opacity-50 italic font-medium tracking-wide">Level {levelNumber} Voyager</span>
-        </div>
       </div>
 
       {/* Top Right: Status Effects (NEW) */}
@@ -119,16 +114,6 @@ export const HUD = () => {
 
       {/* Main HUD Bottom Container */}
       <div className="flex flex-col gap-4 w-full max-w-2xl items-center">
-        {/* XP Bar (Voyage) */}
-        <div className="w-full max-w-sm h-2 bg-black/40 rounded-full overflow-hidden border border-white/5 mb-1 relative">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${(stats.xp / (stats.max || 100)) * 100}%` }}
-            className="h-full bg-green-400 shadow-[0_0_12px_rgba(74,222,128,0.3)]"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-        </div>
-
         {/* Target Block & Active Item (NEW) */}
         <div className="h-6 -mt-2 mb-1 flex items-center justify-center relative">
             <AnimatePresence mode="wait">
@@ -138,7 +123,7 @@ export const HUD = () => {
                         initial={{ opacity: 0, scale: 0.9, y: 5 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 1.1, y: -5 }}
-                        className="premium-text !text-arlo-blue opacity-80"
+                        className="text-sm font-bold text-white px-2.5 py-0.5 rounded-md bg-black/45"
                     >
                         {targetBlock.name}
                     </motion.div>
@@ -149,7 +134,7 @@ export const HUD = () => {
                             initial={{ opacity: 0, y: 5 }}
                             animate={{ opacity: 0.6, y: 0 }}
                             exit={{ opacity: 0, y: -5 }}
-                            className="premium-text !text-white !text-[9px] uppercase tracking-[0.2em]"
+                            className="text-sm font-bold text-white px-2.5 py-0.5 rounded-md bg-black/45"
                         >
                             {inventory[activeSlot].name || inventory[activeSlot].id.replace(/_/g, ' ')}
                         </motion.div>
@@ -158,13 +143,18 @@ export const HUD = () => {
             </AnimatePresence>
         </div>
 
-        <div className="flex justify-between items-end gap-2 w-full max-w-sm">
-          <StatusBar icon={<Heart size={14} className="text-red-400" />} value={stats.hp} max={stats.maxHp} color="bg-red-500" />
-          <StatusBar icon={<Utensils size={14} className="text-orange-400" />} value={stats.hunger} max={stats.maxHunger} color="bg-orange-500" dir="rtl" />
-        </div>
+        {(mode === 'SURVIVAL' || mode === 'ADVENTURE') && (
+          <div className="flex flex-col gap-1.5 items-stretch">
+            <div className="flex justify-between gap-6">
+              <IconRow value={stats.hp} max={game.gameState.maxHp ?? 20} kind="heart" />
+              <IconRow value={stats.hunger} max={20} kind="food" reverse />
+            </div>
+            <XpBar xp={stats.xp} max={stats.max} level={levelNumber} />
+          </div>
+        )}
 
         {/* Hotbar */}
-        <div className="flex justify-center items-center gap-1.5 md:gap-2 px-2 md:px-4 py-2 md:py-3 glass-card pointer-events-auto w-auto overflow-visible">
+        <div className="flex justify-center items-center gap-1 p-1.5 rounded-xl bg-black/55 border-2 border-black/60 shadow-[inset_0_2px_0_rgba(255,255,255,0.08)] pointer-events-auto w-auto overflow-visible">
           {inventory.map((item, i) => (
             <HotbarSlot
               key={i}
@@ -180,7 +170,10 @@ export const HUD = () => {
       <ChatBox game={game} />
 
       {/* Centered Crosshair */}
-      <div id="crosshair" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 border-2 border-white/40 rounded-full" />
+      <div id="crosshair" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 mix-blend-difference">
+        <div className="absolute left-1/2 top-0 -translate-x-1/2 w-0.5 h-full bg-white" />
+        <div className="absolute top-1/2 left-0 -translate-y-1/2 h-0.5 w-full bg-white" />
+      </div>
 
       {/* Modern Debug Overlay (F3) */}
       <DebugOverlay />
@@ -279,50 +272,11 @@ const ChatBox = ({ game }) => {
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             className="flex-1 bg-black/60 backdrop-blur-2xl border border-arlo-blue/50 rounded-lg px-4 py-3 text-xs text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-arlo-blue/30 shadow-2xl"
-            placeholder="Type your transmission..."
+            placeholder="Say something, or type / for commands"
           />
           <button type="submit" className="hidden">Send</button>
         </motion.form>
       )}
-    </div>
-  );
-};
-
-const PlayerAvatar = () => {
-  const base = import.meta.env.BASE_URL || '/';
-  const defaultAvatar = (base.endsWith('/') ? base : base + '/') + 'assets/steve.png';
-  const [avatar, setAvatar] = useState(defaultAvatar);
-  
-  useEffect(() => {
-    const handleUpdate = (e) => {
-      if (typeof e.detail?.avatarUrl === 'string' && e.detail.avatarUrl) {
-        setAvatar(e.detail.avatarUrl);
-      }
-    };
-    window.addEventListener('skin-updated', handleUpdate);
-    setAvatar(defaultAvatar);
-    return () => window.removeEventListener('skin-updated', handleUpdate);
-  }, []);
-
-  // Standard MC Skin: Head is at 8,8 for 8x8 pixels in a 64x64 skin
-  // background-size: 800% (64/8 * 100)
-  // background-position: -8px -8px (relative to current size)
-  // To keep it responsive, we use percentages: 
-  // x: 8 / (64-8) = 14.28%
-  // y: 8 / (64-8) = 14.28%
-  
-  return (
-    <div className="relative w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden border border-white/20 bg-white/5 flex-shrink-0 shadow-lg shadow-black/20">
-        <div 
-            className="w-full h-full"
-            style={{ 
-                backgroundImage: `url(${avatar || defaultAvatar})`,
-                backgroundSize: '800%',
-                backgroundPosition: '14.28% 14.28%',
-                imageRendering: 'pixelated'
-            }}
-        />
-        <div className="absolute inset-0 border border-white/10 rounded-lg pointer-events-none" />
     </div>
   );
 };
@@ -392,35 +346,62 @@ const DebugOverlay = () => {
   );
 };
 
-const StatusBar = ({ icon, value, max, color, dir = 'ltr' }) => {
-  const safeMax = Number.isFinite(max) && max > 0 ? max : 1;
-  const pct = Math.max(0, Math.min(100, (value / safeMax) * 100));
+const HEART_PATH =
+  'M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.6 4.5c2.1 0 3.6 1.2 5.4 3.2 1.8-2 3.3-3.2 5.4-3.2 3.6 0 5.7 3.9 4.2 7.3C19.5 16.4 12 21 12 21z';
+const FOOD_PATH =
+  'M15 3c3.3 0 6 2.7 6 6 0 2.6-1.7 4.9-4.1 5.7L11 20.6a2 2 0 0 1-2.8 0l-.4-.4-2.6 1.6a1.5 1.5 0 0 1-2-2l1.6-2.6-.4-.4a2 2 0 0 1 0-2.8l5.9-5.9C11.1 4.7 12.9 3 15 3z';
+
+/** Ten hearts or drumsticks, each worth 2 points, with half icons. */
+const IconRow = ({ value, max, kind, reverse }) => {
+  const path = kind === 'heart' ? HEART_PATH : FOOD_PATH;
+  const fill = kind === 'heart' ? '#e8312f' : '#c98a3b';
+  const icons = Math.ceil((max || 20) / 2);
+  const v = Math.max(0, Math.round(value || 0));
+  const low = kind === 'heart' && v <= 4;
   return (
-    <div className={`flex flex-col gap-1.5 w-full max-w-[160px] ${dir === 'rtl' ? 'items-end' : 'items-start'}`}>
-      <div className={`flex items-center gap-2 text-white/30 premium-text !text-[8px] ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
-        {icon} <span>{Math.round(value || 0)} / {Math.round(max || 0)}</span>
-      </div>
-      <div className="w-full h-1.5 bg-black/60 rounded-full overflow-hidden border border-white/5 shadow-inner">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-          className={`h-full ${color} shadow-[0_0_15px_rgba(255,255,255,0.1)]`}
-        />
-      </div>
+    <div className={`flex gap-px ${reverse ? 'flex-row-reverse' : ''} ${low ? 'animate-pulse' : ''}`}>
+      {Array.from({ length: icons }, (_, i) => {
+        const part = Math.max(0, Math.min(2, v - i * 2)); // 0 empty, 1 half, 2 full
+        return (
+          <svg key={i} viewBox="0 0 24 24" className="w-4 h-4 md:w-[18px] md:h-[18px] drop-shadow-[0_1px_0_rgba(0,0,0,0.9)]">
+            <path d={path} fill="rgba(0,0,0,0.55)" stroke="#111" strokeWidth="2" />
+            {part > 0 && (
+              <>
+                <clipPath id={`${kind}-${i}`}>
+                  <rect x={reverse ? (part === 1 ? 12 : 0) : 0} y="0" width={part === 2 ? 24 : 12} height="24" />
+                </clipPath>
+                <path d={path} fill={fill} clipPath={`url(#${kind}-${i})`} />
+              </>
+            )}
+          </svg>
+        );
+      })}
+    </div>
+  );
+};
+
+const XpBar = ({ xp, max, level }) => {
+  const pct = Math.max(0, Math.min(100, ((xp || 0) / (max || 100)) * 100));
+  return (
+    <div className="relative h-2 rounded-sm bg-black/70 border border-black">
+      <div className="h-full bg-[#7fdc3c] transition-[width] duration-300" style={{ width: `${pct}%` }} />
+      {level > 0 && (
+        <span className="absolute left-1/2 -translate-x-1/2 -top-4 font-pixel text-[10px] text-[#80ff20]" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>
+          {level}
+        </span>
+      )}
     </div>
   );
 };
 
 const HotbarSlot = ({ item, active, index }) => (
   <motion.button
-    whileHover={{ y: -4, scale: 1.05 }}
     whileTap={{ scale: 0.95 }}
     onClick={() => window.dispatchEvent(new CustomEvent('set-hotbar-index', { detail: index }))}
-    className={`relative w-12 h-12 md:w-14 md:h-14 aspect-square flex-none rounded-md flex items-center justify-center transition-all border-2 group
+    className={`relative w-11 h-11 md:w-[52px] md:h-[52px] aspect-square flex-none rounded-lg flex items-center justify-center transition-colors border-2 group
       ${active
-        ? 'bg-arlo-blue/30 border-arlo-blue shadow-[0_0_15px_rgba(0,195,227,0.4)] scale-110 z-10'
-        : 'bg-black/40 border-white/10 hover:bg-white/10'
+        ? 'bg-white/15 border-[#ffe066] shadow-[0_0_0_2px_rgba(0,0,0,0.6)] z-10'
+        : 'bg-white/[0.06] border-white/5 hover:bg-white/10'
       }`}
   >
     <div className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center">
@@ -432,7 +413,7 @@ const HotbarSlot = ({ item, active, index }) => (
           </div>
         </>
       ) : (
-        <div className="w-1 h-1 bg-white/10 rounded-full" />
+        <span className="text-[10px] font-bold text-white/15">{index + 1}</span>
       )}
     </div>
   </motion.button>

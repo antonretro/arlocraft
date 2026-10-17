@@ -31,9 +31,18 @@
 }
 
 @layer components {
+  /* Panels: dark slate with a soft pixel bevel, shared by every menu. */
   .glass-card {
-    @apply bg-black/30 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl;
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    @apply rounded-2xl text-white;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 40%),
+      rgba(22, 24, 28, 0.82);
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      inset 0 2px 0 rgba(255, 255, 255, 0.07),
+      inset 0 -3px 0 rgba(0, 0, 0, 0.35),
+      0 18px 40px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(14px);
   }
 
   .premium-text {
@@ -41,24 +50,68 @@
     text-shadow: 0 2px 4px rgba(0,0,0,0.5);
   }
 
-  .glass-btn {
-    @apply relative overflow-hidden px-6 py-3 rounded-xl transition-all duration-500 bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/20 active:scale-95 text-sm font-semibold tracking-wide;
+  /* Chunky block buttons that press down when clicked. */
+  /* .glass-btn is the older name, kept so every screen picks up this style. */
+  .block-btn, .glass-btn {
+    @apply relative flex items-center gap-3 rounded-xl px-5 py-3 font-bold text-sm text-white select-none outline-none;
+    background: linear-gradient(180deg, #4b5058, #3a3e45);
+    border: 2px solid rgba(0, 0, 0, 0.55);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.16), inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+    transition: transform 80ms ease, filter 120ms ease, box-shadow 80ms ease;
   }
-
-  .glass-btn-blue {
-    @apply bg-arlo-blue/10 border-arlo-blue/20 hover:bg-arlo-blue/20 text-arlo-blue;
-    box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.05);
+  .block-btn:hover, .glass-btn:hover { filter: brightness(1.15); }
+  .block-btn:focus-visible, .glass-btn:focus-visible { box-shadow: inset 0 2px 0 rgba(255,255,255,.16), inset 0 -4px 0 rgba(0,0,0,.3), 0 0 0 3px #ffe066; }
+  .block-btn:active, .glass-btn:active {
+    transform: translateY(2px);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.3);
   }
+  .block-btn:disabled, .glass-btn:disabled { opacity: 0.4; pointer-events: none; }
+  .glass-btn { justify-content: center; }
+  .block-btn-green { background: linear-gradient(180deg, #5fae3c, #3f8a2a); }
+  .block-btn-blue, .glass-btn-blue { background: linear-gradient(180deg, #3d8fd6, #2a6fb0); }
+  .block-btn-purple { background: linear-gradient(180deg, #8a5cd6, #6a3fb4); }
+  .block-btn-red, .glass-btn-red { background: linear-gradient(180deg, #c8443c, #9c2e28); }
+  .block-btn-gold { background: linear-gradient(180deg, #e0a72a, #b9801a); }
+  .block-btn-ghost { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.08); box-shadow: none; }
 
-  .glass-btn-red {
-    @apply bg-red-500/10 border-red-500/20 hover:bg-red-500/20 text-red-400;
-    box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.05);
+
+  .field {
+    @apply w-full rounded-xl px-4 py-3 text-sm text-white outline-none transition-colors;
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.08);
+  }
+  .field:focus { border-color: #ffe066; }
+
+  .label-caps {
+    @apply text-[11px] font-bold uppercase tracking-[0.16em] text-white/50;
   }
 
   .ni-title {
     @apply font-pixel text-4xl md:text-6xl text-white;
     filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.8));
   }
+
+  /* Game logo: stacked block-letter shadow like an extruded sign. */
+  .logo-title {
+    @apply font-pixel text-white leading-none;
+    font-size: clamp(2.2rem, 7vw, 4.6rem);
+    text-shadow:
+      0 3px 0 #8a8f98, 0 6px 0 #5d626b, 0 9px 0 #3a3e45,
+      0 14px 18px rgba(0, 0, 0, 0.6);
+  }
+
+  .splash-text {
+    @apply font-pixel text-[11px] md:text-sm whitespace-nowrap;
+    color: #ffe066;
+    text-shadow: 2px 2px 0 #3f3000;
+    animation: splash-pulse 0.9s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes splash-pulse {
+  from { transform: rotate(-14deg) scale(1); }
+  to { transform: rotate(-14deg) scale(1.1); }
 }
 
 /* Item Icons & Isometric Logic */
