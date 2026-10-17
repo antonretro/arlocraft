@@ -216,13 +216,14 @@ function normalizeBlock(folderId, raw, scriptModule, readmeContent) {
   // Handle naming mismatch for Minecraft-style blocks (e.g. concrete_black -> black_concrete)
   let tid = merged.textureId || merged.id;
   if (typeof tid === 'string') {
+    // Longer names first so concrete_powder_red doesn't match "concrete".
     const swapTypes = [
+      'concrete_powder',
+      'glazed_terracotta',
+      'stained_glass',
       'concrete',
       'terracotta',
       'wool',
-      'glazed_terracotta',
-      'concrete_powder',
-      'stained_glass',
       'candle',
     ];
     for (const type of swapTypes) {

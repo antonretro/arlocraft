@@ -4,6 +4,44 @@ import { normalizeBlockVariantId } from '../data/blockIds.js';
 
 import { ResourcePackManager } from '../world/ResourcePackManager.js';
 
+// ArloCraft names coloured blocks family-first (wool_red, concrete_powder_red)
+// while the textures use Minecraft's colour-first names (red_wool).
+const COLOURS = [
+  'white',
+  'orange',
+  'magenta',
+  'light_blue',
+  'yellow',
+  'lime',
+  'pink',
+  'gray',
+  'light_gray',
+  'cyan',
+  'purple',
+  'blue',
+  'brown',
+  'green',
+  'red',
+  'black',
+];
+const COLOUR_FAMILIES = [
+  'wool',
+  'stained_glass',
+  'concrete',
+  'concrete_powder',
+  'terracotta',
+  'glazed_terracotta',
+  'carpet',
+];
+function colourFamilyAliases() {
+  const aliases = {};
+  for (const family of COLOUR_FAMILIES) {
+    for (const colour of COLOURS)
+      aliases[`${family}_${colour}`] = `${colour}_${family}`;
+  }
+  return aliases;
+}
+
 export class BlockRegistry {
   constructor() {
     this.textureLoader = new THREE.TextureLoader();
@@ -38,40 +76,9 @@ export class BlockRegistry {
       fire: 'fire_0',
       snow_block: 'snow',
       sweet_berry_bush: 'sweet_berry_bush_stage3',
-      wool_white: 'white_wool',
-      wool_orange: 'orange_wool',
-      wool_magenta: 'magenta_wool',
-      wool_light_blue: 'light_blue_wool',
-      wool_yellow: 'yellow_wool',
-      wool_lime: 'lime_wool',
-      wool_pink: 'pink_wool',
-      wool_gray: 'gray_wool',
-      wool_light_gray: 'light_gray_wool',
-      wool_cyan: 'cyan_wool',
-      wool_purple: 'purple_wool',
-      wool_blue: 'blue_wool',
-      wool_brown: 'brown_wool',
-      wool_green: 'green_wool',
-      wool_red: 'red_wool',
-      wool_black: 'black_wool',
-      stained_glass_white: 'white_stained_glass',
-      stained_glass_orange: 'orange_stained_glass',
-      stained_glass_magenta: 'magenta_stained_glass',
-      stained_glass_light_blue: 'light_blue_stained_glass',
-      stained_glass_yellow: 'yellow_stained_glass',
-      stained_glass_lime: 'lime_stained_glass',
-      stained_glass_pink: 'pink_stained_glass',
-      stained_glass_gray: 'gray_stained_glass',
-      stained_glass_light_gray: 'light_gray_stained_glass',
-      stained_glass_cyan: 'cyan_stained_glass',
-      stained_glass_purple: 'purple_stained_glass',
-      stained_glass_blue: 'blue_stained_glass',
-      stained_glass_brown: 'brown_stained_glass',
-      stained_glass_green: 'green_stained_glass',
-      stained_glass_red: 'red_stained_glass',
-      stained_glass_black: 'black_stained_glass',
       tomato: 'sweet_berry_bush_stage3',
       tomato_stage3: 'sweet_berry_bush_stage3',
+      ...colourFamilyAliases(),
     };
     this.VIRTUAL_IDS = new Set([
       'cave_lush',
@@ -172,6 +179,7 @@ export class BlockRegistry {
       large_fern_top: 'fern',
       nuke: 'tnt',
       chest: 'barrel',
+      ...colourFamilyAliases(),
     };
 
     for (const fileName of this.resourceManager.manifest) {

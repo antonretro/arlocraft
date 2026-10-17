@@ -1,14 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getGame } from '../UIManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
-  Search,
   Hammer,
-  Leaf,
-  Cpu,
-  Carrot,
-  Palette,
   Trophy,
   Warehouse,
   Shield,
@@ -17,8 +12,8 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { ItemIcon } from './ItemIcon';
+import { CreativeCatalog } from './CreativeCatalog';
 import { RECIPE_BOOK } from '../../data/recipeBook';
-import { BLOCKS } from '../../data/blocks';
 import { AchievementScreen } from './AchievementScreen';
 import { CraftingSystem } from '../../engine/CraftingSystem';
 import { TOOLS } from '../../data/tools';
@@ -74,13 +69,6 @@ function moveIntoSlots(arr, indices, item, maxPer = getMaxStackSize(item)) {
 
 const range = (from, to) =>
   Array.from({ length: to - from }, (_, i) => from + i);
-const CATEGORIES = [
-  { id: 'Building', icon: Hammer, label: 'Construction' },
-  { id: 'Natural', icon: Leaf, label: 'Natural' },
-  { id: 'Redstone', icon: Cpu, label: 'Redstone' },
-  { id: 'Consumables', icon: Carrot, label: 'Consumables' },
-  { id: 'Decorative', icon: Palette, label: 'Applied' },
-];
 
 export const Inventory = ({
   onClose,
@@ -94,8 +82,6 @@ export const Inventory = ({
   const [carryItem, setCarryItemState] = useState(null);
   const carryRef = useRef(null);
   const [activeTab, setActiveTab] = useState('STORAGE'); // STORAGE | ACHIEVEMENTS
-  const [activeCategory, setActiveCategory] = useState('Building');
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Container Mode: PLAYER | WORKSHOP (crafting table) | FURNACE | CHEST
   const uiMode = initialMode;
@@ -145,19 +131,6 @@ export const Inventory = ({
     },
     [game]
   );
-
-  // Creative Filtering
-  const filteredBlocks = useMemo(() => {
-    return BLOCKS.filter((b) => {
-      const matchCat =
-        b.category === activeCategory ||
-        (activeCategory === 'Building' && b.category === 'Construction');
-      const matchSearch =
-        b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.id.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCat && matchSearch;
-    });
-  }, [activeCategory, searchQuery]);
 
   // Crafting: the 2x2 player grid uses slots 0,1,3,4 of the 3x3 grid.
   const getActiveGrid = () => {
@@ -352,8 +325,18 @@ export const Inventory = ({
     changed();
   };
 
-  const handleCreativePick = (blockId) => {
-    setCarryItem({ id: blockId, kind: 'block', count: 64 });
+  const handleCreativePick = (entry, toInventory) => {
+    const stack = gameState.createItemStack(
+      entry.id,
+      entry.kind === 'tool' || entry.kind === 'armor' ? 1 : 64,
+      entry.kind
+    );
+    if (toInventory) {
+      gameState.addItemStack(stack);
+      changed();
+    } else {
+      setCarryItem(stack);
+    }
   };
 
   const returnCarry = () => {
@@ -367,19 +350,24 @@ export const Inventory = ({
     const isActive = type === 'inventory' && idx === gameState.selectedSlot;
 
     return (
-      <div 
+      <div
         key={`${type}-${idx}`}
         onClick={(e) => handleSlotClick(idx, type, false, e.shiftKey)}
-        onContextMenu={(e) => { e.preventDefault(); handleSlotClick(idx, type, true, false); }}
-        className={`w-12 h-12 md:w-14 md:h-14 aspect-square flex-none rounded-sm flex items-center justify-center transition-all cursor-pointer relative
-          ${isActive ? 'bg-white/20 border-2 border-[#ffe066]' : 'bg-black/40 border border-white/10 hover:bg-white/5'}
-          ${item ? '' : 'hover:border-white/20'} group`}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          handleSlotClick(idx, type, true, false);
+        }}
+        className={`w-11 h-11 md:w-12 md:h-12 flex-none rounded-md flex items-center justify-center cursor-pointer relative group border-2
+          ${isActive ? 'bg-white/15 border-[#ffe066]' : 'bg-black/40 border-black/40 hover:bg-white/10 hover:border-white/20'}`}
       >
-        {!item && type === 'armor' && <Shield className="text-white/5" size={20} />}
-        {item && <ItemIcon item={item} className="w-8 h-8 md:w-10 md:h-10" />}
+        {!item && type === 'armor' && (
+          <Shield className="text-white/10" size={18} />
+        )}
+        {item && <ItemIcon item={item} className="w-8 h-8 md:w-9 md:h-9" />}
         {item && (
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/80 backdrop-blur-md rounded text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[100] border border-white/10 shadow-xl">
-            {getItemName(item)}{item.count > 1 ? ` x${item.count}` : ''}
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/90 rounded-md text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[100] border border-white/10">
+            {getItemName(item)}
+            {item.count > 1 ? ` ×${item.count}` : ''}
           </div>
         )}
       </div>
@@ -387,159 +375,147 @@ export const Inventory = ({
   };
 
   if (activeTab === 'ACHIEVEMENTS') {
-      return <AchievementScreen game={game} onClose={() => setActiveTab('STORAGE')} />;
+    return (
+      <AchievementScreen game={game} onClose={() => setActiveTab('STORAGE')} />
+    );
   }
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
-      <motion.div 
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="glass-card p-4 md:p-8 flex flex-col gap-6 max-w-[95vw] max-h-[95vh] shadow-2xl relative overflow-hidden"
+  const isCreative = gameState.mode === 'CREATIVE';
+  const showCatalog = isCreative && !chest && !furnace;
+  const close = () => {
+    returnCarry();
+    onClose();
+  };
+
+  const craftingPanel = (
+    <div className="flex items-center gap-3">
+      <div
+        className={`grid gap-1.5 ${isWorkshop ? 'grid-cols-3' : 'grid-cols-2'}`}
       >
-        <button 
-           onClick={() => { returnCarry(); onClose(); }}
-           className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white z-50"
-        >
-          <X size={20} />
-        </button>
+        {(isWorkshop ? WORKSHOP_GRID : PLAYER_GRID).map((i) =>
+          renderSlot(i, 'crafting')
+        )}
+      </div>
+      <ArrowRight
+        className={craftingResult ? 'text-white' : 'text-white/20'}
+        size={24}
+      />
+      <div
+        onClick={(e) => handleCraftingResultClick(e.shiftKey)}
+        title={
+          craftingMatch
+            ? `${craftingMatch.recipeName} (shift-click to craft as many as you can)`
+            : 'Result'
+        }
+        className={`w-14 h-14 rounded-lg flex items-center justify-center border-2 relative
+          ${craftingResult ? 'border-[#5fae3c] bg-[#5fae3c]/15 cursor-pointer hover:bg-[#5fae3c]/25' : 'border-black/40 bg-black/40'}`}
+      >
+        {craftingResult && (
+          <ItemIcon item={craftingResult} className="w-10 h-10" />
+        )}
+        {craftingResult?.count > 1 && (
+          <span className="absolute bottom-0.5 right-1 text-xs font-bold">
+            {craftingResult.count}
+          </span>
+        )}
+      </div>
+    </div>
+  );
 
-        <div className="flex gap-8 h-full">
-            {/* Header Tabs (Vertical Sidebar) */}
-            <div className="flex flex-col gap-3 border-r border-white/5 pr-4">
-                <TabButton active={activeTab === 'STORAGE'} onClick={() => setActiveTab('STORAGE')} icon={Warehouse} label="Items" />
-                <TabButton active={activeTab === 'ACHIEVEMENTS'} onClick={() => setActiveTab('ACHIEVEMENTS')} icon={Trophy} label="Goals" />
-                
-                <div className="h-px bg-white/5 my-2" />
-                
-                {game.gameState.mode === 'CREATIVE' && CATEGORIES.map(cat => (
-                    <button
-                        key={cat.id}
-                        onClick={() => setActiveCategory(cat.id)}
-                        className={`p-3 rounded-xl transition-all flex flex-col items-center gap-1 group
-                            ${activeCategory === cat.id ? 'bg-[#5fae3c] text-white shadow-lg' : 'text-white/20 hover:text-white/40 hover:bg-white/5'}`}
-                        title={cat.label}
-                    >
-                        <cat.icon size={20} />
-                    </button>
-                ))}
-            </div>
-
-            <div className="flex flex-col gap-6 flex-1 min-w-0">
-                {/* Search / Context Header */}
-                <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-bold flex items-center gap-3">
-                        {uiMode === 'WORKSHOP' ? <Hammer className="text-[#ffe066]" /> : uiMode === 'FURNACE' ? <Flame className="text-[#ffe066]" /> : uiMode === 'CHEST' ? <Package className="text-[#ffe066]" /> : <Warehouse className="text-[#ffe066]" />}
-                        {MODE_TITLES[uiMode] ?? MODE_TITLES.PLAYER}
-                    </h2>
-                    
-                    {game.gameState.mode === 'CREATIVE' && (
-                        <div className="relative w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={14} />
-                            <input 
-                                type="text"
-                                placeholder="Search archives..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-black/40 border border-white/10 rounded-xl py-2 pl-9 pr-4 text-xs"
-                            />
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex flex-col md:flex-row gap-8">
-                    {/* Left: Chest, Creative Grid or Specialized UI */}
-                    {chest ? (
-                        <div className="flex flex-col gap-3 flex-1">
-                            <span className="label-caps">Chest</span>
-                            <div className="grid grid-cols-9 gap-2">
-                                {range(0, CHEST_SLOTS).map((i) => renderSlot(i, 'chest'))}
-                            </div>
-                        </div>
-                    ) : game.gameState.mode === 'CREATIVE' ? (
-                        <div className="flex flex-col gap-3 flex-1">
-                            <span className="label-caps">All blocks</span>
-                            <div className="grid grid-cols-6 md:grid-cols-8 gap-2 max-h-[35vh] overflow-y-auto p-1 custom-scrollbar">
-                                {filteredBlocks.map(block => (
-                                    <div 
-                                        key={block.id}
-                                        onClick={() => handleCreativePick(block.id)}
-                                        className="w-10 h-10 bg-black/40 border border-white/10 rounded-sm flex items-center justify-center hover:border-[#ffe066] transition-all cursor-pointer group"
-                                    >
-                                        <ItemIcon item={{ id: block.id, kind: 'block' }} className="w-7 h-7 group-hover:scale-110 transition-transform" />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex-1 flex flex-col justify-center items-center p-8 bg-white/5 rounded-3xl border border-dashed border-white/5">
-                            <p className="text-xs text-white/40 text-center leading-relaxed max-w-[14rem]">
-                                Drag items into the grid to craft. Shift-click moves a whole stack, or crafts as many as you can.
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Armor Slots */}
-                    <div className="flex flex-col gap-3 items-center">
-                        <span className="label-caps">Armor</span>
-                        <div className="flex flex-col gap-2">
-                            {Array.from({ length: 4 }, (_, i) => renderSlot(i, 'armor'))}
-                        </div>
-                    </div>
-
-                    {/* Right: Furnace or Crafting Area */}
-                    {furnace ? (
-                        <FurnacePanel furnace={furnace} renderSlot={renderSlot} />
-                    ) : !chest && (
-                    <div className="flex flex-col gap-3 items-center">
-                        <span className="label-caps">
-                            Crafting
-                        </span>
-                        <div className={`grid gap-2 ${uiMode === 'WORKSHOP' ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                            {uiMode === 'WORKSHOP' 
-                                ? Array.from({ length: 9 }, (_, i) => renderSlot(i, 'crafting'))
-                                : [0, 1, 3, 4].map(i => renderSlot(i, 'crafting'))
-                            }
-                        </div>
-                        <div 
-                            onClick={(e) => handleCraftingResultClick(e.shiftKey)}
-                            title={craftingMatch ? `${craftingMatch.recipeName} (shift-click to craft all)` : ''}
-                            className={`w-14 h-14 mt-4 bg-white/5 border rounded-xl flex items-center justify-center shadow-lg relative transition-all
-                                ${craftingResult ? 'border-[#5fae3c] cursor-pointer hover:bg-[#5fae3c]/15 scale-105' : 'border-white/5 cursor-default'}`}
-                        >
-                             {craftingResult && <ItemIcon item={craftingResult} className="w-10 h-10" />}
-                             {craftingResult && <div className="absolute -top-1 -right-1 w-3 h-3 bg-[#5fae3c] rounded-full animate-pulse" />}
-                        </div>
-                    </div>
-                    )}
-                </div>
-
-                <hr className="border-white/5" />
-
-                {/* Bottom: Player Inventory */}
-                <div className="flex flex-col gap-6">
-                    <div className="flex flex-col gap-2">
-                        <span className="label-caps">Inventory</span>
-                        <div className="grid grid-cols-9 gap-2">
-                            {Array.from({ length: 27 }, (_, i) => renderSlot(i + 9, 'inventory'))}
-                        </div>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                        <span className="label-caps">Hotbar</span>
-                        <div className="grid grid-cols-9 gap-2">
-                            {Array.from({ length: 9 }, (_, i) => renderSlot(i, 'inventory'))}
-                        </div>
-                    </div>
-                </div>
-            </div>
+  const topSection = chest ? (
+    <Section label="Chest">
+      <div className="grid grid-cols-9 gap-1.5">
+        {range(0, CHEST_SLOTS).map((i) => renderSlot(i, 'chest'))}
+      </div>
+    </Section>
+  ) : furnace ? (
+    <FurnacePanel furnace={furnace} renderSlot={renderSlot} />
+  ) : (
+    <div className="flex flex-wrap items-start gap-6">
+      <Section label="Armor">
+        <div className="grid grid-cols-2 gap-1.5">
+          {range(0, 4).map((i) => renderSlot(i, 'armor'))}
         </div>
+      </Section>
+      <Section label={isWorkshop ? 'Crafting table' : 'Crafting'}>
+        {craftingPanel}
+      </Section>
+    </div>
+  );
+
+  const playerSlots = (
+    <div className="flex flex-col gap-3">
+      {topSection}
+      <Section label="Inventory">
+        <div className="grid grid-cols-9 gap-1.5">
+          {range(9, 36).map((i) => renderSlot(i, 'inventory'))}
+        </div>
+      </Section>
+      <div className="grid grid-cols-9 gap-1.5 pt-1.5 border-t-2 border-black/30">
+        {range(0, 9).map((i) => renderSlot(i, 'inventory'))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 pointer-events-auto p-2 md:p-6"
+      onClick={(e) => e.target === e.currentTarget && close()}
+    >
+      <motion.div
+        initial={{ scale: 0.96, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className={`glass-card p-4 md:p-6 flex flex-col gap-4 max-h-full overflow-hidden ${showCatalog ? 'w-full max-w-6xl h-full max-h-[760px]' : 'max-w-full'}`}
+      >
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-bold flex items-center gap-2.5 mr-auto">
+            {uiMode === 'WORKSHOP' ? (
+              <Hammer className="text-[#ffe066]" size={20} />
+            ) : uiMode === 'FURNACE' ? (
+              <Flame className="text-[#ffe066]" size={20} />
+            ) : uiMode === 'CHEST' ? (
+              <Package className="text-[#ffe066]" size={20} />
+            ) : (
+              <Warehouse className="text-[#ffe066]" size={20} />
+            )}
+            {MODE_TITLES[uiMode] ?? MODE_TITLES.PLAYER}
+          </h2>
+          <button
+            onClick={() => setActiveTab('ACHIEVEMENTS')}
+            className="block-btn block-btn-ghost !py-1.5 !px-3 text-xs"
+          >
+            <Trophy size={14} /> Goals
+          </button>
+          <button
+            onClick={close}
+            title="Close (E or Esc)"
+            className="block-btn block-btn-ghost !p-2"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {showCatalog ? (
+          <div className="flex flex-col lg:flex-row gap-6 min-h-0 flex-1 overflow-y-auto lg:overflow-hidden">
+            <CreativeCatalog onPick={handleCreativePick} />
+            <div className="shrink-0">{playerSlots}</div>
+          </div>
+        ) : (
+          <div className="overflow-y-auto">{playerSlots}</div>
+        )}
       </motion.div>
 
-       {/* Carry Item Ghost */}
-       <CarryGhost carryItem={carryItem} />
+      <CarryGhost carryItem={carryItem} />
     </div>
   );
 };
+
+const Section = ({ label, children }) => (
+  <div className="flex flex-col gap-2">
+    <span className="label-caps">{label}</span>
+    {children}
+  </div>
+);
 
 const MODE_TITLES = {
   PLAYER: 'Inventory',
@@ -556,9 +532,7 @@ const FurnacePanel = ({ furnace, renderSlot }) => {
       : 0;
   return (
     <div className="flex flex-col gap-3 items-center">
-      <span className="label-caps">
-        Smelting
-      </span>
+      <span className="label-caps">Smelting</span>
       <div className="flex items-center gap-4">
         <div className="flex flex-col items-center gap-2">
           {renderSlot(0, 'furnace')}
@@ -597,7 +571,6 @@ const FurnacePanel = ({ furnace, renderSlot }) => {
   );
 };
 
-
 const CarryGhost = ({ carryItem }) => {
   const [pos, setPos] = useState({ x: 0, y: 0 });
 
@@ -611,26 +584,15 @@ const CarryGhost = ({ carryItem }) => {
   return (
     <AnimatePresence>
       {carryItem && (
-        <motion.div 
+        <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1, x: pos.x, y: pos.y }}
           exit={{ scale: 0.8, opacity: 0 }}
           className="fixed top-0 left-0 w-12 h-12 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 z-[200]"
         >
-           <ItemIcon item={carryItem} />
+          <ItemIcon item={carryItem} />
         </motion.div>
       )}
     </AnimatePresence>
   );
 };
-
-const TabButton = ({ active, onClick, icon: Icon, label }) => (
-    <button
-        onClick={onClick}
-        className={`p-3 rounded-2xl transition-all flex flex-col items-center gap-1 group
-            ${active ? 'bg-[#5fae3c] text-white shadow-lg' : 'text-white/20 hover:text-white/40 hover:bg-white/5'}`}
-    >
-        <Icon size={20} />
-        <span className="text-[10px] font-bold">{label}</span>
-    </button>
-);

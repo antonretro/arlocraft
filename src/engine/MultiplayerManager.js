@@ -723,11 +723,7 @@ export class MultiplayerManager {
     if (this.game.entities) {
       this.game.entities.removeRemotePlayer?.(peerId);
     }
-    this.game.chat?.addMessage(
-      'SYSTEM',
-      `${name} left the game.`,
-      'system'
-    );
+    this.game.chat?.addMessage('SYSTEM', `${name} left the game.`, 'system');
   }
 
   syncBlock(data) {

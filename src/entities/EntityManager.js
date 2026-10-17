@@ -9,7 +9,8 @@ import { EnderPearl } from './throwables/EnderPearl.js';
 
 /** Interpolates between two angles along the shortest way round. */
 function lerpAngle(a, b, t) {
-  const diff = ((((b - a) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  const diff =
+    ((((b - a) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
   return a + diff * t;
 }
 
