@@ -27,6 +27,26 @@ export class SkinLoader {
     return { materials };
   }
 
+  /** A skin as a single texture, for models that map the whole skin image. */
+  async loadSkinTexture(username) {
+    const url =
+      !username || username === 'Steve'
+        ? this.defaultSteve
+        : username === 'Alex'
+          ? this.defaultAlex
+          : `https://minotar.net/skin/${encodeURIComponent(username)}`;
+    let img;
+    try {
+      img = await this._loadImage(url);
+    } catch {
+      img = await this._loadImage(this.defaultSteve);
+    }
+    const texture = new THREE.Texture(img);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
   async loadSkin(username) {
     const url =
       username === 'Steve' || username === 'Alex' || !username

@@ -7,6 +7,12 @@ import { Snowball } from './throwables/Snowball.js';
 import { Egg } from './throwables/Egg.js';
 import { EnderPearl } from './throwables/EnderPearl.js';
 
+/** Interpolates between two angles along the shortest way round. */
+function lerpAngle(a, b, t) {
+  const diff = ((((b - a) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  return a + diff * t;
+}
+
 const base = import.meta.env.BASE_URL || '/';
 const RESOURCE_PACK_URL =
   (base.endsWith('/') ? base : base + '/') +
@@ -144,7 +150,7 @@ export class EntityManager {
     // Load skin async
     if (this.game.skinLoader && skinUsername) {
       this.game.skinLoader
-        .loadSkin(skinUsername)
+        .loadSkinTexture(skinUsername)
         .then((texture) => {
           if (texture && model) {
             model.setTexture(texture);
@@ -169,7 +175,7 @@ export class EntityManager {
     );
 
     // Smoothly rotate body toward movement direction
-    netPlayer.group.rotation.y = THREE.MathUtils.lerpAngle(
+    netPlayer.group.rotation.y = lerpAngle(
       netPlayer.group.rotation.y,
       rot.yaw + Math.PI,
       lerpSpeed

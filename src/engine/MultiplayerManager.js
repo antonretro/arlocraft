@@ -696,7 +696,7 @@ export class MultiplayerManager {
 
     this.game.chat?.addMessage(
       'SYSTEM',
-      `${skinUsername} has entered the simulation.`,
+      `${skinUsername} joined the game.`,
       'system'
     );
   }
@@ -725,7 +725,7 @@ export class MultiplayerManager {
     }
     this.game.chat?.addMessage(
       'SYSTEM',
-      `${name} has left the simulation.`,
+      `${name} left the game.`,
       'system'
     );
   }
