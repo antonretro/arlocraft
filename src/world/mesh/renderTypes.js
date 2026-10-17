@@ -88,6 +88,11 @@ export function resolveChunkGeometry(world, id, blockData) {
     return geo.cake ?? geo.solid ?? null;
   }
 
+  if (blockData?.renderType === 'plate') return geo.plate ?? geo.trapdoor;
+  if (blockData?.renderType === 'pressure_plate')
+    return geo.pressure_plate ?? geo.trapdoor;
+  if (blockData?.renderType === 'button') return geo.button ?? geo.trapdoor;
+
   if (blockData?.renderType === 'flat' || blockData?.flat === true) {
     return geo.flat ?? geo.deco ?? geo.solid ?? null;
   }

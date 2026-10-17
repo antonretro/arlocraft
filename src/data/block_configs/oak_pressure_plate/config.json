@@ -1,0 +1,1 @@
+{ "name": "Oak Pressure Plate", "hardness": 0.5, "transparent": true, "renderType": "pressure_plate", "textureId": "oak_planks", "tags": ["redstone"] }

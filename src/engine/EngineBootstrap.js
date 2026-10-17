@@ -11,7 +11,7 @@ import { AudioSystem } from './AudioSystem.js';
 import { DayNightSystem } from './DayNightSystem.js';
 import { HorizonService } from '../world/visuals/HorizonService.js';
 import { ParticleSystem } from './ParticleSystem.js';
-import { ScriptSystem } from './ScriptSystem.js';
+import { CommandBlockRunner } from '../scripting/CommandBlockRunner.js';
 import { BlockScriptManager } from './BlockScriptManager.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
 import { ChatSystem } from './ChatSystem.js';
@@ -94,7 +94,8 @@ export class EngineBootstrap {
 
     game.multiplayer = new MultiplayerManager(game);
     game.particles = new ParticleSystem(game);
-    game.scripts = new ScriptSystem(game);
+    game.commandManager = new CommandManager(game);
+    game.commandBlocks = new CommandBlockRunner(game);
     game.survival = new SurvivalSystem(game.gameState, game.hud);
     game.dayNight = new DayNightSystem(game.renderer, game.world, {});
     game.horizons = new HorizonService(game.renderer.scene, game.renderer);

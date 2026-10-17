@@ -15,7 +15,7 @@ import { WorldInteractionService } from './WorldInteractionService.js';
 import { WorldPersistenceService } from './WorldPersistenceService.js';
 import { FluidSystem } from './FluidSystem.js';
 import { GravitySystem } from './GravitySystem.js';
-import { RedstoneSystem } from './RedstoneSystem.js';
+import { RedstoneEngine } from '../redstone/RedstoneEngine.js';
 import { getBlockHandler } from '../engine/BlockHandlerRegistry.js';
 import { rollLoot } from '../data/LootTables.js';
 import { VoxelStore } from '../voxel/VoxelStore.js';
@@ -42,7 +42,7 @@ export class World {
     this.persistence = new WorldPersistenceService(this);
     this.fluids = new FluidSystem(this);
     this.gravity = new GravitySystem(this);
-    this.redstone = new RedstoneSystem(this);
+    this.redstone = new RedstoneEngine(this);
 
     this.registry = new BlockRegistry();
     this.blockRegistry = this.registry;
@@ -97,7 +97,7 @@ export class World {
 
     // 3. Systems
     this.explosions.update(delta);
-    this.redstone?.tick();
+    this.redstone?.tick(delta);
   }
 
   // --- Core API Proxies (Backward Compatibility) ---
@@ -394,6 +394,7 @@ export class World {
 
   clearWorld() {
     this.chunkManager.clearAll();
+    this.redstone?.clear();
     this.objects = [];
     this.state.blockMap.clear();
     this.state.blockData.clear();
@@ -729,6 +730,8 @@ export class World {
       'dispenser',
       'dropper',
       'observer',
+      'repeater',
+      'comparator',
       'piston',
       'sticky_piston',
       'stonecutter',
@@ -753,6 +756,10 @@ export class World {
       else if (absYaw >= (5 * Math.PI) / 4 && absYaw < (7 * Math.PI) / 4)
         dir = 'e';
 
+      // Observers watch the player; everything else faces away from them.
+      if (blockId === 'observer') {
+        dir = { n: 's', s: 'n', e: 'w', w: 'e' }[dir];
+      }
       finalId = `${blockId}_${dir}`;
     }
 
@@ -1080,7 +1087,9 @@ export class World {
       const cz = this.getChunkCoord(cell.z);
       const ownerKey = this.getChunkKey(cx, cy, cz);
 
-      this.addBlock(cell.x, cell.y, cell.z, nextId, ownerKey, true);
+      this.addBlock(cell.x, cell.y, cell.z, nextId, ownerKey, true, {
+        persistChange: true,
+      });
 
       if (blockData.pairId) {
         const pairY = cell.y + Number(blockData.pairOffsetY);
@@ -1089,7 +1098,9 @@ export class World {
         if (currentPairId) {
           const pBaseId = currentPairId.replace(':open', '');
           const pNextId = isOpen ? pBaseId : pBaseId + ':open';
-          this.addBlock(cell.x, pairY, cell.z, pNextId, ownerKey, true);
+          this.addBlock(cell.x, pairY, cell.z, pNextId, ownerKey, true, {
+            persistChange: true,
+          });
         }
       }
 
@@ -1201,40 +1212,8 @@ export class World {
       return true;
     }
 
-    // --- Lever & Button Interaction ---
-    if (blockId === 'lever' || blockId === 'stone_button') {
-      const key = this.getKey(cell.x, cell.y, cell.z);
-      const isActive = this.state.blockData.get(key + ':active') || false;
-      this.state.blockData.set(key + ':active', !isActive);
-
-      // Trigger redstone pulse
-      this.redstone?.onBlockChanged(cell.x, cell.y, cell.z, 'update');
-
-      // Sound effect
-      const soundId = blockId === 'lever' ? 'ui-lever' : 'ui-click';
-      this.game.audio?.play(soundId);
-
-      window.dispatchEvent(new CustomEvent('action-success'));
-      return true;
-    }
-
-    // --- Advanced Redstone Interaction ---
-    if (blockId.startsWith('repeater')) {
-      const key = this.getKey(cell.x, cell.y, cell.z);
-      let delay = this.state.blockData.get(key + ':delay') || 1;
-      delay = (delay % 4) + 1; // Cycle 1 -> 2 -> 3 -> 4 -> 1
-      this.state.blockData.set(key + ':delay', delay);
-      this.game.audio?.play('ui-click');
-      window.dispatchEvent(new CustomEvent('action-success'));
-      return true;
-    }
-
-    if (blockId.startsWith('comparator')) {
-      const key = this.getKey(cell.x, cell.y, cell.z);
-      let mode = this.state.blockData.get(key + ':mode') || 'compare';
-      mode = mode === 'compare' ? 'subtract' : 'compare';
-      this.state.blockData.set(key + ':mode', mode);
-      this.game.audio?.play('ui-click');
+    // --- Redstone parts (levers, buttons, repeaters, comparators) ---
+    if (this.redstone?.interact(cell.x, cell.y, cell.z, blockId)) {
       window.dispatchEvent(new CustomEvent('action-success'));
       return true;
     }

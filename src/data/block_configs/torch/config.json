@@ -1,9 +1,9 @@
 {
   "hardness": 1,
   "transparent": true,
+  "renderType": "plant",
   "name": "Torch",
   "xp": 2,
-  "deco": true,
   "emissive": true,
   "flicker": true,
   "emissiveColor": "0xff8800"

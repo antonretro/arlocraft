@@ -440,6 +440,22 @@ export class WorldVisuals {
         geo.translate(0, 0.5002, 0); // Tiny lift to eliminate seams and Z-fighting
         return withWhiteVertexColors(geo);
       })(),
+      // Redstone parts: repeaters/comparators/detectors, plates and buttons.
+      plate: (() => {
+        const geo = new THREE.BoxGeometry(1, 0.125, 1);
+        geo.translate(0, -0.4375, 0);
+        return withWhiteVertexColors(geo);
+      })(),
+      pressure_plate: (() => {
+        const geo = new THREE.BoxGeometry(0.875, 0.0625, 0.875);
+        geo.translate(0, -0.46875, 0);
+        return withWhiteVertexColors(geo);
+      })(),
+      button: (() => {
+        const geo = new THREE.BoxGeometry(0.375, 0.125, 0.25);
+        geo.translate(0, -0.4375, 0);
+        return withWhiteVertexColors(geo);
+      })(),
       flat: (() => {
         const geo = new THREE.PlaneGeometry(1, 1);
         geo.rotateX(-Math.PI / 2);

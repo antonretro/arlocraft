@@ -1,0 +1,1 @@
+{ "name": "Redstone Dust", "hardness": 0, "transparent": true, "renderType": "flat", "flat": true, "textureId": "redstone_dust_dot", "tags": ["redstone"] }

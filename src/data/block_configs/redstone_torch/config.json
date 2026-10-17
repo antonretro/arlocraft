@@ -2,7 +2,8 @@
   "name": "Redstone Torch",
   "hardness": 0,
   "transparent": true,
-  "deco": true,
+  "renderType": "plant",
   "emissive": true,
-  "emissiveColor": "0xff0000"
+  "emissiveColor": "0xff0000",
+  "tags": ["redstone"]
 }

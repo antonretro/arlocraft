@@ -1,0 +1,1 @@
+{ "name": "Daylight Detector", "hardness": 0.2, "transparent": true, "renderType": "plate", "textureId": "daylight_detector", "tags": ["redstone"] }

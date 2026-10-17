@@ -1,0 +1,1 @@
+{ "name": "Stone Button", "hardness": 0.5, "transparent": true, "renderType": "button", "textureId": "stone", "tags": ["redstone"] }

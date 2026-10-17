@@ -1097,6 +1097,12 @@ export class Chunk {
 
     this.state = 'ready';
     this.resyncBlockKeysFromWorld();
+    this.world.redstone?.wakeChunk(
+      this.cx,
+      this.cy,
+      this.cz,
+      voxels.getChunkArray(this.cx, this.cy, this.cz)
+    );
     this.dirty = true;
   }
 

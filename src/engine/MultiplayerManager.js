@@ -36,9 +36,11 @@ function sanitizeMeta(meta) {
   if (typeof meta === 'string') return meta.slice(0, MAX_META_BYTES);
   if (!isPlainObject(meta)) return null;
   try {
-    return JSON.stringify(meta).length <= MAX_META_BYTES
-      ? cloneForSync(meta)
-      : null;
+    if (JSON.stringify(meta).length > MAX_META_BYTES) return null;
+    const copy = cloneForSync(meta);
+    // Command block scripts from other players only run if the host allows.
+    if (typeof copy.command === 'string') copy.remote = true;
+    return copy;
   } catch {
     return null;
   }

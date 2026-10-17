@@ -1,0 +1,1 @@
+{ "name": "Stone Pressure Plate", "hardness": 0.5, "transparent": true, "renderType": "pressure_plate", "textureId": "stone", "tags": ["redstone"] }

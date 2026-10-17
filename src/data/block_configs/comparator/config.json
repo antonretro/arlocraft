@@ -1,6 +1,1 @@
-{
-  "name": "Redstone Comparator",
-  "hardness": 0,
-  "transparent": true,
-  "deco": true
-}
+{ "name": "Redstone Comparator", "hardness": 0, "transparent": true, "renderType": "plate", "textureId": "comparator", "tags": ["redstone"] }

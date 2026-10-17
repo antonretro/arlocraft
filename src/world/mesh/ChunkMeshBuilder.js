@@ -82,7 +82,10 @@ function usesCustomInstancedGeometry(blockData) {
     renderType === 'slab' ||
     renderType === 'stairs' ||
     renderType === 'trapdoor' ||
-    renderType === 'door'
+    renderType === 'door' ||
+    renderType === 'plate' ||
+    renderType === 'pressure_plate' ||
+    renderType === 'button'
   );
 }
 
@@ -364,9 +367,11 @@ function createInstancedMesh(
   const cam = chunk.world?.game?.camera?.instance;
   const camPos = cam ? cam.position : new THREE.Vector3(0, 0, 0);
 
-  const isTintable = Array.isArray(material)
-    ? material.some(isTintableMaterial)
-    : isTintableMaterial(material);
+  const isTintable =
+    id === 'redstone_wire' ||
+    (Array.isArray(material)
+      ? material.some(isTintableMaterial)
+      : isTintableMaterial(material));
   const color = new THREE.Color();
 
   let renderCount = 0;
@@ -390,14 +395,24 @@ function createInstancedMesh(
       }
     }
 
-    if (isTintable) {
+    if (id === 'redstone_wire') {
+      // Dust glows brighter the more power it carries.
+      const power = chunk.world.redstone?.getWirePower?.(ax, ay, az) ?? 0;
+      color.setRGB(0.3 + (power / 15) * 0.7, 0.02, 0.02);
+      mesh.setColorAt(renderCount, color);
+    } else if (isTintable) {
       const hex = chunk.world.terrain.getBlendedColor(ax, az, 'color');
       color.setHex(hex);
       mesh.setColorAt(renderCount, color);
     }
 
     tempEuler.set(0, 0, 0);
-    if (blockData?.renderType === 'stairs') {
+    if (rawId.startsWith('repeater') || rawId.startsWith('comparator')) {
+      // Texture arrow points to -Z (north) by default.
+      if (rawId.endsWith('_s')) tempEuler.y = Math.PI;
+      else if (rawId.endsWith('_e')) tempEuler.y = -Math.PI / 2;
+      else if (rawId.endsWith('_w')) tempEuler.y = Math.PI / 2;
+    } else if (blockData?.renderType === 'stairs') {
       if (rawId.includes('_n')) tempEuler.y = Math.PI;
       else if (rawId.includes('_e')) tempEuler.y = -Math.PI / 2;
       else if (rawId.includes('_w')) tempEuler.y = Math.PI / 2;

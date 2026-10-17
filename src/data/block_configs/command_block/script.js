@@ -10,14 +10,5 @@ export function onInteract(game, x, y, z) {
   return true;
 }
 
-export function onRedstoneUpdate(game, x, y, z, power) {
-  if (power > 0) {
-    const key = game.world.coords.getKey(x, y, z);
-    const data = game.world.state.blockData.get(key);
-    if (data?.command) {
-      game.commandManager?.execute(data.command);
-    }
-  }
-}
-
-export const handlerIds = ['onInteract', 'onRedstoneUpdate'];
+// Redstone triggering is handled by RedstoneEngine -> game.commandBlocks.
+export const handlerIds = ['onInteract'];

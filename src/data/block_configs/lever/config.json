@@ -1,0 +1,1 @@
+{ "name": "Lever", "hardness": 0.5, "transparent": true, "renderType": "plant", "textureId": "lever", "tags": ["redstone"] }
