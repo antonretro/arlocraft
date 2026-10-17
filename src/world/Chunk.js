@@ -100,8 +100,8 @@ const BIOME_GROUND_LIFE = {
     'blueberry_stage3',
   ],
   desert: ['tomato'],
-  badlands: ['carrot'],
-  canyon: ['carrot'],
+  badlands: ['dead_bush'],
+  canyon: ['dead_bush'],
   highlands: [
     'short_grass',
     'short_grass',

@@ -1112,6 +1112,8 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         }
       }
     }
+  }
+
   async preloadEssentialBlocks() {
     const essentialIds = [
       'grass_block', 'dirt', 'stone', 'cobblestone', 'bedrock',

@@ -29,3 +29,6 @@ release_v1_0_0
 *.njsproj
 *.sln
 *.sw?
+
+# Local scratch
+scratch/
