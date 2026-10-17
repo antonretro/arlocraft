@@ -6,14 +6,14 @@
 @theme {
   --font-outfit: "Outfit", sans-serif;
   --font-pixel: "Press Start 2P", system-ui;
-  --color-arlo-blue: #00e5ff;
+  --color-arlo-blue: #6dbb45;
   --color-arlo-dark: #050505;
   --color-arlo-glass: rgba(255, 255, 255, 0.03);
   --color-accent-gold: #ffcc00;
 }
 
 :root {
-  --color-arlo-blue: #00c3e3;
+  --color-arlo-blue: #6dbb45;
   --color-arlo-dark: #0a0a0a;
   --color-arlo-glass: rgba(255, 255, 255, 0.05);
 }

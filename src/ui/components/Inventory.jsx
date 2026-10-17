@@ -11,7 +11,6 @@ import {
   Palette,
   Trophy,
   Warehouse,
-  Zap,
   Shield,
   Flame,
   Package,
@@ -373,7 +372,7 @@ export const Inventory = ({
         onClick={(e) => handleSlotClick(idx, type, false, e.shiftKey)}
         onContextMenu={(e) => { e.preventDefault(); handleSlotClick(idx, type, true, false); }}
         className={`w-12 h-12 md:w-14 md:h-14 aspect-square flex-none rounded-sm flex items-center justify-center transition-all cursor-pointer relative
-          ${isActive ? 'bg-white/20 border-2 border-arlo-blue shadow-[0_0_15px_rgba(0,195,227,0.2)]' : 'bg-black/40 border border-white/10 hover:bg-white/5'}
+          ${isActive ? 'bg-white/20 border-2 border-[#ffe066]' : 'bg-black/40 border border-white/10 hover:bg-white/5'}
           ${item ? '' : 'hover:border-white/20'} group`}
       >
         {!item && type === 'armor' && <Shield className="text-white/5" size={20} />}
@@ -408,8 +407,8 @@ export const Inventory = ({
         <div className="flex gap-8 h-full">
             {/* Header Tabs (Vertical Sidebar) */}
             <div className="flex flex-col gap-3 border-r border-white/5 pr-4">
-                <TabButton active={activeTab === 'STORAGE'} onClick={() => setActiveTab('STORAGE')} icon={Warehouse} label="Cargo" />
-                <TabButton active={activeTab === 'ACHIEVEMENTS'} onClick={() => setActiveTab('ACHIEVEMENTS')} icon={Trophy} label="Honors" />
+                <TabButton active={activeTab === 'STORAGE'} onClick={() => setActiveTab('STORAGE')} icon={Warehouse} label="Items" />
+                <TabButton active={activeTab === 'ACHIEVEMENTS'} onClick={() => setActiveTab('ACHIEVEMENTS')} icon={Trophy} label="Goals" />
                 
                 <div className="h-px bg-white/5 my-2" />
                 
@@ -418,7 +417,7 @@ export const Inventory = ({
                         key={cat.id}
                         onClick={() => setActiveCategory(cat.id)}
                         className={`p-3 rounded-xl transition-all flex flex-col items-center gap-1 group
-                            ${activeCategory === cat.id ? 'bg-arlo-blue text-white shadow-lg' : 'text-white/20 hover:text-white/40 hover:bg-white/5'}`}
+                            ${activeCategory === cat.id ? 'bg-[#5fae3c] text-white shadow-lg' : 'text-white/20 hover:text-white/40 hover:bg-white/5'}`}
                         title={cat.label}
                     >
                         <cat.icon size={20} />
@@ -429,8 +428,8 @@ export const Inventory = ({
             <div className="flex flex-col gap-6 flex-1 min-w-0">
                 {/* Search / Context Header */}
                 <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-black italic tracking-tighter uppercase flex items-center gap-3">
-                        {uiMode === 'WORKSHOP' ? <Hammer className="text-arlo-blue" /> : uiMode === 'FURNACE' ? <Flame className="text-arlo-blue" /> : uiMode === 'CHEST' ? <Package className="text-arlo-blue" /> : <Warehouse className="text-arlo-blue" />}
+                    <h2 className="text-xl font-bold flex items-center gap-3">
+                        {uiMode === 'WORKSHOP' ? <Hammer className="text-[#ffe066]" /> : uiMode === 'FURNACE' ? <Flame className="text-[#ffe066]" /> : uiMode === 'CHEST' ? <Package className="text-[#ffe066]" /> : <Warehouse className="text-[#ffe066]" />}
                         {MODE_TITLES[uiMode] ?? MODE_TITLES.PLAYER}
                     </h2>
                     
@@ -452,20 +451,20 @@ export const Inventory = ({
                     {/* Left: Chest, Creative Grid or Specialized UI */}
                     {chest ? (
                         <div className="flex flex-col gap-3 flex-1">
-                            <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Chest</span>
+                            <span className="label-caps">Chest</span>
                             <div className="grid grid-cols-9 gap-2">
                                 {range(0, CHEST_SLOTS).map((i) => renderSlot(i, 'chest'))}
                             </div>
                         </div>
                     ) : game.gameState.mode === 'CREATIVE' ? (
                         <div className="flex flex-col gap-3 flex-1">
-                            <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">System Catalog</span>
+                            <span className="label-caps">All blocks</span>
                             <div className="grid grid-cols-6 md:grid-cols-8 gap-2 max-h-[35vh] overflow-y-auto p-1 custom-scrollbar">
                                 {filteredBlocks.map(block => (
                                     <div 
                                         key={block.id}
                                         onClick={() => handleCreativePick(block.id)}
-                                        className="w-10 h-10 bg-black/40 border border-white/10 rounded-sm flex items-center justify-center hover:border-arlo-blue transition-all cursor-pointer group"
+                                        className="w-10 h-10 bg-black/40 border border-white/10 rounded-sm flex items-center justify-center hover:border-[#ffe066] transition-all cursor-pointer group"
                                     >
                                         <ItemIcon item={{ id: block.id, kind: 'block' }} className="w-7 h-7 group-hover:scale-110 transition-transform" />
                                     </div>
@@ -474,16 +473,15 @@ export const Inventory = ({
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col justify-center items-center p-8 bg-white/5 rounded-3xl border border-dashed border-white/5">
-                            <Zap className="text-white/5 mb-4" size={48} />
-                            <p className="text-[10px] font-bold text-white/10 uppercase tracking-[0.2em] text-center">
-                                System Matrix Standby.<br/>Ready for Fabrication.
+                            <p className="text-xs text-white/40 text-center leading-relaxed max-w-[14rem]">
+                                Drag items into the grid to craft. Shift-click moves a whole stack, or crafts as many as you can.
                             </p>
                         </div>
                     )}
 
                     {/* Armor Slots */}
                     <div className="flex flex-col gap-3 items-center">
-                        <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Defense</span>
+                        <span className="label-caps">Armor</span>
                         <div className="flex flex-col gap-2">
                             {Array.from({ length: 4 }, (_, i) => renderSlot(i, 'armor'))}
                         </div>
@@ -494,8 +492,8 @@ export const Inventory = ({
                         <FurnacePanel furnace={furnace} renderSlot={renderSlot} />
                     ) : !chest && (
                     <div className="flex flex-col gap-3 items-center">
-                        <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
-                            {uiMode === 'WORKSHOP' ? '3x3 Matrix' : '2x2 Field'}
+                        <span className="label-caps">
+                            Crafting
                         </span>
                         <div className={`grid gap-2 ${uiMode === 'WORKSHOP' ? 'grid-cols-3' : 'grid-cols-2'}`}>
                             {uiMode === 'WORKSHOP' 
@@ -507,10 +505,10 @@ export const Inventory = ({
                             onClick={(e) => handleCraftingResultClick(e.shiftKey)}
                             title={craftingMatch ? `${craftingMatch.recipeName} (shift-click to craft all)` : ''}
                             className={`w-14 h-14 mt-4 bg-white/5 border rounded-xl flex items-center justify-center shadow-lg relative transition-all
-                                ${craftingResult ? 'border-arlo-blue cursor-pointer hover:bg-arlo-blue/10 scale-105' : 'border-white/5 cursor-default'}`}
+                                ${craftingResult ? 'border-[#5fae3c] cursor-pointer hover:bg-[#5fae3c]/15 scale-105' : 'border-white/5 cursor-default'}`}
                         >
                              {craftingResult && <ItemIcon item={craftingResult} className="w-10 h-10" />}
-                             {craftingResult && <div className="absolute -top-1 -right-1 w-3 h-3 bg-arlo-blue rounded-full animate-pulse" />}
+                             {craftingResult && <div className="absolute -top-1 -right-1 w-3 h-3 bg-[#5fae3c] rounded-full animate-pulse" />}
                         </div>
                     </div>
                     )}
@@ -521,13 +519,13 @@ export const Inventory = ({
                 {/* Bottom: Player Inventory */}
                 <div className="flex flex-col gap-6">
                     <div className="flex flex-col gap-2">
-                        <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Cargo Bay</span>
+                        <span className="label-caps">Inventory</span>
                         <div className="grid grid-cols-9 gap-2">
                             {Array.from({ length: 27 }, (_, i) => renderSlot(i + 9, 'inventory'))}
                         </div>
                     </div>
                     <div className="flex flex-col gap-2">
-                        <span className="text-[10px] font-bold text-arlo-blue/60 uppercase tracking-widest">Hotbar Link</span>
+                        <span className="label-caps">Hotbar</span>
                         <div className="grid grid-cols-9 gap-2">
                             {Array.from({ length: 9 }, (_, i) => renderSlot(i, 'inventory'))}
                         </div>
@@ -544,8 +542,8 @@ export const Inventory = ({
 };
 
 const MODE_TITLES = {
-  PLAYER: 'Mobile Storage Unit',
-  WORKSHOP: 'Advanced Fabrication',
+  PLAYER: 'Inventory',
+  WORKSHOP: 'Crafting Table',
   FURNACE: 'Furnace',
   CHEST: 'Chest',
 };
@@ -558,7 +556,7 @@ const FurnacePanel = ({ furnace, renderSlot }) => {
       : 0;
   return (
     <div className="flex flex-col gap-3 items-center">
-      <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
+      <span className="label-caps">
         Smelting
       </span>
       <div className="flex items-center gap-4">
@@ -580,12 +578,12 @@ const FurnacePanel = ({ furnace, renderSlot }) => {
         </div>
         <div className="flex flex-col items-center gap-1 w-14">
           <ArrowRight
-            className={smeltPct > 0 ? 'text-arlo-blue' : 'text-white/20'}
+            className={smeltPct > 0 ? 'text-white' : 'text-white/20'}
             size={28}
           />
           <div className="w-full h-1.5 bg-black/60 rounded-full overflow-hidden">
             <div
-              className="h-full bg-arlo-blue"
+              className="h-full bg-white"
               style={{ width: `${smeltPct}%` }}
             />
           </div>
@@ -630,9 +628,9 @@ const TabButton = ({ active, onClick, icon: Icon, label }) => (
     <button
         onClick={onClick}
         className={`p-3 rounded-2xl transition-all flex flex-col items-center gap-1 group
-            ${active ? 'bg-arlo-blue text-white shadow-lg' : 'text-white/20 hover:text-white/40 hover:bg-white/5'}`}
+            ${active ? 'bg-[#5fae3c] text-white shadow-lg' : 'text-white/20 hover:text-white/40 hover:bg-white/5'}`}
     >
         <Icon size={20} />
-        <span className="text-[8px] font-black uppercase tracking-tighter">{label}</span>
+        <span className="text-[10px] font-bold">{label}</span>
     </button>
 );

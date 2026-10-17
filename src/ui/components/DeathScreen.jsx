@@ -26,13 +26,13 @@ export const DeathScreen = ({ cause = 'damage', onRespawn, onTitle }) => (
       <button
         id="btn-respawn"
         onClick={onRespawn}
-        className="py-3 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-white font-black uppercase tracking-widest transition-colors"
+        className="block-btn block-btn-green justify-center"
       >
         Respawn
       </button>
       <button
         onClick={onTitle}
-        className="py-3 rounded-xl bg-black/30 hover:bg-black/40 border border-white/10 text-white/70 font-bold uppercase tracking-widest text-xs transition-colors"
+        className="block-btn justify-center"
       >
         Title Screen
       </button>

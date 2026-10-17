@@ -41,7 +41,7 @@ export const AchievementScreen = ({ game, onClose }) => {
             <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-4 text-arlo-blue">
                     <Trophy size={32} strokeWidth={2.5} />
-                    <h2 className="text-3xl font-black italic tracking-tighter uppercase">Hall of Valor</h2>
+                    <h2 className="text-2xl font-bold">Goals</h2>
                 </div>
                 <p className="text-white/40 text-sm max-w-md leading-relaxed">
                     Track your progression through the dimensions of ArloCraft. Every milestone represents a new mastery of the world.

@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        'arlo-blue': '#00c3e3',
+        'arlo-blue': '#6dbb45',
         'arlo-dark': '#0a0a0a',
         'arlo-glass': 'rgba(255, 255, 255, 0.05)',
       },
