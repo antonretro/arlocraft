@@ -8,6 +8,7 @@ import { SignEditor } from './components/SignEditor';
 import { CommandEditor } from './components/CommandEditor';
 import { MainMenuPanorama } from './components/MainMenuPanorama';
 import { EngineLoading } from './components/EngineLoading';
+import { DeathScreen } from './components/DeathScreen';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../css/index.css';
 
@@ -23,6 +24,8 @@ const UIApp = () => {
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [hudVisible, setHudVisible] = useState(false);
   const [uiMode, setUiMode] = useState('PLAYER');
+  const [containerKey, setContainerKey] = useState(null);
+  const [deathInfo, setDeathInfo] = useState(null);
   const [signData, setSignData] = useState(null);
   const [commandBlockData, setCommandBlockData] = useState(null);
   const panoRef = React.useRef(null);
@@ -60,16 +63,22 @@ const UIApp = () => {
     const handlePause = (e) => setIsPaused(e.detail);
     const handleHud = (e) => setHudVisible(e.detail);
     const handleInventory = (e) => {
-        const isOpen = typeof e.detail === 'boolean' ? e.detail : e.detail.detail;
-        const mode = e.detail.mode || 'PLAYER';
+        const isOpen = typeof e.detail === 'boolean' ? e.detail : Boolean(e.detail?.detail);
+        const mode = (isOpen && e.detail?.mode) || 'PLAYER';
         
         setIsInventoryOpen(isOpen);
-        setUiMode(mode);
+        if (isOpen) {
+            setUiMode(mode);
+            setContainerKey(e.detail?.blockKey ?? null);
+        }
         
         if (isOpen) {
             document.exitPointerLock?.();
         }
     };
+
+    const handleDeath = (e) => setDeathInfo(e.detail ?? { cause: 'damage' });
+    const handleRespawn = () => setDeathInfo(null);
 
     const handleOpenSignEditor = (e) => {
         setSignData(e.detail);
@@ -97,6 +106,8 @@ const UIApp = () => {
     window.addEventListener('inventory-toggle', handleInventory);
     window.addEventListener('open-sign-editor', handleOpenSignEditor);
     window.addEventListener('open-command-editor', handleOpenCommandEditor);
+    window.addEventListener('player-died', handleDeath);
+    window.addEventListener('player-respawn', handleRespawn);
     window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
@@ -106,6 +117,8 @@ const UIApp = () => {
       window.removeEventListener('inventory-toggle', handleInventory);
       window.removeEventListener('open-sign-editor', handleOpenSignEditor);
       window.removeEventListener('open-command-editor', handleOpenCommandEditor);
+      window.removeEventListener('player-died', handleDeath);
+      window.removeEventListener('player-respawn', handleRespawn);
       window.removeEventListener('keydown', handleKeyDown, true);
     };
   }, []);
@@ -179,9 +192,22 @@ const UIApp = () => {
           >
             <Inventory 
               initialMode={uiMode}
+              blockKey={containerKey}
               onClose={() => game.gameState.toggleInventory()} 
             />
           </motion.div>
+        )}
+
+        {deathInfo && screen === 'ingame' && (
+          <DeathScreen
+            key="death"
+            cause={deathInfo.cause}
+            onRespawn={() => game.gameState.respawn()}
+            onTitle={() => {
+              game.returnToTitle?.();
+              game.gameState.respawn();
+            }}
+          />
         )}
 
         {signData && (

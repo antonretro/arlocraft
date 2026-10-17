@@ -1,5 +1,7 @@
 {
+  "id": "diamond_ore",
   "name": "Diamond Ore",
+  "textureId": "diamond_ore",
   "hardness": 5,
   "xp": 100,
   "color": "0x55ffd9"

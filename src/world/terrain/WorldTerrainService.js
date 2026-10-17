@@ -510,14 +510,15 @@ export class WorldTerrainService {
 
   getDeepBlockId(x, y, z) {
     const r = this.hash3D(x * 17 + 13, y * 7, z * 19 - 5);
-    if (y > -8) return r > 0.992 ? 'coal' : r > 0.986 ? 'copper' : 'stone';
+    if (y > -8)
+      return r > 0.992 ? 'coal_ore' : r > 0.986 ? 'copper_ore' : 'stone';
     if (y > -20)
       return r > 0.994
         ? 'tin'
         : r > 0.988
           ? 'silver'
           : r > 0.982
-            ? 'iron'
+            ? 'iron_ore'
             : 'stone';
     if (y > -40)
       return r > 0.996
@@ -525,7 +526,7 @@ export class WorldTerrainService {
         : r > 0.992
           ? 'sapphire'
           : r > 0.986
-            ? 'gold'
+            ? 'gold_ore'
             : r > 0.978
               ? 'amethyst'
               : 'stone';
@@ -535,14 +536,14 @@ export class WorldTerrainService {
         : r > 0.992
           ? 'uranium'
           : r > 0.986
-            ? 'diamond'
+            ? 'diamond_ore'
             : r > 0.979
               ? 'obsidian'
               : 'stone';
     return r > 0.996
       ? 'mythril'
       : r > 0.991
-        ? 'diamond'
+        ? 'diamond_ore'
         : r > 0.985
           ? 'uranium'
           : 'obsidian';

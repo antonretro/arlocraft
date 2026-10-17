@@ -59,6 +59,7 @@ export class SaveSystem {
         mode: g.gameState.mode,
         hp: g.gameState.hp,
         hunger: g.gameState.hunger,
+        spawnPoint: g.gameState.spawnPoint,
       },
       stats: {
         level: g.stats.level,
@@ -111,12 +112,15 @@ export class SaveSystem {
         g.gameState.craftingGrid.push(null);
     }
 
+    g.gameState.isDead = false;
+
     // 3. Player Stats & Identity
     if (data.player) {
       if (data.player.mode) g.gameState.setMode(data.player.mode);
       if (Number.isFinite(data.player.hp)) g.gameState.hp = data.player.hp;
       if (Number.isFinite(data.player.hunger))
         g.gameState.hunger = data.player.hunger;
+      g.gameState.spawnPoint = data.player.spawnPoint ?? null;
 
       if (data.player.look) {
         g.viewYaw = Number(data.player.look.yaw) || 0;

@@ -1,5 +1,7 @@
 {
+  "id": "gold_ore",
   "name": "Gold Ore",
+  "textureId": "gold_ore",
   "hardness": 4,
   "xp": 30,
   "color": "0xf2d438"

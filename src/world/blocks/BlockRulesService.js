@@ -1,6 +1,7 @@
 import { BLOCKS } from '../../data/blocks.js';
 import { TOOLS } from '../../data/tools.js';
 import { normalizeBlockVariantId } from '../../data/blockIds.js';
+import { computeBreakSeconds, getBlockDrops } from '../../data/harvest.js';
 
 export class BlockRulesService {
   constructor(world) {
@@ -80,16 +81,16 @@ export class BlockRulesService {
   computeMineDuration(blockId, selectedItem, mode) {
     if (mode === 'CREATIVE') return 0;
 
-    const hardness = Math.max(
-      0.15,
-      Number(this.blockHardnessById.get(normalizeBlockVariantId(blockId)) ?? 1)
-    );
-    let efficiency = 1;
-    if (selectedItem?.id) {
-      const tool = this.toolById.get(selectedItem.id);
-      if (tool) efficiency += Math.max(0, Number(tool.efficiency) || 0);
-    }
-    return Math.max(0.12, (hardness * 0.9) / efficiency);
+    const id = normalizeBlockVariantId(blockId);
+    const hardness = Number(this.blockHardnessById.get(id) ?? 1);
+    return computeBreakSeconds(id, hardness, selectedItem);
+  }
+
+  /** Items dropped when `id` is broken with `selectedItem` ([] if the tool is too weak). */
+  getBlockDrops(id, selectedItem) {
+    return getBlockDrops(id, selectedItem, {
+      fallbackDropId: this.getBlockDropId(id),
+    });
   }
 
   isReplaceableForPlacement(id) {

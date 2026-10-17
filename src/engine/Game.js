@@ -186,6 +186,8 @@ export class Game {
       this.gameState.offhand = null;
       this.gameState.armor = Array(4).fill(null);
       this.gameState.craftingGrid = Array(9).fill(null);
+      this.gameState.isDead = false;
+      this.gameState.spawnPoint = null;
 
       if (this.physics.isReady) {
         this.physics.resetPlayer(0, 160, 0);
@@ -328,7 +330,7 @@ export class Game {
   }
 
   toggleInventory() {
-    if (!this.hasStarted || this.isPaused) return;
+    if (!this.hasStarted || this.isPaused || this.gameState.isDead) return;
     this.gameState.toggleInventory();
     this.updateCrosshairVisibility();
   }
@@ -353,6 +355,9 @@ export class Game {
       this.helpPanel.setState('inventory');
       return;
     }
+
+    // The death screen owns the cursor until the player respawns.
+    if (this.gameState.isDead) return;
 
     if (this.isPaused) {
       this.showPause(true);
@@ -504,7 +509,10 @@ export class Game {
     this.world.blockRegistry.updateShaderMaterials(this.clock.getElapsed());
 
     const canSimulate =
-      this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen;
+      this.hasStarted &&
+      !this.isPaused &&
+      !this.gameState.isInventoryOpen &&
+      !this.gameState.isDead;
     this.input.update();
 
     if (canSimulate) {

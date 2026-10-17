@@ -209,7 +209,7 @@ const HOST_ROCK = new Set([
 // attempts = veins per 16³ chunk (fractional part is a chance of one more)
 const ORES = [
   {
-    id: 'coal',
+    id: 'coal_ore',
     deep: 'deepslate_coal_ore',
     minY: -10,
     maxY: 140,
@@ -217,7 +217,7 @@ const ORES = [
     size: [6, 13],
   },
   {
-    id: 'iron',
+    id: 'iron_ore',
     deep: 'deepslate_iron_ore',
     minY: -60,
     maxY: 70,
@@ -225,7 +225,7 @@ const ORES = [
     size: [4, 9],
   },
   {
-    id: 'copper',
+    id: 'copper_ore',
     deep: 'deepslate_copper_ore',
     minY: -20,
     maxY: 60,
@@ -233,7 +233,7 @@ const ORES = [
     size: [5, 10],
   },
   {
-    id: 'gold',
+    id: 'gold_ore',
     deep: 'deepslate_gold_ore',
     minY: -64,
     maxY: -5,
@@ -257,7 +257,7 @@ const ORES = [
     size: [3, 6],
   },
   {
-    id: 'diamond',
+    id: 'diamond_ore',
     deep: 'deepslate_diamond_ore',
     minY: -64,
     maxY: -40,

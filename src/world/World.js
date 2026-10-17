@@ -401,6 +401,7 @@ export class World {
     this.state.blockMap.clear();
     this.state.blockData.clear();
     this.state.chestInventories?.clear();
+    this.state.furnaceStates?.clear();
     this.state.changedBlocks.clear();
     this.state.landmarks.clear();
     this.state.openedChestKeys.clear();
@@ -533,7 +534,10 @@ export class World {
     const id = this.state.blockMap.get(key);
     if (!id || id === 'bedrock') return false;
     const pairState = this.getBlockPairState(id, x, y, z);
-    const dropId = this.getBlockDropId(id);
+    const selectedItem = this.game?.gameState?.getSelectedItem?.() ?? null;
+    const drops = this.blocks.getBlockDrops(id, selectedItem);
+    const dropId = drops[0]?.id ?? null;
+    this.releaseContainerContents(key);
     if (pairState) {
       const pairKey = this.getKey(x, pairState.pairY, z);
       this.state.changedBlocks.set(pairKey, null);
@@ -556,7 +560,8 @@ export class World {
     }
 
     this.spawnBreakParticles(x, y, z, id);
-    this.spawnPickupEffect(x, y, z, dropId, this.game?.getPlayerPosition?.());
+    if (dropId)
+      this.spawnPickupEffect(x, y, z, dropId, this.game?.getPlayerPosition?.());
 
     // Apply Durability Damage to Active Tool
     const selectedSlot = this.game.gameState.selectedSlot;
@@ -571,9 +576,26 @@ export class World {
     }
 
     window.dispatchEvent(
-      new CustomEvent('block-mined', { detail: { id: dropId, x, y, z } })
+      new CustomEvent('block-mined', {
+        detail: { id: dropId, blockId: id, drops, x, y, z },
+      })
     );
     return true;
+  }
+
+  /** Chests and furnaces hand their contents to the player when broken. */
+  releaseContainerContents(key) {
+    const gameState = this.game?.gameState;
+    const chest = this.state.chestInventories?.get(key);
+    const furnace = this.state.furnaceStates?.get(key);
+    const items = [
+      ...(Array.isArray(chest) ? chest : []),
+      ...(furnace ? [furnace.input, furnace.fuel, furnace.output] : []),
+    ].filter(Boolean);
+    this.state.chestInventories?.delete(key);
+    this.state.furnaceStates?.delete(key);
+    if (!gameState || gameState.mode === 'CREATIVE') return;
+    for (const item of items) gameState.addItemStack({ ...item });
   }
 
   mineBlockProgress(camera, delta, selectedItem, mode = 'SURVIVAL') {
@@ -671,6 +693,7 @@ export class World {
       potato: 'potato_stage0',
       beetroot: 'beetroot_stage0',
       wheat: 'wheat_stage0',
+      redstone: 'redstone_wire',
     };
     const blockId = isBucket
       ? item.id.replace('_bucket', '')
@@ -921,6 +944,49 @@ export class World {
     return false;
   }
 
+  /**
+   * Right-clicking a bed sets the respawn point and, at night, skips to the
+   * next morning (unless monsters are close by), like Minecraft.
+   */
+  sleepInBed(cell) {
+    const game = this.game;
+    const gameState = game?.gameState;
+    if (!gameState) return false;
+    gameState.setSpawnPoint(cell.x + 0.5, cell.y + 1, cell.z + 0.5);
+    const flash = (text, color) => game.hud?.flashPrompt?.(text, color);
+
+    const dayNight = game.dayNight;
+    if (!dayNight?.isNight?.()) {
+      flash('Respawn point set. You can only sleep at night.', '#aaddff');
+      return true;
+    }
+
+    const monstersNearby = (game.entities?.entities ?? []).some(
+      (entity) =>
+        !entity.dead &&
+        !entity.config?.friendly &&
+        entity.mesh?.position &&
+        Math.abs(entity.mesh.position.x - cell.x) < 8 &&
+        Math.abs(entity.mesh.position.y - cell.y) < 5 &&
+        Math.abs(entity.mesh.position.z - cell.z) < 8
+    );
+    if (monstersNearby) {
+      flash('You may not rest now; there are monsters nearby', '#ff8585');
+      return true;
+    }
+
+    // The sun peaks at timeOfDay 0.5 and rises around 0.25; the day counter
+    // ticks over at 0. Wake just after sunrise on the following morning.
+    const nextDay =
+      dayNight.timeOfDay > 0.5 ? dayNight.totalDays + 1 : dayNight.totalDays;
+    dayNight.setTime(0.28, nextDay);
+    window.dispatchEvent(
+      new CustomEvent('player-slept', { detail: { day: nextDay } })
+    );
+    flash('Good morning! The night was skipped.', '#f8f87a');
+    return true;
+  }
+
   interactBlock(camera) {
     const hit = this.raycastBlocks(camera, 6, true);
     if (!hit) return false;
@@ -1056,8 +1122,12 @@ export class World {
       }
     }
 
+    if (normalizeBlockVariantId(blockId) === 'bed') {
+      return this.sleepInBed(cell);
+    }
+
     // Route to modular block handler if one is registered
-    const handler = getBlockHandler(blockId);
+    const handler = getBlockHandler(normalizeBlockVariantId(blockId));
     if (handler) {
       const blockKey = this.getKey(cell.x, cell.y, cell.z);
       handler.open(blockKey, this.game);

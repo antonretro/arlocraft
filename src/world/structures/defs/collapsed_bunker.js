@@ -22,7 +22,7 @@ export const collapsed_bunker = {
     }
     // Loot
     blocks.push({ x: x + 1, y, z: z + 1, id: 'starter_chest' });
-    blocks.push({ x: x - 1, y, z: z - 1, id: 'iron' });
+    blocks.push({ x: x - 1, y, z: z - 1, id: 'iron_block' });
     blocks.push({ x, y, z, id: 'furnace' });
     return blocks;
   },

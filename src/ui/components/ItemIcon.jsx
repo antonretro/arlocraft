@@ -12,10 +12,31 @@ const FIXED_COLOR_FOLIAGE_IDS = new Set([
  * High-fidelity Item Icon component that renders 3D isometric blocks
  * or high-quality 2D sprites based on the item type.
  */
-export const ItemIcon = React.memo(({ item, className = "" }) => {
+// Game code mutates stacks in place (item.count--), so memoize on the values
+// the icon shows rather than on the item object's identity.
+const MemoItemIcon = React.memo(
+  ({ item, className }) => <ItemIconInner item={item} className={className} />,
+  (prev, next) =>
+    prev.className === next.className &&
+    prev.id === next.id &&
+    prev.count === next.count &&
+    prev.durability === next.durability &&
+    prev.kind === next.kind
+);
+
+export const ItemIcon = ({ item, className = "" }) => {
   if (!item) return null;
-  return <ItemIconInner item={item} className={className} />;
-});
+  return (
+    <MemoItemIcon
+      item={item}
+      className={className}
+      id={item.id}
+      count={item.count}
+      durability={item.durability}
+      kind={item.kind}
+    />
+  );
+};
 
 const ItemIconInner = ({ item, className }) => {
   const normalizedId = useMemo(() => normalizeBlockVariantId(item.id), [item.id]);

@@ -1,174 +1,377 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { getGame } from '../UIManager';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, RefreshCw, Box, Hammer, Leaf, Cpu, Carrot, Palette, Trophy, Warehouse, Zap, Shield } from 'lucide-react';
+import {
+  X,
+  Search,
+  Hammer,
+  Leaf,
+  Cpu,
+  Carrot,
+  Palette,
+  Trophy,
+  Warehouse,
+  Zap,
+  Shield,
+  Flame,
+  Package,
+  ArrowRight,
+} from 'lucide-react';
 import { ItemIcon } from './ItemIcon';
 import { RECIPE_BOOK } from '../../data/recipeBook';
 import { BLOCKS } from '../../data/blocks';
 import { AchievementScreen } from './AchievementScreen';
 import { CraftingSystem } from '../../engine/CraftingSystem';
+import { TOOLS } from '../../data/tools';
+import { blockIdToDisplayName } from '../../data/blockIds';
+import {
+  getMaxStackSize,
+  canStackTogether,
+  getArmorDefinition,
+} from '../../data/itemKinds';
+import { isFuel, isSmeltable, SMELT_SECONDS } from '../../data/smelting';
+import {
+  getFurnaceState,
+  tickAllFurnaces,
+} from '../../blocks/handlers/FurnaceHandler';
+import {
+  getChestInventory,
+  CHEST_SLOTS,
+} from '../../blocks/handlers/ChestHandler';
 
-const MAX_STACK = 99;
 const craftingSystem = new CraftingSystem(RECIPE_BOOK);
+const PLAYER_GRID = [0, 1, 3, 4];
+const WORKSHOP_GRID = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+const FURNACE_FIELDS = ['input', 'fuel', 'output'];
+const TOOL_NAMES = new Map(TOOLS.map((tool) => [tool.id, tool.name]));
+
+const getItemName = (item) =>
+  item.name ||
+  TOOL_NAMES.get(item.id) ||
+  getArmorDefinition(item.id)?.name ||
+  blockIdToDisplayName(item.id);
+
+/** Moves as much of `item` as fits into `slots` (indices of `arr`): merge first, then empty slots. */
+function moveIntoSlots(arr, indices, item, maxPer = getMaxStackSize(item)) {
+  if (maxPer > 1) {
+    for (const i of indices) {
+      const slot = arr[i];
+      if (!slot || !canStackTogether(slot, item)) continue;
+      const moved = Math.min(maxPer - slot.count, item.count);
+      if (moved <= 0) continue;
+      slot.count += moved;
+      item.count -= moved;
+      if (item.count <= 0) return;
+    }
+  }
+  for (const i of indices) {
+    if (arr[i]) continue;
+    const moved = Math.min(maxPer, item.count);
+    arr[i] = { ...item, count: moved };
+    item.count -= moved;
+    if (item.count <= 0) return;
+  }
+}
+
+const range = (from, to) =>
+  Array.from({ length: to - from }, (_, i) => from + i);
 const CATEGORIES = [
   { id: 'Building', icon: Hammer, label: 'Construction' },
   { id: 'Natural', icon: Leaf, label: 'Natural' },
   { id: 'Redstone', icon: Cpu, label: 'Redstone' },
   { id: 'Consumables', icon: Carrot, label: 'Consumables' },
-  { id: 'Decorative', icon: Palette, label: 'Applied' }
+  { id: 'Decorative', icon: Palette, label: 'Applied' },
 ];
 
-export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
+export const Inventory = ({
+  onClose,
+  initialMode = 'PLAYER',
+  blockKey = null,
+}) => {
   const game = getGame();
-  const [inventory, setInventory] = useState(() => game?.gameState?.inventory ?? []);
-  const [craftingGrid, setCraftingGrid] = useState(() => game?.gameState?.craftingGrid ?? []);
-  const [armor, setArmor] = useState(() => game?.gameState?.armor ?? [null, null, null, null]);
-  const [carryItem, setCarryItem] = useState(null);
+  const gameState = game.gameState;
+  const [, setVersion] = useState(0);
+  const refresh = () => setVersion((v) => v + 1);
+  const [carryItem, setCarryItemState] = useState(null);
+  const carryRef = useRef(null);
   const [activeTab, setActiveTab] = useState('STORAGE'); // STORAGE | ACHIEVEMENTS
   const [activeCategory, setActiveCategory] = useState('Building');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Container Mode: PLAYER | WORKSHOP | DISPENSARY | MAGIC
-  const [uiMode, setUiMode] = useState(initialMode);
 
-  // Sync state
+  // Container Mode: PLAYER | WORKSHOP (crafting table) | FURNACE | CHEST
+  const uiMode = initialMode;
+  const isWorkshop = uiMode === 'WORKSHOP';
+  const gridIndices = isWorkshop ? WORKSHOP_GRID : PLAYER_GRID;
+  const furnace =
+    uiMode === 'FURNACE' ? getFurnaceState(game.world, blockKey) : null;
+  const chest =
+    uiMode === 'CHEST' ? getChestInventory(game.world, blockKey) : null;
+
+  const setCarryItem = (item) => {
+    const next = item && item.count > 0 ? { ...item } : null;
+    carryRef.current = next;
+    setCarryItemState(next);
+  };
+
+  // Re-render whenever the game changes a stack in place.
   useEffect(() => {
-    const handleUpdate = () => {
-      setInventory([...game.gameState.inventory]);
-      setCraftingGrid([...game.gameState.craftingGrid]);
-      setArmor([...game.gameState.armor]);
-    };
-    window.addEventListener('inventory-changed', handleUpdate);
-    return () => window.removeEventListener('inventory-changed', handleUpdate);
+    window.addEventListener('inventory-changed', refresh);
+    return () => window.removeEventListener('inventory-changed', refresh);
   }, [game]);
 
+  // The furnace keeps burning while its screen is open (the game loop is paused).
+  useEffect(() => {
+    if (uiMode !== 'FURNACE') return undefined;
+    let last = performance.now();
+    const timer = setInterval(() => {
+      const now = performance.now();
+      tickAllFurnaces(game.world, Math.min(1, (now - last) / 1000));
+      last = now;
+      refresh();
+    }, 100);
+    return () => clearInterval(timer);
+  }, [uiMode, game]);
 
-  const sameItem = (a, b) => a && b && a.id === b.id && a.kind === b.kind;
+  // Closing the screen hands the carried stack and crafting grid back, like Minecraft.
+  useEffect(
+    () => () => {
+      const gs = game.gameState;
+      if (carryRef.current) gs.addItemStack({ ...carryRef.current });
+      carryRef.current = null;
+      for (let i = 0; i < gs.craftingGrid.length; i++) {
+        if (gs.craftingGrid[i]) gs.addItemStack({ ...gs.craftingGrid[i] });
+        gs.craftingGrid[i] = null;
+      }
+      window.dispatchEvent(new CustomEvent('inventory-changed'));
+    },
+    [game]
+  );
 
   // Creative Filtering
   const filteredBlocks = useMemo(() => {
-    return BLOCKS.filter(b => {
-      const matchCat = b.category === activeCategory || (activeCategory === 'Building' && b.category === 'Construction');
-      const matchSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          b.id.toLowerCase().includes(searchQuery.toLowerCase());
+    return BLOCKS.filter((b) => {
+      const matchCat =
+        b.category === activeCategory ||
+        (activeCategory === 'Building' && b.category === 'Construction');
+      const matchSearch =
+        b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        b.id.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCat && matchSearch;
     });
   }, [activeCategory, searchQuery]);
 
-  // Crafting Logic (Enhanced for 3x3)
-  const craftingResult = useMemo(() => {
-    const isWorkshop = uiMode === 'WORKSHOP';
-    
-    // In PLAYER mode, only indices [0, 1, 3, 4] are active (2x2)
-    // However, the CraftingSystem expects a 3x3 grid (Array(9))
-    let grid = craftingGrid;
-    if (!isWorkshop) {
-        // Map 2x2 to 3x3 (top-left)
-        grid = new Array(9).fill(null);
-        grid[0] = craftingGrid[0];
-        grid[1] = craftingGrid[1];
-        grid[3] = craftingGrid[3];
-        grid[4] = craftingGrid[4];
+  // Crafting: the 2x2 player grid uses slots 0,1,3,4 of the 3x3 grid.
+  const getActiveGrid = () => {
+    const grid = new Array(9).fill(null);
+    for (const i of gridIndices) grid[i] = gameState.craftingGrid[i];
+    return grid;
+  };
+  const craftingMatch = craftingSystem.match(getActiveGrid());
+  const craftingResult = craftingMatch ? craftingMatch.result : null;
+
+  // --- Slot access -------------------------------------------------------
+  const getSlot = (type, idx) => {
+    if (type === 'inventory') return gameState.inventory[idx];
+    if (type === 'crafting') return gameState.craftingGrid[idx];
+    if (type === 'armor') return gameState.armor[idx];
+    if (type === 'chest') return chest?.[idx] ?? null;
+    if (type === 'furnace') return furnace?.[FURNACE_FIELDS[idx]] ?? null;
+    return null;
+  };
+  const setSlot = (type, idx, item) => {
+    const value = item && item.count > 0 ? item : null;
+    if (type === 'inventory') gameState.inventory[idx] = value;
+    else if (type === 'crafting') gameState.craftingGrid[idx] = value;
+    else if (type === 'armor') gameState.armor[idx] = value;
+    else if (type === 'chest' && chest) chest[idx] = value;
+    else if (type === 'furnace' && furnace)
+      furnace[FURNACE_FIELDS[idx]] = value;
+  };
+  const canPlace = (type, idx, item) => {
+    if (type === 'armor') return getArmorDefinition(item.id)?.slot === idx;
+    if (type === 'furnace') return idx === 0 || (idx === 1 && isFuel(item.id));
+    return true;
+  };
+  const slotLimit = (type, item) =>
+    type === 'armor' ? 1 : getMaxStackSize(item);
+
+  const changed = () => {
+    window.dispatchEvent(new CustomEvent('inventory-changed'));
+    refresh();
+  };
+
+  // Shift-click: send the stack to the other side of the screen.
+  const quickMove = (type, idx) => {
+    const item = getSlot(type, idx);
+    if (!item) return;
+    const stack = { ...item };
+    if (type === 'inventory') {
+      const armorSlot = getArmorDefinition(stack.id)?.slot;
+      if (chest) {
+        moveIntoSlots(chest, range(0, CHEST_SLOTS), stack);
+      } else if (
+        furnace &&
+        isSmeltable(stack.id) &&
+        canFurnaceTake('input', stack)
+      ) {
+        moveIntoFurnace('input', stack);
+      } else if (furnace && isFuel(stack.id) && canFurnaceTake('fuel', stack)) {
+        moveIntoFurnace('fuel', stack);
+      } else if (armorSlot !== undefined && !gameState.armor[armorSlot]) {
+        gameState.armor[armorSlot] = { ...stack, count: 1 };
+        stack.count -= 1;
+      } else {
+        // Hotbar <-> main inventory.
+        moveIntoSlots(
+          gameState.inventory,
+          idx < 9 ? range(9, 36) : range(0, 9),
+          stack
+        );
+      }
+    } else {
+      gameState.addItemStack(stack);
     }
+    if (stack.count > 0) setSlot(type, idx, { ...item, count: stack.count });
+    else setSlot(type, idx, null);
+    changed();
+  };
+  const canFurnaceTake = (field, stack) =>
+    !furnace[field] || canStackTogether(furnace[field], stack);
+  const moveIntoFurnace = (field, stack) => {
+    const current = furnace[field];
+    const max = getMaxStackSize(stack);
+    const moved = Math.min(stack.count, max - (current?.count ?? 0));
+    if (moved <= 0) return;
+    furnace[field] = current
+      ? { ...current, count: current.count + moved }
+      : { ...stack, count: moved };
+    stack.count -= moved;
+  };
 
-    const match = craftingSystem.match(grid);
-    return match ? match.result : null;
-  }, [craftingGrid, uiMode]);
+  const handleSlotClick = (
+    idx,
+    type,
+    isRightClick = false,
+    isShift = false
+  ) => {
+    if (isShift && !carryItem) {
+      quickMove(type, idx);
+      return;
+    }
+    const slotItem = getSlot(type, idx);
+    let carry = carryItem ? { ...carryItem } : null;
 
-  const handleSlotClick = (idx, type, isRightClick = false) => {
-    const target = type === 'inventory' ? game.gameState.inventory : type === 'crafting' ? game.gameState.craftingGrid : game.gameState.armor;
-    const slotItem = target[idx];
-
-    // Armor-specific logic: Only allow armor in armor slots
-    if (type === 'armor' && carryItem && carryItem.kind !== 'armor') return;
-    // In a real impl, we'd also check if the armor slot matches (helmet to 0, etc.)
-
-    if (!carryItem) {
+    if (!carry) {
       if (!slotItem) return;
       if (isRightClick && slotItem.count > 1) {
         const take = Math.ceil(slotItem.count / 2);
-        setCarryItem({ ...slotItem, count: take });
+        carry = { ...slotItem, count: take };
         slotItem.count -= take;
       } else {
-        setCarryItem({ ...slotItem });
-        target[idx] = null;
+        carry = slotItem;
+        setSlot(type, idx, null);
+      }
+    } else if (!canPlace(type, idx, carry)) {
+      // Output slots only give: pick more of the same item onto the cursor.
+      if (type === 'furnace' && slotItem && canStackTogether(slotItem, carry)) {
+        const moved = Math.min(
+          slotItem.count,
+          getMaxStackSize(carry) - carry.count
+        );
+        carry.count += moved;
+        slotItem.count -= moved;
+        if (slotItem.count <= 0) setSlot(type, idx, null);
+      } else {
+        return;
       }
     } else {
-      if (isRightClick) {
-        if (!slotItem) {
-          target[idx] = { ...carryItem, count: 1 };
-          carryItem.count--;
-        } else if (sameItem(slotItem, carryItem) && slotItem.count < MAX_STACK) {
-          slotItem.count++;
-          carryItem.count--;
-        }
-        if (carryItem.count <= 0) setCarryItem(null);
-        else setCarryItem({ ...carryItem });
+      const max = slotLimit(type, carry);
+      if (!slotItem) {
+        const moved = isRightClick ? 1 : Math.min(max, carry.count);
+        setSlot(type, idx, { ...carry, count: moved });
+        carry.count -= moved;
+      } else if (canStackTogether(slotItem, carry)) {
+        const space = max - slotItem.count;
+        if (space <= 0) return;
+        const moved = isRightClick ? 1 : Math.min(space, carry.count);
+        slotItem.count += moved;
+        carry.count -= moved;
+      } else if (carry.count <= max) {
+        setSlot(type, idx, carry);
+        carry = slotItem;
       } else {
-        if (!slotItem) {
-          target[idx] = { ...carryItem };
-          setCarryItem(null);
-        } else if (sameItem(slotItem, carryItem) && slotItem.count < MAX_STACK) {
-          const space = MAX_STACK - slotItem.count;
-          const moved = Math.min(space, carryItem.count);
-          slotItem.count += moved;
-          carryItem.count -= moved;
-          if (carryItem.count <= 0) setCarryItem(null);
-          else setCarryItem({ ...carryItem });
-        } else {
-          const temp = { ...slotItem };
-          target[idx] = { ...carryItem };
-          setCarryItem(temp);
-        }
+        return;
       }
     }
-    window.dispatchEvent(new CustomEvent('inventory-changed'));
+    setCarryItem(carry);
+    changed();
   };
 
-  const handleCraftingResultClick = () => {
-    if (!craftingResult) return;
-    if (carryItem && !sameItem(carryItem, craftingResult)) return;
-    if (carryItem && carryItem.count + craftingResult.count > MAX_STACK) return;
+  const consumeIngredients = () => {
+    for (const i of gridIndices) {
+      const slot = gameState.craftingGrid[i];
+      if (!slot) continue;
+      slot.count -= 1;
+      if (slot.count <= 0) gameState.craftingGrid[i] = null;
+    }
+  };
 
-    const newCarry = carryItem ? { ...carryItem, count: carryItem.count + craftingResult.count } : { ...craftingResult };
-    setCarryItem(newCarry);
+  const makeResultStack = (result) =>
+    gameState.createItemStack(
+      result.id,
+      result.count ?? 1,
+      result.kind ?? 'block'
+    );
 
-    // Consume ingredients
-    const isWorkshop = uiMode === 'WORKSHOP';
-    const grid = [...game.gameState.craftingGrid];
-    const indices = isWorkshop ? [0,1,2,3,4,5,6,7,8] : [0, 1, 3, 4];
-    
-    indices.forEach(i => {
-      if (grid[i]) {
-        grid[i].count--;
-        if (grid[i].count <= 0) grid[i] = null;
+  const handleCraftingResultClick = (isShift = false) => {
+    if (!craftingMatch) return;
+    if (isShift) {
+      // Craft as many as the grid and inventory allow.
+      let crafted = 0;
+      while (crafted < 64) {
+        const match = craftingSystem.match(getActiveGrid());
+        if (!match || match.recipeId !== craftingMatch.recipeId) break;
+        const stack = makeResultStack(match.result);
+        if (!gameState.canAccept(stack)) break;
+        gameState.addItemStack(stack);
+        consumeIngredients();
+        gameState.recordCraft?.(stack.id, match.result.count ?? 1);
+        crafted++;
       }
-    });
-
-    game.gameState.craftingGrid = grid;
-    setCraftingGrid(grid);
-    window.dispatchEvent(new CustomEvent('inventory-changed'));
+      if (crafted > 0) changed();
+      return;
+    }
+    const stack = makeResultStack(craftingResult);
+    if (carryItem && !canStackTogether(carryItem, stack)) return;
+    if (carryItem && carryItem.count + stack.count > getMaxStackSize(stack))
+      return;
+    setCarryItem(
+      carryItem ? { ...carryItem, count: carryItem.count + stack.count } : stack
+    );
+    consumeIngredients();
+    gameState.recordCraft?.(stack.id, stack.count);
+    changed();
   };
 
   const handleCreativePick = (blockId) => {
-      setCarryItem({ id: blockId, kind: 'block', count: 64 });
+    setCarryItem({ id: blockId, kind: 'block', count: 64 });
   };
 
   const returnCarry = () => {
     if (!carryItem) return;
-    game.gameState.addItemToInventory(carryItem.id, carryItem.count, carryItem.kind);
+    gameState.addItemStack({ ...carryItem });
     setCarryItem(null);
   };
 
   const renderSlot = (idx, type) => {
-    const item = type === 'inventory' ? inventory[idx] : type === 'crafting' ? craftingGrid[idx] : armor[idx];
-    const isActive = type === 'inventory' && idx === game.gameState.selectedSlot;
+    const item = getSlot(type, idx);
+    const isActive = type === 'inventory' && idx === gameState.selectedSlot;
 
     return (
       <div 
         key={`${type}-${idx}`}
-        onClick={() => handleSlotClick(idx, type, false)}
-        onContextMenu={(e) => { e.preventDefault(); handleSlotClick(idx, type, true); }}
+        onClick={(e) => handleSlotClick(idx, type, false, e.shiftKey)}
+        onContextMenu={(e) => { e.preventDefault(); handleSlotClick(idx, type, true, false); }}
         className={`w-12 h-12 md:w-14 md:h-14 aspect-square flex-none rounded-sm flex items-center justify-center transition-all cursor-pointer relative
           ${isActive ? 'bg-white/20 border-2 border-arlo-blue shadow-[0_0_15px_rgba(0,195,227,0.2)]' : 'bg-black/40 border border-white/10 hover:bg-white/5'}
           ${item ? '' : 'hover:border-white/20'} group`}
@@ -177,7 +380,7 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
         {item && <ItemIcon item={item} className="w-8 h-8 md:w-10 md:h-10" />}
         {item && (
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/80 backdrop-blur-md rounded text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[100] border border-white/10 shadow-xl">
-            {item.name || item.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            {getItemName(item)}{item.count > 1 ? ` x${item.count}` : ''}
           </div>
         )}
       </div>
@@ -227,8 +430,8 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
                 {/* Search / Context Header */}
                 <div className="flex justify-between items-center">
                     <h2 className="text-xl font-black italic tracking-tighter uppercase flex items-center gap-3">
-                        {uiMode === 'WORKSHOP' ? <Hammer className="text-arlo-blue" /> : <Warehouse className="text-arlo-blue" />}
-                        {uiMode === 'WORKSHOP' ? 'Advanced Fabrication' : 'Mobile Storage Unit'}
+                        {uiMode === 'WORKSHOP' ? <Hammer className="text-arlo-blue" /> : uiMode === 'FURNACE' ? <Flame className="text-arlo-blue" /> : uiMode === 'CHEST' ? <Package className="text-arlo-blue" /> : <Warehouse className="text-arlo-blue" />}
+                        {MODE_TITLES[uiMode] ?? MODE_TITLES.PLAYER}
                     </h2>
                     
                     {game.gameState.mode === 'CREATIVE' && (
@@ -246,8 +449,15 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
                 </div>
 
                 <div className="flex flex-col md:flex-row gap-8">
-                    {/* Left: Creative Grid or Specialized UI */}
-                    {game.gameState.mode === 'CREATIVE' ? (
+                    {/* Left: Chest, Creative Grid or Specialized UI */}
+                    {chest ? (
+                        <div className="flex flex-col gap-3 flex-1">
+                            <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Chest</span>
+                            <div className="grid grid-cols-9 gap-2">
+                                {range(0, CHEST_SLOTS).map((i) => renderSlot(i, 'chest'))}
+                            </div>
+                        </div>
+                    ) : game.gameState.mode === 'CREATIVE' ? (
                         <div className="flex flex-col gap-3 flex-1">
                             <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">System Catalog</span>
                             <div className="grid grid-cols-6 md:grid-cols-8 gap-2 max-h-[35vh] overflow-y-auto p-1 custom-scrollbar">
@@ -279,7 +489,10 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
                         </div>
                     </div>
 
-                    {/* Right: Crafting Table Area */}
+                    {/* Right: Furnace or Crafting Area */}
+                    {furnace ? (
+                        <FurnacePanel furnace={furnace} renderSlot={renderSlot} />
+                    ) : !chest && (
                     <div className="flex flex-col gap-3 items-center">
                         <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
                             {uiMode === 'WORKSHOP' ? '3x3 Matrix' : '2x2 Field'}
@@ -291,7 +504,8 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
                             }
                         </div>
                         <div 
-                            onClick={handleCraftingResultClick}
+                            onClick={(e) => handleCraftingResultClick(e.shiftKey)}
+                            title={craftingMatch ? `${craftingMatch.recipeName} (shift-click to craft all)` : ''}
                             className={`w-14 h-14 mt-4 bg-white/5 border rounded-xl flex items-center justify-center shadow-lg relative transition-all
                                 ${craftingResult ? 'border-arlo-blue cursor-pointer hover:bg-arlo-blue/10 scale-105' : 'border-white/5 cursor-default'}`}
                         >
@@ -299,6 +513,7 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
                              {craftingResult && <div className="absolute -top-1 -right-1 w-3 h-3 bg-arlo-blue rounded-full animate-pulse" />}
                         </div>
                     </div>
+                    )}
                 </div>
 
                 <hr className="border-white/5" />
@@ -327,6 +542,63 @@ export const Inventory = ({ onClose, initialMode = 'PLAYER' }) => {
     </div>
   );
 };
+
+const MODE_TITLES = {
+  PLAYER: 'Mobile Storage Unit',
+  WORKSHOP: 'Advanced Fabrication',
+  FURNACE: 'Furnace',
+  CHEST: 'Chest',
+};
+
+const FurnacePanel = ({ furnace, renderSlot }) => {
+  const smeltPct = Math.min(100, (furnace.progress / SMELT_SECONDS) * 100);
+  const burnPct =
+    furnace.burnTotal > 0
+      ? Math.min(100, (furnace.burnRemaining / furnace.burnTotal) * 100)
+      : 0;
+  return (
+    <div className="flex flex-col gap-3 items-center">
+      <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
+        Smelting
+      </span>
+      <div className="flex items-center gap-4">
+        <div className="flex flex-col items-center gap-2">
+          {renderSlot(0, 'furnace')}
+          <div
+            className="relative w-6 h-6"
+            title={furnace.burnRemaining > 0 ? 'Burning' : 'Out of fuel'}
+          >
+            <Flame className="absolute inset-0 text-white/10" size={24} />
+            <div
+              className="absolute inset-x-0 bottom-0 overflow-hidden"
+              style={{ height: `${burnPct}%` }}
+            >
+              <Flame className="absolute bottom-0 text-orange-400" size={24} />
+            </div>
+          </div>
+          {renderSlot(1, 'furnace')}
+        </div>
+        <div className="flex flex-col items-center gap-1 w-14">
+          <ArrowRight
+            className={smeltPct > 0 ? 'text-arlo-blue' : 'text-white/20'}
+            size={28}
+          />
+          <div className="w-full h-1.5 bg-black/60 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-arlo-blue"
+              style={{ width: `${smeltPct}%` }}
+            />
+          </div>
+        </div>
+        {renderSlot(2, 'furnace')}
+      </div>
+      <span className="text-[9px] text-white/30 text-center max-w-[12rem]">
+        Top: item to smelt · Bottom: fuel (coal, charcoal, wood, sticks)
+      </span>
+    </div>
+  );
+};
+
 
 const CarryGhost = ({ carryItem }) => {
   const [pos, setPos] = useState({ x: 0, y: 0 });

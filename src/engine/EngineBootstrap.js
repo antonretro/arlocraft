@@ -121,15 +121,35 @@ export class EngineBootstrap {
   }
 
   static bindGlobalEvents(game) {
-    window.addEventListener('player-respawn', () => {
-      game.physics.resetPlayer();
+    window.addEventListener('player-respawn', (event) => {
+      const spawn = event.detail?.spawnPoint;
+      if (spawn) game.physics.resetPlayer(spawn.x, spawn.y + 1, spawn.z);
+      else game.physics.resetPlayer();
+      game.physics.fallDistance = 0;
       game.audio.play('respawn');
+      if (game.hasStarted && !game.isPaused && !game.touchControls)
+        game.input.setPointerLock();
+    });
+
+    window.addEventListener('player-died', () => {
+      game.cancelMining();
+      if (document.pointerLockElement) document.exitPointerLock();
     });
 
     window.addEventListener('block-mined', (event) => {
       const minedId = event.detail?.id;
-      if (minedId) game.gameState.addBlockToInventory(minedId, 1);
-      game.stats.addXP(game.world.getBlockXP(minedId));
+      const drops =
+        event.detail?.drops ?? (minedId ? [{ id: minedId, count: 1 }] : []);
+      // Creative mode breaks blocks without collecting them, like Minecraft.
+      if (game.gameState.mode !== 'CREATIVE') {
+        for (const drop of drops) {
+          game.gameState.addItemToInventory(drop.id, drop.count ?? 1);
+        }
+      }
+      if (drops.length > 0)
+        game.stats.addXP(
+          game.world.getBlockXP(event.detail?.blockId ?? minedId)
+        );
       game.screenShake = Math.max(0.05, minedId === 'virus' ? 0.09 : 0.05);
       game.shakeCamera(game.screenShake);
       game.audio.play('block-mined', { id: minedId });

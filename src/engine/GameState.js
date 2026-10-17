@@ -1,4 +1,10 @@
 import { ACHIEVEMENTS } from '../data/achievements.js';
+import {
+  resolveItemKind,
+  getMaxStackSize,
+  canStackTogether,
+  getArmorDefinition,
+} from '../data/itemKinds.js';
 
 export class GameState {
   constructor() {
@@ -17,6 +23,8 @@ export class GameState {
     // UI State
     this.isInventoryOpen = false;
     this.isPaused = false;
+    this.isDead = false;
+    this.spawnPoint = null; // { x, y, z } set by sleeping in a bed
 
     // Crafting State
     this.craftingGrid = new Array(9).fill(null); // 3x3
@@ -173,6 +181,7 @@ export class GameState {
       selectedSlot: this.selectedSlot,
       offhand: this.offhand,
       armor: this.armor,
+      spawnPoint: this.spawnPoint,
       discoveredBlocks: Array.from(this.discoveredBlocks),
       discoveredRecipes: Array.from(this.discoveredRecipes),
       unlockedAchievements: Array.from(this.unlockedAchievements),
@@ -194,6 +203,7 @@ export class GameState {
     this.selectedSlot = data.selectedSlot ?? 0;
     this.offhand = data.offhand ?? null;
     this.armor = data.armor || new Array(4).fill(null);
+    this.spawnPoint = data.spawnPoint ?? null;
 
     if (data.discoveredBlocks)
       this.discoveredBlocks = new Set(data.discoveredBlocks);
@@ -235,9 +245,24 @@ export class GameState {
   }
 
   toggleInventory() {
+    if (this.isDead && !this.isInventoryOpen) return;
     this.isInventoryOpen = !this.isInventoryOpen;
     window.dispatchEvent(
       new CustomEvent('inventory-toggle', { detail: this.isInventoryOpen })
+    );
+  }
+
+  /**
+   * Opens the inventory screen for a block UI: 'WORKSHOP' (crafting table),
+   * 'FURNACE' or 'CHEST'. `blockKey` identifies the furnace/chest.
+   */
+  openContainer(mode, blockKey = null) {
+    if (this.isDead) return;
+    this.isInventoryOpen = true;
+    window.dispatchEvent(
+      new CustomEvent('inventory-toggle', {
+        detail: { detail: true, mode, blockKey },
+      })
     );
   }
 
@@ -250,15 +275,65 @@ export class GameState {
     );
   }
 
-  takeDamage(amount) {
-    if (this.mode === 'CREATIVE') return;
-    this.hp = Math.max(0, this.hp - amount);
-    window.dispatchEvent(new CustomEvent('player-damaged', { detail: amount }));
+  /** Total armor points worn (Minecraft: each point blocks 4% damage). */
+  getArmorPoints() {
+    return this.armor.reduce(
+      (total, piece) =>
+        total + (piece ? (getArmorDefinition(piece.id)?.protection ?? 0) : 0),
+      0
+    );
+  }
+
+  /**
+   * Applies damage after armor. `options.bypassArmor` is used for fall
+   * damage and starvation, which armor does not block in Minecraft.
+   */
+  takeDamage(amount, options = {}) {
+    if (this.mode === 'CREATIVE' || this.isDead) return;
+    let damage = Math.max(0, Number(amount) || 0);
+    if (!options.bypassArmor) {
+      const reduction = Math.min(20, this.getArmorPoints()) * 0.04;
+      damage *= 1 - reduction;
+      if (damage > 0) this.damageArmor(Math.max(1, Math.floor(amount / 4)));
+    }
+    if (damage <= 0) return;
+    // Keep half-hearts: round to 0.5 so light hits on armor still count.
+    damage = Math.max(0.5, Math.round(damage * 2) / 2);
+    this.hp = Math.max(0, this.hp - damage);
+    window.dispatchEvent(new CustomEvent('player-damaged', { detail: damage }));
     window.dispatchEvent(new CustomEvent('hp-changed', { detail: this.hp }));
-    if (this.hp <= 0) this.respawn();
+    if (this.hp <= 0) this.die(options.cause);
+  }
+
+  damageArmor(amount) {
+    let changed = false;
+    for (let i = 0; i < this.armor.length; i++) {
+      const piece = this.armor[i];
+      if (!piece) continue;
+      if (piece.durability === undefined) {
+        piece.maxDurability = this.getToolDurability(piece.id);
+        piece.durability = piece.maxDurability;
+      }
+      piece.durability -= amount;
+      if (piece.durability <= 0) {
+        this.armor[i] = null;
+        window.dispatchEvent(new CustomEvent('item-broken', { detail: piece }));
+      }
+      changed = true;
+    }
+    if (changed) window.dispatchEvent(new CustomEvent('inventory-changed'));
+  }
+
+  die(cause = 'damage') {
+    if (this.isDead) return;
+    this.isDead = true;
+    this.hp = 0;
+    if (this.isInventoryOpen) this.toggleInventory();
+    window.dispatchEvent(new CustomEvent('player-died', { detail: { cause } }));
   }
 
   heal(amount) {
+    if (this.isDead) return;
     this.hp = Math.min(this.maxHp, this.hp + amount);
     window.dispatchEvent(new CustomEvent('hp-changed', { detail: this.hp }));
   }
@@ -271,13 +346,22 @@ export class GameState {
   }
 
   respawn() {
+    this.isDead = false;
     this.hp = this.maxHp;
     this.hunger = 20;
     window.dispatchEvent(new CustomEvent('hp-changed', { detail: this.hp }));
     window.dispatchEvent(
       new CustomEvent('hunger-changed', { detail: this.hunger })
     );
-    window.dispatchEvent(new CustomEvent('player-respawn'));
+    window.dispatchEvent(
+      new CustomEvent('player-respawn', {
+        detail: { spawnPoint: this.spawnPoint },
+      })
+    );
+  }
+
+  setSpawnPoint(x, y, z) {
+    this.spawnPoint = { x, y, z };
   }
 
   setSlot(idx) {
@@ -317,34 +401,73 @@ export class GameState {
     }, 0);
   }
 
+  createItemStack(itemId, count = 1, kind = 'block') {
+    const item = { id: itemId, count, kind: resolveItemKind(itemId, kind) };
+    if (item.kind === 'tool' || item.kind === 'armor') {
+      item.durability = this.getToolDurability(itemId);
+      item.maxDurability = item.durability;
+      if (item.kind === 'tool') item.enchantments = [];
+    }
+    return item;
+  }
+
   addItemToInventory(itemId, count = 1, kind = 'block') {
     if (!itemId || count <= 0) return false;
+    return this.addItemStack(this.createItemStack(itemId, count, kind));
+  }
 
-    for (let i = 0; i < this.inventory.length; i++) {
-      const slot = this.inventory[i];
-      if (!slot) continue;
-      if (slot.id !== itemId || slot.kind !== kind) continue;
-      slot.count += count;
-      this.discoverBlock(itemId);
-      window.dispatchEvent(new CustomEvent('inventory-changed'));
-      return true;
-    }
+  /**
+   * Merges a stack into the inventory (hotbar first), respecting stack
+   * limits and keeping per-item state such as tool durability. Mutates
+   * `item.count` to whatever did not fit; returns true when all of it fit.
+   */
+  addItemStack(item, slotOrder = null) {
+    if (!item?.id || !(item.count > 0)) return false;
+    item.kind = resolveItemKind(item.id, item.kind);
+    const order = slotOrder ?? this.inventory.map((_, i) => i);
+    const maxStack = getMaxStackSize(item);
+    const startCount = item.count;
 
-    const emptyIdx = this.inventory.findIndex((slot) => slot === null);
-    if (emptyIdx >= 0) {
-      const newItem = { id: itemId, count, kind };
-      if (kind === 'tool') {
-        newItem.durability = this.getToolDurability(itemId);
-        newItem.maxDurability = newItem.durability;
-        newItem.enchantments = [];
+    if (maxStack > 1) {
+      for (const i of order) {
+        const slot = this.inventory[i];
+        if (!slot || !canStackTogether(slot, item)) continue;
+        const space = maxStack - (slot.count ?? 0);
+        if (space <= 0) continue;
+        const moved = Math.min(space, item.count);
+        slot.count += moved;
+        item.count -= moved;
+        if (item.count <= 0) break;
       }
-      this.inventory[emptyIdx] = newItem;
-      this.discoverBlock(itemId);
-      window.dispatchEvent(new CustomEvent('inventory-changed'));
-      return true;
     }
 
-    return false;
+    for (const i of order) {
+      if (item.count <= 0) break;
+      if (this.inventory[i]) continue;
+      const moved = Math.min(maxStack, item.count);
+      this.inventory[i] = { ...item, count: moved };
+      item.count -= moved;
+    }
+
+    if (item.count !== startCount) {
+      this.discoverBlock(item.id);
+      window.dispatchEvent(new CustomEvent('inventory-changed'));
+    }
+    return item.count <= 0;
+  }
+
+  /** True when the whole stack fits into the inventory. */
+  canAccept(item) {
+    if (!item?.id) return false;
+    const maxStack = getMaxStackSize(item);
+    let space = 0;
+    for (const slot of this.inventory) {
+      if (!slot) space += maxStack;
+      else if (maxStack > 1 && canStackTogether(slot, item))
+        space += Math.max(0, maxStack - (slot.count ?? 0));
+      if (space >= item.count) return true;
+    }
+    return space >= item.count;
   }
 
   addBlockToInventory(blockId, count = 1) {
@@ -354,20 +477,7 @@ export class GameState {
   grantLootRoll(lootItems) {
     if (!Array.isArray(lootItems)) return;
     lootItems.forEach((item) => {
-      // Determine kind: tools end in specific suffixes or are defined in tools.js
-      const kind =
-        item.id.includes('sword') ||
-        item.id.includes('pick') ||
-        item.id.includes('axe') ||
-        item.id.includes('sledge') ||
-        item.id.includes('blade') ||
-        item.id.includes('saber') ||
-        item.id.includes('dagger') ||
-        item.id.includes('gun') ||
-        item.id.includes('wand')
-          ? 'tool'
-          : 'block';
-      this.addItemToInventory(item.id, item.count, kind);
+      this.addItemToInventory(item.id, item.count, resolveItemKind(item.id));
     });
   }
 
