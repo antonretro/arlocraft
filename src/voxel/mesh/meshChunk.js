@@ -302,16 +302,15 @@ function emitCross(group, x, y, z, layer, tinted, tr, tg, tb, emit) {
     [inset, 1 - inset, 1 - inset, inset],
   ];
   for (const [x0, z0, x1, z1] of planes) {
-    const nx = z1 - z0;
-    const nz = -(x1 - x0);
-    const len = Math.hypot(nx, nz) || 1;
+    // Plants are lit like the ground they stand on (Minecraft does the
+    // same); sideways normals made them look dark grey under the sun.
     const a = group.vertex(
       x + x0,
       y,
       z + z0,
-      nx / len,
       0,
-      nz / len,
+      1,
+      0,
       0,
       0,
       layer,
@@ -324,9 +323,9 @@ function emitCross(group, x, y, z, layer, tinted, tr, tg, tb, emit) {
       x + x1,
       y,
       z + z1,
-      nx / len,
       0,
-      nz / len,
+      1,
+      0,
       1,
       0,
       layer,
@@ -339,9 +338,9 @@ function emitCross(group, x, y, z, layer, tinted, tr, tg, tb, emit) {
       x + x1,
       y + 1,
       z + z1,
-      nx / len,
       0,
-      nz / len,
+      1,
+      0,
       1,
       1,
       layer,
@@ -354,9 +353,9 @@ function emitCross(group, x, y, z, layer, tinted, tr, tg, tb, emit) {
       x + x0,
       y + 1,
       z + z0,
-      nx / len,
       0,
-      nz / len,
+      1,
+      0,
       0,
       1,
       layer,

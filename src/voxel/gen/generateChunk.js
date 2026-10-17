@@ -1,26 +1,13 @@
-import { BIOME_BY_ID } from '../../data/biomes.js';
 import { BLOCKS } from '../../data/blocks.js';
 import { Noise } from '../../world/Noise.js';
-import { NoiseRouter } from '../../world/NoiseRouter.js';
-import {
-  getColumnHeight,
-  SPAWN_FLAT_RADIUS,
-  SEA_LEVEL,
-  MIN_TERRAIN_Y,
-  isPathAt,
-  isHighwayAt,
-} from '../../world/terrain/ContinentShaper.js';
 import {
   getCaveCell,
   getCaveProfileForCell,
 } from '../../world/terrain/CaveGenerator.js';
-import {
-  shouldPlaceTree,
-  addTree,
-  addGroundLife,
-} from '../../world/terrain/DecorationPlacer.js';
-
+import { BIOME_GROUND_LIFE } from '../../world/terrain/DecorationPlacer.js';
 import { CHUNK_SIZE, CHUNK_MASK, localIndex } from '../VoxelStore.js';
+import { getTerrainSampler, SEA_LEVEL, MIN_Y } from './terrain.js';
+import { TREE_BUILDERS, pickTreeType } from './trees.js';
 
 /**
  * Generates one CHUNK_SIZE³ chunk of terrain. Pure and deterministic for a
@@ -29,30 +16,21 @@ import { CHUNK_SIZE, CHUNK_MASK, localIndex } from '../VoxelStore.js';
  *
  * Returns { blocks: Uint16Array (indices into `palette`), palette: string[],
  *           outside: [x, y, z, paletteIndex, ...] } where `outside` holds
- * blocks that features (tree canopies, ruins) place in neighbouring chunks.
+ * blocks that trees place in neighbouring chunks (applied fill-only).
  */
-// ---------------------------------------------------------------------------
-// Static lookup tables
-// ---------------------------------------------------------------------------
-const DEFAULT_BIOME = BIOME_BY_ID.get('plains');
+
 const BLOCK_DATA_BY_ID = new Map(BLOCKS.map((block) => [block.id, block]));
+const DEEPSLATE_Y = -8;
+// Columns this far apart in x/z share a tree "cell"; one candidate each.
+const TREE_CELL = 3;
 
-// ---------------------------------------------------------------------------
-// Worker-local state (re-initialised when seed changes)
-// ---------------------------------------------------------------------------
-let workerRouter = null;
-let workerNoise = null;
 let currentSeedString = null;
-let currentSeed = 1;
+let caveNoise = null;
+let numericSeed = 1;
 
-// ---------------------------------------------------------------------------
-// Math helpers (worker-local; shared modules have their own copies)
-// ---------------------------------------------------------------------------
 function getNumericSeed(seedString) {
   const numeric = Number(seedString);
-  if (Number.isFinite(numeric)) {
-    return Math.floor(Math.abs(numeric)) + 1;
-  }
+  if (Number.isFinite(numeric)) return Math.floor(Math.abs(numeric)) + 1;
   let hash = 2166136261;
   for (let i = 0; i < seedString.length; i++) {
     hash ^= seedString.charCodeAt(i);
@@ -62,50 +40,81 @@ function getNumericSeed(seedString) {
   return Math.abs(hash >>> 0) + 1;
 }
 
-function hash2D(x, z, seed) {
-  const value = Math.sin(x * 127.1 + z * 311.7 + seed) * 43758.5453;
-  return value - Math.floor(value);
+function useSeed(seedString) {
+  if (currentSeedString === seedString) return;
+  currentSeedString = seedString;
+  caveNoise = new Noise(seedString);
+  numericSeed = getNumericSeed(seedString);
+  columnCache.clear();
+}
+
+function hash2D(x, z, salt) {
+  let h =
+    (x * 374761393 + z * 668265263 + (numericSeed + salt) * 1442695041) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function hash3D(x, y, z, salt) {
+  return hash2D(x + Math.imul(y, 73856093), z ^ Math.imul(y, 19349663), salt);
+}
+
+/** Small deterministic RNG (mulberry32). */
+function rngFrom(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Router / Noise initialisation
+// Column data: height, biome, river and slope for every column of a chunk
+// column, shared by all vertical chunks of that column.
 // ---------------------------------------------------------------------------
-function getRouter(seedString) {
-  if (currentSeedString !== seedString || !workerRouter || !workerNoise) {
-    workerRouter = new NoiseRouter(seedString);
-    workerNoise = new Noise(seedString);
-    currentSeed = getNumericSeed(seedString);
-    currentSeedString = seedString;
-  }
-  return workerRouter;
-}
-
-// Heights and biomes per chunk column, shared by every vertical chunk of
-// that column (they used to be recomputed for each one).
 const columnCache = new Map();
 const COLUMN_CACHE_LIMIT = 1024;
+const PADDED = CHUNK_SIZE + 2;
 
-function getColumnInfo(router, cx, cz) {
-  const key = `${currentSeedString}|${cx}|${cz}`;
+function getColumnInfo(terrain, cx, cz) {
+  const key = `${cx}|${cz}`;
   let info = columnCache.get(key);
   if (info) return info;
+
+  // Heights include a one-block border for slope detection.
+  const padded = new Int32Array(PADDED * PADDED);
+  for (let pz = 0; pz < PADDED; pz++) {
+    for (let px = 0; px < PADDED; px++) {
+      padded[px + pz * PADDED] = terrain.height(
+        cx * CHUNK_SIZE + px - 1,
+        cz * CHUNK_SIZE + pz - 1
+      );
+    }
+  }
   info = {
     heights: new Int32Array(CHUNK_SIZE * CHUNK_SIZE),
+    slopes: new Uint8Array(CHUNK_SIZE * CHUNK_SIZE),
     biomes: new Array(CHUNK_SIZE * CHUNK_SIZE),
   };
   for (let lz = 0; lz < CHUNK_SIZE; lz++) {
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-      const wx = cx * CHUNK_SIZE + lx;
-      const wz = cz * CHUNK_SIZE + lz;
       const i = lx + lz * CHUNK_SIZE;
-      info.heights[i] = getColumnHeight(
-        router,
-        workerNoise,
-        wx,
-        wz,
-        currentSeed
+      const p = lx + 1 + (lz + 1) * PADDED;
+      const h = padded[p];
+      info.heights[i] = h;
+      info.slopes[i] = Math.max(
+        Math.abs(padded[p + 1] - h),
+        Math.abs(padded[p - 1] - h),
+        Math.abs(padded[p + PADDED] - h),
+        Math.abs(padded[p - PADDED] - h)
       );
-      info.biomes[i] = getBiomeById(router.getBiomeID(wx, wz));
+      info.biomes[i] = terrain.biome(
+        cx * CHUNK_SIZE + lx,
+        cz * CHUNK_SIZE + lz,
+        h
+      );
     }
   }
   if (columnCache.size >= COLUMN_CACHE_LIMIT) {
@@ -115,49 +124,9 @@ function getColumnInfo(router, cx, cz) {
   return info;
 }
 
-function getBiomeById(id) {
-  return BIOME_BY_ID.get(id) ?? DEFAULT_BIOME;
-}
-
 // ---------------------------------------------------------------------------
-// Spawn-zone helper
+// Chunk plan: dense block array with a chunk-local palette.
 // ---------------------------------------------------------------------------
-function isInSpawnZone(x, z) {
-  return Math.sqrt(x * x + z * z) <= SPAWN_FLAT_RADIUS;
-}
-
-// ---------------------------------------------------------------------------
-// Corruption / special block helpers
-// ---------------------------------------------------------------------------
-function shouldPlaceVirus(wx, wz, height, corruptionEnabled) {
-  if (!corruptionEnabled) return false;
-  if (height < SEA_LEVEL + 1) return false;
-  return hash2D(wx - 991, wz + 417, currentSeed) > 0.9992;
-}
-
-function shouldPlaceArlo(wx, wz, height, corruptionEnabled) {
-  if (!corruptionEnabled) return false;
-  if (height < SEA_LEVEL + 1) return false;
-  return hash2D(wx + 613, wz - 271, currentSeed) > 0.985;
-}
-
-// -- WORLD CLASS: RUIN STRUCTURE GENERATOR --
-function addRuinStructure(plan, x, y, z, seed) {
-  const size = 3 + Math.floor(hash2D(x, z, seed) * 3);
-  for (let lx = -size; lx <= size; lx++) {
-    for (let lz = -size; lz <= size; lz++) {
-      const h = 1 + Math.floor(hash2D(x + lx, z + lz, seed + 123) * 4);
-      for (let ly = 0; ly < h; ly++) {
-        const block =
-          hash2D(x + lx, z + lz, ly + seed) > 0.6
-            ? 'mossy_cobblestone'
-            : 'cobblestone';
-        plan.set(x + lx, y + ly, z + lz, block);
-      }
-    }
-  }
-}
-
 class ChunkPlan {
   constructor(cx, cy, cz) {
     this.startX = cx * CHUNK_SIZE;
@@ -193,44 +162,227 @@ class ChunkPlan {
     );
   }
 
+  idx(x, y, z) {
+    return localIndex(x & CHUNK_MASK, y & CHUNK_MASK, z & CHUNK_MASK);
+  }
+
   set(x, y, z, id) {
-    x = Math.round(x);
-    y = Math.round(y);
-    z = Math.round(z);
     if (this.inside(x, y, z)) {
-      this.blocks[localIndex(x & CHUNK_MASK, y & CHUNK_MASK, z & CHUNK_MASK)] =
-        id ? this.indexOf(id) : 0;
+      this.blocks[this.idx(x, y, z)] = id ? this.indexOf(id) : 0;
     } else if (id) {
       this.outside.push(x, y, z, this.indexOf(id));
     }
   }
 
+  /** Places a block only into air (leaves, plants). */
+  fill(x, y, z, id) {
+    if (this.inside(x, y, z)) {
+      const i = this.idx(x, y, z);
+      if (this.blocks[i] === 0) this.blocks[i] = this.indexOf(id);
+    } else {
+      this.outside.push(x, y, z, this.indexOf(id));
+    }
+  }
+
+  get(x, y, z) {
+    if (!this.inside(x, y, z)) return null;
+    return this.palette[this.blocks[this.idx(x, y, z)]];
+  }
+
   has(x, y, z) {
-    if (!this.inside(x, y, z)) return false;
-    return (
-      this.blocks[
-        localIndex(x & CHUNK_MASK, y & CHUNK_MASK, z & CHUNK_MASK)
-      ] !== 0
-    );
+    return this.inside(x, y, z) && this.blocks[this.idx(x, y, z)] !== 0;
   }
 }
 
-// Adapters with the (plan, changedMap, x, y, z, id) signature that the
-// decoration placer expects.
-function setPlannedBlock(plan, _changed, x, y, z, id) {
-  plan.set(x, y, z, id);
+// ---------------------------------------------------------------------------
+// Underground: ore veins and stone variety
+// ---------------------------------------------------------------------------
+const HOST_ROCK = new Set([
+  'stone',
+  'deepslate',
+  'tuff',
+  'andesite',
+  'diorite',
+  'granite',
+]);
+
+// attempts = veins per 16³ chunk (fractional part is a chance of one more)
+const ORES = [
+  {
+    id: 'coal',
+    deep: 'deepslate_coal_ore',
+    minY: -10,
+    maxY: 140,
+    attempts: 2.4,
+    size: [6, 13],
+  },
+  {
+    id: 'iron',
+    deep: 'deepslate_iron_ore',
+    minY: -60,
+    maxY: 70,
+    attempts: 1.8,
+    size: [4, 9],
+  },
+  {
+    id: 'copper',
+    deep: 'deepslate_copper_ore',
+    minY: -20,
+    maxY: 60,
+    attempts: 1.5,
+    size: [5, 10],
+  },
+  {
+    id: 'gold',
+    deep: 'deepslate_gold_ore',
+    minY: -64,
+    maxY: -5,
+    attempts: 0.7,
+    size: [3, 8],
+  },
+  {
+    id: 'redstone_ore',
+    deep: 'deepslate_redstone_ore',
+    minY: -64,
+    maxY: -20,
+    attempts: 0.9,
+    size: [3, 7],
+  },
+  {
+    id: 'lapis_ore',
+    deep: 'deepslate_lapis_ore',
+    minY: -50,
+    maxY: 10,
+    attempts: 0.5,
+    size: [3, 6],
+  },
+  {
+    id: 'diamond',
+    deep: 'deepslate_diamond_ore',
+    minY: -64,
+    maxY: -40,
+    attempts: 0.45,
+    size: [2, 6],
+  },
+  {
+    id: 'emerald_ore',
+    deep: 'deepslate_emerald_ore',
+    minY: 20,
+    maxY: 160,
+    attempts: 0.4,
+    size: [1, 2],
+    mountainsOnly: true,
+  },
+];
+
+const STONE_BLOBS = [
+  { id: 'granite', minY: -10, maxY: 120, attempts: 0.35, radius: [2, 4] },
+  { id: 'diorite', minY: -10, maxY: 120, attempts: 0.35, radius: [2, 4] },
+  { id: 'andesite', minY: -10, maxY: 120, attempts: 0.35, radius: [2, 4] },
+  { id: 'tuff', minY: -64, maxY: 0, attempts: 0.3, radius: [2, 4] },
+  { id: 'gravel', minY: -40, maxY: 80, attempts: 0.25, radius: [1, 3] },
+  { id: 'dirt', minY: 0, maxY: 120, attempts: 0.25, radius: [1, 3] },
+];
+
+function attemptsFor(rng, attempts) {
+  return Math.floor(attempts) + (rng() < attempts % 1 ? 1 : 0);
 }
 
-function setPlannedPlant(plan, _changed, x, y, z, id) {
-  const blockData = BLOCK_DATA_BY_ID.get(id);
-  const pairId = blockData?.pairId;
-  const pairOffsetY = Number(blockData?.pairOffsetY);
-  plan.set(x, y, z, id);
-  if (pairId && Number.isFinite(pairOffsetY) && pairOffsetY !== 0) {
-    plan.set(x, y + pairOffsetY, z, pairId);
+function placeUnderground(plan, rng, mountainous) {
+  const { startX, startY, startZ } = plan;
+  const replaceHost = (x, y, z, id, deepId) => {
+    const current = plan.get(x, y, z);
+    if (!current || !HOST_ROCK.has(current)) return;
+    plan.set(x, y, z, current === 'deepslate' && deepId ? deepId : id);
+  };
+
+  for (const blob of STONE_BLOBS) {
+    const n = attemptsFor(rng, blob.attempts);
+    for (let i = 0; i < n; i++) {
+      const x = startX + Math.floor(rng() * CHUNK_SIZE);
+      const y = startY + Math.floor(rng() * CHUNK_SIZE);
+      const z = startZ + Math.floor(rng() * CHUNK_SIZE);
+      if (y < blob.minY || y > blob.maxY) continue;
+      const r = blob.radius[0] + rng() * (blob.radius[1] - blob.radius[0]);
+      const ri = Math.ceil(r);
+      for (let dx = -ri; dx <= ri; dx++)
+        for (let dy = -ri; dy <= ri; dy++)
+          for (let dz = -ri; dz <= ri; dz++) {
+            if (dx * dx + dy * dy + dz * dz > r * r) continue;
+            replaceHost(x + dx, y + dy, z + dz, blob.id);
+          }
+    }
+  }
+
+  for (const ore of ORES) {
+    if (ore.mountainsOnly && !mountainous) continue;
+    if (startY + CHUNK_SIZE < ore.minY || startY > ore.maxY) continue;
+    const n = attemptsFor(rng, ore.attempts);
+    for (let i = 0; i < n; i++) {
+      let x = startX + Math.floor(rng() * CHUNK_SIZE);
+      let y = startY + Math.floor(rng() * CHUNK_SIZE);
+      let z = startZ + Math.floor(rng() * CHUNK_SIZE);
+      if (y < ore.minY || y > ore.maxY) continue;
+      const size =
+        ore.size[0] + Math.floor(rng() * (ore.size[1] - ore.size[0] + 1));
+      // A short random walk makes a natural-looking vein.
+      for (let s = 0; s < size; s++) {
+        replaceHost(x, y, z, ore.id, ore.deep);
+        const dir = Math.floor(rng() * 6);
+        if (dir === 0) x++;
+        else if (dir === 1) x--;
+        else if (dir === 2) y++;
+        else if (dir === 3) y--;
+        else if (dir === 4) z++;
+        else z--;
+      }
+    }
   }
 }
 
+// ---------------------------------------------------------------------------
+// Surface rules
+// ---------------------------------------------------------------------------
+function surfaceFor(biome, h, slope, wx, wz) {
+  const underwater = h < SEA_LEVEL;
+  if (underwater) {
+    const bed = biome.underwaterBlock ?? 'sand';
+    // Patchy beds: mostly the biome's bed with some sand, gravel and clay.
+    const roll = hash2D(wx >> 2, wz >> 2, 71);
+    const top =
+      roll < 0.12 ? 'clay' : roll < 0.35 ? 'gravel' : roll < 0.6 ? 'sand' : bed;
+    return {
+      top,
+      filler: top === 'clay' ? 'clay' : bed === 'mud' ? 'mud' : 'sand',
+      depth: 3,
+    };
+  }
+  let top = biome.surfaceBlock ?? 'grass_block';
+  let filler = biome.fillerBlock ?? 'dirt';
+  const sandy = top === 'sand' || top === 'red_sand';
+  const steep = slope >= 4 || (biome.rockySlopes && slope >= 2);
+  if (steep && !sandy) {
+    // Snow clings to moderate slopes; anything steeper is bare rock.
+    if (!(top === 'snow_block' && slope < 4)) top = 'stone';
+    filler = 'stone';
+  } else if (biome.patchBlock && hash2D(wx >> 1, wz >> 1, 97) < 0.18) {
+    top = biome.patchBlock;
+  }
+  return {
+    top,
+    filler,
+    depth: sandy ? 4 : 3,
+    deepFiller: sandy
+      ? top === 'red_sand'
+        ? 'terracotta'
+        : 'sandstone'
+      : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Main entry
+// ---------------------------------------------------------------------------
 export function generateChunkData({
   cx,
   cy,
@@ -239,339 +391,266 @@ export function generateChunkData({
   corruptionEnabled = false,
   cavesEnabled = true,
 }) {
-  const chunkSize = CHUNK_SIZE;
-  const router = getRouter(seedString);
+  useSeed(seedString);
+  const terrain = getTerrainSampler(seedString);
   const plan = new ChunkPlan(cx, cy, cz);
-  const columns = getColumnInfo(router, cx, cz);
-  // Carved cells from the terrain pass, reused by the cave decoration pass.
+  const columns = getColumnInfo(terrain, cx, cz);
   const caveCells = new Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
-  const planMap = plan;
-  const changedMap = null;
-  const startX = cx * chunkSize;
-  const startY = cy * chunkSize;
-  const startZ = cz * chunkSize;
-  const endY = startY + chunkSize;
+  const startX = cx * CHUNK_SIZE;
+  const startY = cy * CHUNK_SIZE;
+  const startZ = cz * CHUNK_SIZE;
+  const endY = startY + CHUNK_SIZE;
+  let mountainous = false;
 
-  for (let lx = 0; lx < chunkSize; lx++) {
-    for (let lz = 0; lz < chunkSize; lz++) {
+  for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       const wx = startX + lx;
       const wz = startZ + lz;
-      const biome = columns.biomes[lx + lz * CHUNK_SIZE];
-      const inSpawnZone = isInSpawnZone(wx, wz);
-      const terrainHeight = columns.heights[lx + lz * CHUNK_SIZE];
-      const waterLevel = SEA_LEVEL;
-
-      // ── Surface block ──────────────────────────────────────────
-      let surfaceId = terrainHeight <= waterLevel ? 'sand' : biome.surfaceBlock;
-      const hasRoad =
-        !inSpawnZone &&
-        terrainHeight > waterLevel &&
-        isPathAt(workerNoise, wx, wz);
-      const hasHighway =
-        !inSpawnZone &&
-        terrainHeight > waterLevel &&
-        isHighwayAt(workerNoise, wx, wz);
-      if (hasHighway) {
-        surfaceId = 'cobblestone';
-      } else if (hasRoad) {
-        surfaceId = 'path_block';
-      }
-
-      // Feature: Force clean grass start at spawn point
-      if (inSpawnZone) {
-        surfaceId = 'grass_block';
-      } else if (
-        terrainHeight > 58 &&
-        surfaceId !== 'path_block' &&
-        biome.surfaceBlock !== 'snow_block'
-      ) {
-        // Snow cap override for non-snow biomes above y = 58
-        surfaceId = 'snow_block';
-      }
-
+      const ci = lx + lz * CHUNK_SIZE;
+      const h = columns.heights[ci];
+      const biome = columns.biomes[ci];
+      if (h > SEA_LEVEL + 50) mountainous = true;
+      const surface = surfaceFor(biome, h, columns.slopes[ci], wx, wz);
+      const deepslateY = DEEPSLATE_Y + Math.floor(hash2D(wx, wz, 13) * 4);
       let surfaceCarved = false;
 
-      // ── Unified Terrain & Cave Pass ──────────────────────────
       for (let y = startY; y < endY; y++) {
-        const depthBelowSurface = terrainHeight - y;
-        if (y <= MIN_TERRAIN_Y) {
+        if (y > h) {
+          if (y <= SEA_LEVEL) {
+            const frozenTop = biome.frozenWater && y === SEA_LEVEL;
+            plan.set(wx, y, wz, frozenTop ? 'ice' : 'water');
+          }
+          continue;
+        }
+        if (y <= MIN_Y) {
+          plan.set(wx, y, wz, 'bedrock');
+          continue;
+        }
+        if (y <= MIN_Y + 3 && hash3D(wx, y, wz, 5) < 0.6 - (y - MIN_Y) * 0.18) {
           plan.set(wx, y, wz, 'bedrock');
           continue;
         }
 
         const cave = getCaveCell(
-          workerNoise,
+          caveNoise,
           wx,
           y,
           wz,
-          terrainHeight,
+          h,
           cavesEnabled,
-          currentSeed
+          numericSeed
         );
         if (cave.carve) {
           caveCells[localIndex(lx, y - startY, lz)] = cave;
-        }
-
-        if (y === terrainHeight) surfaceCarved = cave.carve;
-
-        if (cave.carve) {
-          if (cave.fluid === 'water' || cave.fluid === 'ice_water') {
+          if (y === h) surfaceCarved = true;
+          if (cave.fluid === 'water' || cave.fluid === 'ice_water')
             plan.set(wx, y, wz, 'water');
-          } else if (cave.fluid === 'lava') {
-            plan.set(wx, y, wz, 'lava');
-          }
-          // Air is implicit
+          else if (cave.fluid === 'lava') plan.set(wx, y, wz, 'lava');
           continue;
         }
 
-        if (y === terrainHeight) {
-          plan.set(wx, y, wz, surfaceId);
-        } else if (depthBelowSurface > 0 && depthBelowSurface <= 3) {
-          plan.set(wx, y, wz, biome.fillerBlock);
-        } else if (depthBelowSurface > 3) {
-          plan.set(wx, y, wz, 'stone');
-        }
+        const depth = h - y;
+        let id;
+        if (depth === 0) id = surface.top;
+        else if (depth <= surface.depth) id = surface.filler;
+        else if (surface.deepFiller && depth <= surface.depth + 3)
+          id = surface.deepFiller;
+        else id = y < deepslateY ? 'deepslate' : 'stone';
+        plan.set(wx, y, wz, id);
       }
 
-      // ── Bedrock Floor ─────────────────────────────────────────
-      if (MIN_TERRAIN_Y >= startY && MIN_TERRAIN_Y < endY) {
-        setPlannedBlock(planMap, changedMap, wx, MIN_TERRAIN_Y, wz, 'bedrock');
-      }
-      if (
-        MIN_TERRAIN_Y + 1 >= startY &&
-        MIN_TERRAIN_Y + 1 < endY &&
-        hash2D(wx + 44, wz - 11, currentSeed) > 0.4
-      ) {
-        setPlannedBlock(
-          planMap,
-          changedMap,
-          wx,
-          MIN_TERRAIN_Y + 1,
-          wz,
-          'bedrock'
-        );
-      }
-      if (
-        MIN_TERRAIN_Y + 2 >= startY &&
-        MIN_TERRAIN_Y + 2 < endY &&
-        hash2D(wx - 22, wz + 88, currentSeed) > 0.8
-      ) {
-        setPlannedBlock(
-          planMap,
-          changedMap,
-          wx,
-          MIN_TERRAIN_Y + 2,
-          wz,
-          'bedrock'
-        );
-      }
-
-      // ── Water fill ────────────────────────────────────────────
-      if (!inSpawnZone) {
-        const waterBottom = Math.max(startY, terrainHeight + 1);
-        const waterTop = Math.min(endY - 1, waterLevel);
-        for (let y = waterBottom; y <= waterTop; y++) {
-          plan.set(wx, y, wz, 'water');
-        }
-      }
-
-      // ── Special entities ──────────────────────────────────────
-      if (terrainHeight + 1 >= startY && terrainHeight + 1 < endY) {
-        if (shouldPlaceVirus(wx, wz, terrainHeight, corruptionEnabled)) {
-          setPlannedBlock(
-            planMap,
-            changedMap,
-            wx,
-            terrainHeight + 1,
-            wz,
-            'virus'
-          );
-        } else if (shouldPlaceArlo(wx, wz, terrainHeight, corruptionEnabled)) {
-          setPlannedBlock(
-            planMap,
-            changedMap,
-            wx,
-            terrainHeight + 1,
-            wz,
-            'arlo'
-          );
-        }
-      }
-
-      if (
-        !inSpawnZone &&
-        terrainHeight > waterLevel &&
-        terrainHeight + 1 >= startY &&
-        terrainHeight + 1 < endY
-      ) {
-        const tntRoll = hash2D(wx + 777, wz - 313, currentSeed);
-        const nukeRoll = hash2D(wx - 1441, wz + 918, currentSeed);
-        if (tntRoll > 0.9989)
-          setPlannedBlock(
-            planMap,
-            changedMap,
-            wx,
-            terrainHeight + 1,
-            wz,
-            'tnt'
-          );
-        if (nukeRoll > 0.99972)
-          setPlannedBlock(
-            planMap,
-            changedMap,
-            wx,
-            terrainHeight + 1,
-            wz,
-            'chest:common_village'
-          );
-      }
-
-      // World Class: Ruin Spawning
-      const ruinRoll = hash2D(wx + 99, wz - 88, currentSeed);
-      if (!inSpawnZone && terrainHeight > waterLevel && ruinRoll > 0.9995) {
-        if (terrainHeight >= startY && terrainHeight < endY) {
-          addRuinStructure(plan, wx, terrainHeight + 1, wz, currentSeed);
-        }
-      }
-
-      // ── Trees & ground decoration ─────────────────────────────
-      // Deterministic Tree Check: We must check ground heights potentially below us
-      // if a tree can span multiple vertical chunks.
-      const checkY = terrainHeight + 1;
-      const isHighAltitude = terrainHeight > 46;
-
-      // Simple check for now: Only spawn if the start point is in or very near this chunk
-      // The addTree function already handles cross-chunk bounds via planMap.
-      if (
-        !surfaceCarved &&
-        !inSpawnZone &&
-        !isHighAltitude &&
-        shouldPlaceTree(workerNoise, wx, wz, terrainHeight, biome, currentSeed)
-      ) {
-        // We only call addTree if the tree's BASE is in this chunk or its bounds.
-        // For now, simpler: only spawn trees if the surface is in this chunk.
-        if (checkY >= startY && checkY < endY) {
-          addTree(
-            planMap,
-            changedMap,
-            wx,
-            checkY,
-            wz,
-            biome,
-            corruptionEnabled,
-            workerNoise,
-            currentSeed,
-            setPlannedBlock
-          );
-        }
-      }
-      if (
-        !surfaceCarved &&
-        !inSpawnZone &&
-        !isHighAltitude &&
-        terrainHeight > waterLevel
-      ) {
-        if (terrainHeight >= startY && terrainHeight < endY) {
-          // First call for non-pair blocks (setPlannedBlock)
-          addGroundLife(
-            planMap,
-            changedMap,
-            wx,
-            terrainHeight,
-            wz,
-            biome,
-            workerNoise,
-            currentSeed,
-            setPlannedBlock,
-            surfaceId
-          );
-          // Second call for pair-block support (setPlannedPlant)
-          addGroundLife(
-            planMap,
-            changedMap,
-            wx,
-            terrainHeight,
-            wz,
-            biome,
-            workerNoise,
-            currentSeed,
-            setPlannedPlant,
-            surfaceId
-          );
-        }
-      }
+      // ── Surface features (only in the chunk holding the surface) ──
+      const above = h + 1;
+      if (above < startY || above >= endY || surfaceCarved) continue;
+      decorateColumn(
+        plan,
+        terrain,
+        biome,
+        surface.top,
+        wx,
+        h,
+        wz,
+        corruptionEnabled
+      );
     }
   }
 
-  // ── Cave biome decoration pass ────────────────────────────────────
-  if (cavesEnabled) {
-    for (let lx = 0; lx < chunkSize; lx++) {
-      for (let lz = 0; lz < chunkSize; lz++) {
-        const wx = startX + lx;
-        const wz = startZ + lz;
-        const terrainH = columns.heights[lx + lz * CHUNK_SIZE];
+  placeUnderground(
+    plan,
+    rngFrom(hash3D(cx, cy, cz, 3) * 4294967296),
+    mountainous
+  );
 
-        for (
-          let wy = Math.min(terrainH - 1, endY - 1);
-          wy >= Math.max(MIN_TERRAIN_Y + 1, startY);
-          wy--
-        ) {
-          const profile = getCaveProfileForCell(
-            caveCells[localIndex(lx, wy - startY, lz)],
-            wy
-          );
-          if (!profile) continue;
-
-          const roll = hash2D(wx + wy * 7, wz - wy * 13, currentSeed + 9371);
-
-          // ── Floor Decoration ──
-          if (!plan.has(wx, wy, wz) && plan.has(wx, wy - 1, wz)) {
-            if (
-              roll < (profile.vegetationChance || 0) ||
-              (profile.sculkChance && roll < profile.sculkChance)
-            ) {
-              setPlannedBlock(
-                planMap,
-                changedMap,
-                wx,
-                wy - 1,
-                wz,
-                profile.floor
-              );
-            }
-            // Chest Spawning: Standard visual chest with context-aware loot tag
-            if (roll < 0.005) {
-              const chestTag = `chest:cave_${profile.biome}`;
-              plan.set(wx, wy, wz, chestTag);
-            }
-          }
-
-          // ── Ceiling Decoration ──
-          if (!plan.has(wx, wy, wz) && plan.has(wx, wy + 1, wz)) {
-            if (roll < (profile.stalactiteChance || 0)) {
-              setPlannedBlock(
-                planMap,
-                changedMap,
-                wx,
-                wy + 1,
-                wz,
-                profile.ceiling
-              );
-            }
-          }
-
-          // ── Filler logic (Walls) ──
-          if (plan.has(wx, wy, wz)) {
-            const isExposed =
-              !plan.has(wx + 1, wy, wz) || !plan.has(wx - 1, wy, wz);
-            if (isExposed && roll < 0.3) {
-              plan.set(wx, wy, wz, profile.wall);
-            }
-          }
-        }
-      }
-    }
-  }
+  if (cavesEnabled)
+    decorateCaves(plan, columns, caveCells, startX, startY, startZ, endY);
 
   return { blocks: plan.blocks, palette: plan.palette, outside: plan.outside };
+}
+
+function decorateColumn(
+  plan,
+  terrain,
+  biome,
+  topId,
+  wx,
+  h,
+  wz,
+  corruptionEnabled
+) {
+  const y = h + 1;
+  const underwater = h < SEA_LEVEL;
+
+  if (corruptionEnabled && !underwater) {
+    if (hash2D(wx - 991, wz + 417, 1) > 0.9992)
+      return plan.set(wx, y, wz, 'virus');
+    if (hash2D(wx + 613, wz - 271, 2) > 0.985)
+      return plan.set(wx, y, wz, 'arlo');
+  }
+
+  if (underwater) {
+    // Kelp in deeper water, lily pads on calm shallow swamp water.
+    const depth = SEA_LEVEL - h;
+    if (depth >= 4 && hash2D(wx, wz, 31) < 0.06 && topId !== 'clay') {
+      const len = 1 + Math.floor(hash2D(wx, wz, 32) * Math.min(depth - 1, 6));
+      for (let i = 0; i < len; i++) plan.set(wx, y + i, wz, 'kelp');
+    }
+    if (
+      depth <= 2 &&
+      biome.plants?.includes('lily_pad') &&
+      hash2D(wx, wz, 33) < 0.08
+    ) {
+      plan.fill(wx, SEA_LEVEL + 1, wz, 'lily_pad');
+    }
+    return;
+  }
+
+  const onSoil =
+    topId === 'grass_block' ||
+    topId === 'podzol' ||
+    topId === 'dirt' ||
+    topId === 'mud' ||
+    topId === 'snow_block' ||
+    topId === 'moss_block';
+
+  // Trees: one jittered candidate per TREE_CELL² cell keeps them spaced.
+  const cellX = Math.floor(wx / TREE_CELL);
+  const cellZ = Math.floor(wz / TREE_CELL);
+  const jx = Math.floor(hash2D(cellX, cellZ, 41) * TREE_CELL);
+  const jz = Math.floor(hash2D(cellX, cellZ, 42) * TREE_CELL);
+  const isCandidate =
+    wx === cellX * TREE_CELL + jx && wz === cellZ * TREE_CELL + jz;
+  if (isCandidate && onSoil && biome.trees && h >= SEA_LEVEL) {
+    const chance = (biome.treeDensity ?? 0) * TREE_CELL * TREE_CELL;
+    if (hash2D(wx, wz, 43) < chance) {
+      const type = pickTreeType(biome.trees, hash2D(wx, wz, 44));
+      const build = TREE_BUILDERS[type];
+      if (build) {
+        const rng = rngFrom(hash2D(wx, wz, 45) * 4294967296);
+        if (topId === 'grass_block' || topId === 'snow_block')
+          plan.set(wx, h, wz, 'dirt');
+        build(
+          (x, yy, z, id) => plan.set(x, yy, z, id),
+          (x, yy, z, id) => plan.fill(x, yy, z, id),
+          rng,
+          wx,
+          y,
+          wz
+        );
+        return;
+      }
+    }
+  }
+
+  // Desert cacti and shoreline sugar cane.
+  if ((topId === 'sand' || topId === 'red_sand') && h > SEA_LEVEL) {
+    if (
+      (biome.id === 'desert' || biome.id === 'badlands') &&
+      hash2D(wx, wz, 51) < 0.006
+    ) {
+      const len = 1 + Math.floor(hash2D(wx, wz, 52) * 3);
+      for (let i = 0; i < len; i++) plan.set(wx, y + i, wz, 'cactus');
+      return;
+    }
+    if (biome.id === 'desert' && hash2D(wx, wz, 53) < 0.01)
+      return plan.fill(wx, y, wz, 'dead_bush');
+  }
+  if (
+    h <= SEA_LEVEL + 1 &&
+    h >= SEA_LEVEL - 0 &&
+    (topId === 'sand' || topId === 'grass_block') &&
+    hash2D(wx, wz, 54) < 0.05
+  ) {
+    const len = 1 + Math.floor(hash2D(wx, wz, 55) * 3);
+    for (let i = 0; i < len; i++) plan.fill(wx, y + i, wz, 'sugar_cane');
+    return;
+  }
+
+  if (!onSoil || topId === 'snow_block') return;
+  const plants = biome.plants ?? BIOME_GROUND_LIFE[biome.id];
+  if (!plants || plants.length === 0) return;
+  const density = biome.plantDensity ?? 0.12;
+  // Clumped placement: a low-frequency mask so flowers grow in patches.
+  const patch = hash2D(wx >> 3, wz >> 3, 61) * 0.6 + 0.7;
+  if (hash2D(wx, wz, 62) >= density * patch) return;
+  let plant = plants[Math.floor(hash2D(wx, wz, 63) * plants.length)];
+  if (!plant || plant === 'lily_pad' || plant === 'sugar_cane') return;
+  if (
+    /^(wheat|beetroot|potato|carrot|tomato|blueberry|strawberry)$/.test(plant)
+  ) {
+    plant = `${plant}_stage${1 + Math.floor(hash2D(wx, wz, 64) * 3)}`;
+  }
+  const data = BLOCK_DATA_BY_ID.get(plant);
+  plan.fill(wx, y, wz, plant);
+  const pairOffset = Number(data?.pairOffsetY);
+  if (data?.pairId && Number.isFinite(pairOffset) && pairOffset !== 0) {
+    plan.fill(wx, y + pairOffset, wz, data.pairId);
+  }
+}
+
+function decorateCaves(plan, columns, caveCells, startX, startY, startZ, endY) {
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const wx = startX + lx;
+      const wz = startZ + lz;
+      const terrainH = columns.heights[lx + lz * CHUNK_SIZE];
+      for (
+        let wy = Math.min(terrainH - 1, endY - 1);
+        wy >= Math.max(MIN_Y + 1, startY);
+        wy--
+      ) {
+        const profile = getCaveProfileForCell(
+          caveCells[localIndex(lx, wy - startY, lz)],
+          wy
+        );
+        if (!profile) continue;
+        const roll = hash2D(wx + wy * 7, wz - wy * 13, 9371);
+
+        if (!plan.has(wx, wy, wz) && plan.has(wx, wy - 1, wz)) {
+          if (
+            roll < (profile.vegetationChance || 0) ||
+            (profile.sculkChance && roll < profile.sculkChance)
+          ) {
+            plan.set(wx, wy - 1, wz, profile.floor);
+          }
+          // Rare cave loot chests.
+          if (roll < 0.0006)
+            plan.set(wx, wy, wz, `chest:cave_${profile.biome}`);
+        }
+        if (
+          !plan.has(wx, wy, wz) &&
+          plan.has(wx, wy + 1, wz) &&
+          roll < (profile.stalactiteChance || 0)
+        ) {
+          plan.set(wx, wy + 1, wz, profile.ceiling);
+        }
+        if (
+          plan.has(wx, wy, wz) &&
+          (!plan.has(wx + 1, wy, wz) || !plan.has(wx - 1, wy, wz)) &&
+          roll < 0.3
+        ) {
+          plan.set(wx, wy, wz, profile.wall);
+        }
+      }
+    }
+  }
 }

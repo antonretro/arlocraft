@@ -36,6 +36,7 @@ export class BlockRegistry {
       berry_bush: 'sweet_berry_bush',
       nuke: 'nuke',
       fire: 'fire_0',
+      snow_block: 'snow',
       wool_white: 'white_wool',
       wool_orange: 'orange_wool',
       wool_magenta: 'magenta_wool',

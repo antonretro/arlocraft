@@ -1,13 +1,9 @@
-import { BIOME_BY_ID } from '../../data/biomes.js';
+import { BIOME_BY_ID, biomeMatches } from '../../data/biomes.js';
 import { Noise } from '../Noise.js';
 import { NoiseRouter } from '../NoiseRouter.js';
+import { getTerrainSampler } from '../../voxel/gen/terrain.js';
 import { generateSettlementName } from '../naming/SettlementNameGenerator.js';
-import {
-  getContinentMask,
-  getColumnHeight as shapeColumnHeight,
-  isPathAt,
-  isHighwayAt,
-} from './ContinentShaper.js';
+import { getContinentMask, isPathAt, isHighwayAt } from './ContinentShaper.js';
 
 export class WorldTerrainService {
   constructor(world) {
@@ -44,6 +40,8 @@ export class WorldTerrainService {
     }
 
     this.noise = new Noise(this.seedString);
+    // Terrain v2: same sampler the chunk generator uses.
+    this.sampler = getTerrainSampler(this.seedString);
     this.router = new NoiseRouter(this.seedString);
     this.terrainHeightCache.clear();
     this.biomeCache.clear();
@@ -56,7 +54,7 @@ export class WorldTerrainService {
     const key = (gx + 1000000) * 2097152 + (gz + 1000000);
     let id = this.biomeCache.get(key);
     if (!id) {
-      id = this.router.getBiomeID(gx, gz);
+      id = this.sampler.biomeId(gx, gz, this.getTerrainHeight(gx, gz));
       if (this.biomeCache.size > 120000) this.biomeCache.clear();
       this.biomeCache.set(key, id);
     }
@@ -78,13 +76,7 @@ export class WorldTerrainService {
     // Must match the chunk generator exactly (including the flattened
     // spawn area), or physics, spawning and structures disagree with the
     // blocks that are actually there.
-    const clamped = shapeColumnHeight(
-      this.router,
-      this.noise,
-      gx,
-      gz,
-      this.seed
-    );
+    const clamped = this.sampler.height(gx, gz);
     if (this.terrainHeightCache.size > 120000) this.terrainHeightCache.clear();
     this.terrainHeightCache.set(key, clamped);
     return clamped;
@@ -518,20 +510,11 @@ export class WorldTerrainService {
       cx * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
     const wz =
       cz * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
-    const onHighway = isHighwayAt(this.noise, wx, wz);
-    const onPath = isPathAt(this.noise, wx, wz);
-
-    // Boost chance if on a road (0.992 -> 0.85 approx 20x boost)
-    const threshold = onHighway || onPath ? 0.82 : 0.992;
-
-    if (this.hash2D(cx * 31 + 71, cz * 31 - 19) < threshold) return false;
+    if (this.hash2D(cx * 31 + 71, cz * 31 - 19) < 0.988) return false;
 
     const biome = this.getBiomeAt(wx, wz);
-    return (
-      biome.id === 'plains' ||
-      biome.id === 'forest' ||
-      biome.id === 'meadow' ||
-      biome.id === 'desert'
+    return ['plains', 'forest', 'meadow', 'desert'].some((id) =>
+      biomeMatches(biome, id)
     );
   }
 
