@@ -69,7 +69,7 @@ export const ocean_ruins = {
 
     // Scattered treasure
     blocks.push({ x: x, y: y + 1, z: z, id: 'sea_lantern' });
-    blocks.push({ x: x + 1, y: y + 1, z: z + 1, id: 'gold' });
+    blocks.push({ x: x + 1, y: y + 1, z: z + 1, id: 'gold_block' });
     blocks.push({ x: x - 2, y: y + 1, z: z - 1, id: 'lapis_ore' });
 
     // Coral and sea life on floor

@@ -609,7 +609,10 @@ export class Physics {
         if (this.fallDistance > 3.5) {
           const damage = Math.floor(this.fallDistance - 3);
           if (damage > 0) {
-            this.world.game.gameState.takeDamage(damage);
+            this.world.game.gameState.takeDamage(damage, {
+              bypassArmor: true,
+              cause: 'fall',
+            });
             this.world.game.audio?.play('fall-damage');
           }
         }

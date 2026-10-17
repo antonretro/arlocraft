@@ -14,6 +14,24 @@ const FOOD_VALUES = {
   mushroom_brown: 2,
   steak: 8,
   cooked_fish: 6,
+  beef: 3,
+  porkchop: 3,
+  cooked_porkchop: 8,
+  chicken: 2,
+  cooked_chicken: 6,
+  mutton: 2,
+  cooked_mutton: 6,
+  cod: 2,
+  cooked_cod: 5,
+  salmon: 2,
+  cooked_salmon: 6,
+  rabbit: 3,
+  cooked_rabbit: 5,
+  baked_potato: 5,
+  dried_kelp: 1,
+  beetroot: 1,
+  rotten_flesh: 4,
+  golden_apple: 4,
 };
 
 import { PotionSystem } from './PotionSystem.js';
@@ -49,7 +67,7 @@ export class SurvivalSystem {
   }
 
   update(delta) {
-    if (this.gameState.mode !== 'SURVIVAL') return;
+    if (this.gameState.mode !== 'SURVIVAL' || this.gameState.isDead) return;
 
     this.potionSystem.update(delta);
 
@@ -77,7 +95,7 @@ export class SurvivalSystem {
       this.timers.starve += delta;
       if (this.timers.starve >= 3) {
         this.timers.starve = 0;
-        this.gameState.takeDamage(1);
+        this.gameState.takeDamage(1, { bypassArmor: true, cause: 'starve' });
       }
     } else {
       this.timers.starve = 0;

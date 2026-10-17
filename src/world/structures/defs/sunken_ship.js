@@ -48,8 +48,8 @@ export const sunken_ship = {
 
     // Cargo — chests replaced with prismarine/gold scattered
     blocks.push({ x: x - 2, y: y + 1, z: z, id: 'prismarine' });
-    blocks.push({ x: x + 2, y: y + 1, z: z, id: 'gold' });
-    blocks.push({ x: x, y: y + 1, z: z, id: 'diamond' });
+    blocks.push({ x: x + 2, y: y + 1, z: z, id: 'gold_block' });
+    blocks.push({ x: x, y: y + 1, z: z, id: 'diamond_block' });
     blocks.push({ x: x - 4, y: y + 1, z: z, id: 'sea_lantern' });
 
     return blocks;

@@ -1,0 +1,9 @@
+{
+  "name": "Bed",
+  "textureId": "red_wool",
+  "renderType": "slab",
+  "category": "Decorative",
+  "hardness": 0.5,
+  "xp": 2,
+  "color": "0xb02e26"
+}

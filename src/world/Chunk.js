@@ -341,18 +341,18 @@ export class Chunk {
       return isDeep ? 'deepslate_redstone_ore' : 'redstone_ore';
     // Gold     (y -50..−10)
     if (y > -50 && y < -10 && h1 < 0.006)
-      return isDeep ? 'deepslate_gold_ore' : 'gold';
+      return isDeep ? 'deepslate_gold_ore' : 'gold_ore';
     // Lapis    (y -40..+5)
     if (y > -40 && y < 5 && h2 < 0.004)
       return isDeep ? 'deepslate_lapis_ore' : 'lapis_ore';
     // Iron     (y -30..+25)
     if (y > -30 && y < 25 && h1 < 0.014)
-      return isDeep ? 'deepslate_iron_ore' : 'iron';
+      return isDeep ? 'deepslate_iron_ore' : 'iron_ore';
     // Copper   (y -16..+48)
     if (y > -16 && y < 48 && h3 < 0.009)
-      return isDeep ? 'deepslate_copper_ore' : 'copper';
+      return isDeep ? 'deepslate_copper_ore' : 'copper_ore';
     // Coal     (y > -15)
-    if (y > -15 && h2 < 0.024) return 'coal';
+    if (y > -15 && h2 < 0.024) return 'coal_ore';
     // Emerald  (highlands only, y > -20)
     if (biome?.id === 'highlands' && y > -20 && h3 < 0.001)
       return 'emerald_ore';

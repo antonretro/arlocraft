@@ -162,6 +162,11 @@ export class Input {
       if (preventCodes.has(event.code) && !isInput) event.preventDefault();
 
       if (event.code === 'Escape') {
+        if (this.game.gameState.isDead) return;
+        if (this.game.gameState.isInventoryOpen && !this.game.isPaused) {
+          this.game.toggleInventory();
+          return;
+        }
         if (this.game.isSettingsOpen?.()) {
           this.game.showSettings(false);
           if (this.game.isPaused) this.game.showPause(true);

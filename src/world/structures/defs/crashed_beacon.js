@@ -20,7 +20,7 @@ export const crashed_beacon = {
     }
     // Broken pillar (beacon remains)
     for (let dy = 0; dy < 3; dy++) {
-      blocks.push({ x, y: y + dy, z, id: 'iron' });
+      blocks.push({ x, y: y + dy, z, id: 'iron_block' });
     }
     blocks.push({ x, y: y + 3, z, id: 'uranium' });
     // Debris
@@ -31,7 +31,7 @@ export const crashed_beacon = {
         x: x + ox,
         y,
         z: z + oz,
-        id: i % 2 === 0 ? 'cobblestone' : 'iron',
+        id: i % 2 === 0 ? 'cobblestone' : 'iron_block',
       });
     }
     return blocks;

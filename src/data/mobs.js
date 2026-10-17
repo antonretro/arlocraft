@@ -249,7 +249,10 @@ export const MOBS = [
     textureKey: 'sheep/sheep',
     model: 'sheep',
     overlayTextureKey: 'sheep/sheep_fur',
-    drops: [{ id: 'wool_white', min: 1, max: 2 }],
+    drops: [
+      { id: 'wool_white', min: 1, max: 2 },
+      { id: 'mutton', min: 1, max: 2 },
+    ],
   },
   {
     id: 'pig',
@@ -261,7 +264,7 @@ export const MOBS = [
     biomes: ['plains', 'forest', 'swamp'],
     textureKey: 'pig/pig',
     model: 'pig',
-    drops: [{ id: 'steak', min: 1, max: 2 }],
+    drops: [{ id: 'porkchop', min: 1, max: 3 }],
   },
   {
     id: 'cow',
@@ -273,7 +276,10 @@ export const MOBS = [
     biomes: ['plains', 'forest', 'highlands'],
     textureKey: 'cow/cow',
     model: 'cow',
-    drops: [{ id: 'steak', min: 1, max: 3 }],
+    drops: [
+      { id: 'beef', min: 1, max: 3 },
+      { id: 'leather', min: 0, max: 2 },
+    ],
   },
   {
     id: 'chicken',
@@ -284,6 +290,10 @@ export const MOBS = [
     friendly: true,
     textureKey: 'chicken',
     model: 'chicken',
+    drops: [
+      { id: 'chicken', min: 1, max: 1 },
+      { id: 'feather', min: 0, max: 2 },
+    ],
   },
   {
     id: 'wolf',
@@ -345,6 +355,8 @@ export const MOBS = [
     xp: 50,
     textureKey: 'zombie/zombie',
     model: 'zombie',
+    attackDamage: 3,
+    drops: [{ id: 'rotten_flesh', min: 0, max: 2 }],
   },
   {
     id: 'skeleton',
@@ -355,6 +367,10 @@ export const MOBS = [
     ranged: true,
     textureKey: 'skeleton/skeleton',
     model: 'skeleton',
+    drops: [
+      { id: 'bone', min: 0, max: 2 },
+      { id: 'arrow', min: 0, max: 2 },
+    ],
   },
   {
     id: 'creeper',
@@ -365,6 +381,7 @@ export const MOBS = [
     textureKey: 'creeper/creeper',
     model: 'creeper',
     explodes: true,
+    drops: [{ id: 'gunpowder', min: 0, max: 2 }],
   },
   {
     id: 'spider',
@@ -374,6 +391,8 @@ export const MOBS = [
     xp: 50,
     textureKey: 'spider/spider',
     model: 'spider',
+    attackDamage: 2,
+    drops: [{ id: 'string', min: 0, max: 2 }],
   },
   {
     id: 'enderman',

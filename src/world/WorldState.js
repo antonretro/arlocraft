@@ -7,6 +7,7 @@ export class WorldState {
     this.blockMap = new Map();
     this.blockData = new Map(); // Metadata for blocks (e.g. sign text, command block commands)
     this.chestInventories = new Map(); // blockKey -> 27-slot chest contents
+    this.furnaceStates = new Map(); // blockKey -> furnace slots + burn state
     this.changedBlocks = new Map();
 
     this.waterMeshes = new Set();

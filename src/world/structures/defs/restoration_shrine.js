@@ -26,7 +26,7 @@ export const restoration_shrine = {
     }
     // Central arlo block
     blocks.push({ x, y: y + 1, z, id: 'arlo' });
-    blocks.push({ x, y: y + 2, z, id: 'diamond' });
+    blocks.push({ x, y: y + 2, z, id: 'diamond_block' });
     return blocks;
   },
 };

@@ -1,210 +1,53 @@
 import { registerBlockHandler } from '../../engine/BlockHandlerRegistry.js';
-import { iconService } from '../../ui/IconService.js';
+import { rollLoot } from '../../data/LootTables.js';
+import { resolveItemKind } from '../../data/itemKinds.js';
 
 // ── Chest Handler ──────────────────────────────────────────────────────────
-// Opens a 9x3 chest inventory + player inventory.
-// Each chest is keyed by its block coordinate key and persists in worldState.
+// Opens the inventory screen in CHEST mode: a 27-slot chest above the player
+// inventory. Contents are keyed by block coordinate in
+// world.state.chestInventories and saved with the world. Generated chests
+// roll loot the first time they are opened ("chest:<table>" picks the
+// table); chests the player placed (tracked in changedBlocks) start empty.
 // ──────────────────────────────────────────────────────────────────────────
 
-let _game = null;
-let _blockKey = null;
-let _carryItem = null;
-let _carryOrigin = null;
+export const CHEST_SLOTS = 27;
 
-function getOverlay() {
-  return document.getElementById('chest-overlay');
-}
+export function getChestInventory(world, blockKey) {
+  const state = world?.state;
+  if (!state || !blockKey) return null;
+  if (!state.chestInventories) state.chestInventories = new Map();
 
-function getChestInventory() {
-  if (!_game || !_blockKey) return null;
-  const worldState = _game.world?.state;
-  if (!worldState) return null;
-  if (!worldState.chestInventories) worldState.chestInventories = new Map();
-
-  if (!worldState.chestInventories.has(_blockKey)) {
-    // Determine loot table from block ID (e.g. "chest:common_village")
-    const fullId =
-      _game.world.getBlockAt(..._game.world.keyToCoords(_blockKey)) || 'chest';
-    const tag = fullId.includes(':') ? fullId.split(':')[1] : 'common_village';
-
-    const inv = new Array(27).fill(null);
-    import('../../data/LootTables.js').then(({ rollLoot }) => {
-      const loot = rollLoot(tag, 6);
-      loot.forEach((item, i) => {
-        if (i < 27) inv[i] = { id: item.id, count: item.count, kind: 'block' };
+  if (!state.chestInventories.has(blockKey)) {
+    const inv = new Array(CHEST_SLOTS).fill(null);
+    const coords = world.keyToCoords?.(blockKey);
+    const fullId = (coords && world.getBlockAt?.(...coords)) || 'chest';
+    const placedByPlayer = state.changedBlocks?.get(blockKey) != null;
+    const tag = fullId.includes(':') ? fullId.split(':')[1] : null;
+    const lootTable = placedByPlayer ? null : tag || 'common_village';
+    if (lootTable) {
+      rollLoot(lootTable, 6).forEach((item, i) => {
+        inv[i] = {
+          id: item.id,
+          count: item.count,
+          kind: resolveItemKind(item.id),
+        };
       });
-      worldState.chestInventories.set(_blockKey, inv);
-      renderAll();
-    });
-    worldState.chestInventories.set(_blockKey, inv);
+    }
+    state.chestInventories.set(blockKey, inv);
   }
-  return worldState.chestInventories.get(_blockKey);
+  return state.chestInventories.get(blockKey);
 }
 
 function open(blockKey, game) {
-  _game = game;
-  _blockKey = blockKey;
-  _carryItem = null;
-  _carryOrigin = null;
-  const overlay = getOverlay();
-  if (!overlay) return;
-  overlay.style.display = 'flex';
-  renderAll();
-  if (document.pointerLockElement) document.exitPointerLock();
+  getChestInventory(game?.world, blockKey);
+  game?.gameState?.openContainer('CHEST', blockKey);
 }
 
-function close() {
-  returnCarry();
-  const overlay = getOverlay();
-  if (overlay) overlay.style.display = 'none';
-  _game = null;
-  _blockKey = null;
-}
-
-function returnCarry() {
-  if (!_carryItem || !_game) return;
-  _game.gameState.addItemToInventory(
-    _carryItem.id,
-    _carryItem.count,
-    _carryItem.kind ?? 'block'
-  );
-  _carryItem = null;
-  _carryOrigin = null;
-  window.dispatchEvent(new CustomEvent('inventory-changed'));
-}
-
-function renderAll() {
-  renderChestGrid();
-  renderPlayerInventory();
-}
-
-function renderChestGrid() {
-  const grid = document.getElementById('chest-grid');
-  if (!grid) return;
-  grid.innerHTML = '';
-  const chest = getChestInventory();
-  if (!chest) return;
-  for (let i = 0; i < 27; i++) {
-    grid.appendChild(makeSlot('chest', i, chest[i]));
-  }
-}
-
-function renderPlayerInventory() {
-  const mainGrid = document.getElementById('chest-player-main');
-  const hotbarGrid = document.getElementById('chest-player-hotbar');
-  if (!mainGrid || !hotbarGrid || !_game) return;
-  mainGrid.innerHTML = '';
-  for (let i = 9; i < 36; i++) {
-    mainGrid.appendChild(
-      makeSlot('inventory', i, _game.gameState.inventory[i])
-    );
-  }
-  hotbarGrid.innerHTML = '';
-  for (let i = 0; i < 9; i++) {
-    hotbarGrid.appendChild(
-      makeSlot('inventory', i, _game.gameState.inventory[i])
-    );
-  }
-}
-
-function makeSlot(source, idx, item) {
-  const slot = document.createElement('div');
-  slot.className = 'slot bh-slot';
-  slot.dataset.bhSource = source;
-  slot.dataset.bhIdx = String(idx);
-  if (item) slot.appendChild(makeItemEl(item));
-  slot.addEventListener('pointerdown', (e) => onSlotDown(source, idx, e));
-  return slot;
-}
-
-function makeItemEl(item) {
-  // Shared icon pipeline: isometric cubes for blocks, flat sprites for items.
-  const el = iconService.createItemElement(item);
-  el.title = item.id;
-  return el;
-}
-
-function getContainer(source) {
-  if (source === 'chest') return getChestInventory() ?? [];
-  return _game?.gameState?.inventory ?? [];
-}
-
-function onSlotDown(source, idx, event) {
-  if (event.button !== 0 && event.button !== 2) return;
-  event.preventDefault();
-  const container = getContainer(source);
-  const item = container[idx] ?? null;
-
-  if (!_carryItem) {
-    if (!item) return;
-    if (event.button === 2 && (item.count ?? 1) > 1) {
-      const take = Math.ceil((item.count ?? 1) / 2);
-      _carryItem = { ...item, count: take };
-      item.count -= take;
-      if (item.count <= 0) container[idx] = null;
-    } else {
-      _carryItem = item;
-      container[idx] = null;
-    }
-    _carryOrigin = { source, idx };
-  } else {
-    const slot = container[idx];
-    if (!slot) {
-      if (event.button === 2) {
-        container[idx] = { ..._carryItem, count: 1 };
-        _carryItem.count -= 1;
-        if (_carryItem.count <= 0) {
-          _carryItem = null;
-          _carryOrigin = null;
-        }
-      } else {
-        container[idx] = _carryItem;
-        _carryItem = null;
-        _carryOrigin = null;
-      }
-    } else if (
-      slot.id === _carryItem.id &&
-      slot.kind === _carryItem.kind &&
-      (slot.count ?? 1) < 99
-    ) {
-      const space = 99 - (slot.count ?? 1);
-      const put =
-        event.button === 2 ? 1 : Math.min(space, _carryItem.count ?? 1);
-      slot.count = (slot.count ?? 1) + put;
-      _carryItem.count = (_carryItem.count ?? 1) - put;
-      if (_carryItem.count <= 0) {
-        _carryItem = null;
-        _carryOrigin = null;
-      }
-    } else {
-      container[idx] = _carryItem;
-      _carryItem = slot;
-      _carryOrigin = { source, idx };
-    }
-  }
-
-  window.dispatchEvent(new CustomEvent('inventory-changed'));
-  renderAll();
-}
-
-if (typeof document !== 'undefined') {
-  document.addEventListener('pointerup', (e) => {
-    if (getOverlay()?.style.display !== 'flex') return;
-    if (!_carryItem) return;
-    const target = document
-      .elementFromPoint(e.clientX, e.clientY)
-      ?.closest('.bh-slot[data-bh-source]');
-    if (target) return;
-    returnCarry();
-    renderAll();
-  });
-
-  window.addEventListener('keydown', (e) => {
-    if (getOverlay()?.style.display !== 'flex') return;
-    if (e.code === 'KeyE' || e.code === 'Escape') close();
-  });
+function close(game) {
+  if (game?.gameState?.isInventoryOpen) game.gameState.toggleInventory();
 }
 
 const handler = { open, close };
 registerBlockHandler('chest', handler);
 registerBlockHandler('starter_chest', handler);
+registerBlockHandler('barrel', handler);

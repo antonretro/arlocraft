@@ -10,7 +10,7 @@ export const monument = {
       for (let dz = -2; dz <= 2; dz++) {
         for (let dy = 0; dy < 5; dy++) {
           if (Math.abs(dx) === 2 && Math.abs(dz) === 2) {
-            blocks.push({ x: x + dx, y: y + dy, z: z + dz, id: 'gold' });
+            blocks.push({ x: x + dx, y: y + dy, z: z + dz, id: 'gold_block' });
           }
         }
       }

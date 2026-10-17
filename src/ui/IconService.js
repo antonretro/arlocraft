@@ -61,6 +61,30 @@ const WATER_ICON_TINT = 0x3f76e4;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// pick_stone -> stone_pickaxe, axe_gold -> golden_axe, …
+const TOOL_TEXTURE_TYPES = {
+  pick: 'pickaxe',
+  axe: 'axe',
+  shovel: 'shovel',
+  sword: 'sword',
+  hoe: 'hoe',
+};
+const TOOL_TEXTURE_MATERIALS = {
+  wood: 'wooden',
+  stone: 'stone',
+  iron: 'iron',
+  gold: 'golden',
+  diamond: 'diamond',
+};
+const TIERED_TOOL_TEXTURES = {};
+for (const [type, typeName] of Object.entries(TOOL_TEXTURE_TYPES)) {
+  for (const [material, materialName] of Object.entries(
+    TOOL_TEXTURE_MATERIALS
+  )) {
+    TIERED_TOOL_TEXTURES[`${type}_${material}`] = `${materialName}_${typeName}`;
+  }
+}
+
 export class IconService {
   constructor() {
     // blockById / toolById are built lazily (see getters below): block
@@ -909,7 +933,8 @@ export class IconService {
       mushroom_brown: 'brown_mushroom',
       mushroom_red: 'red_mushroom',
     };
-    const directToolTexture = toolMap[normalizedId];
+    const directToolTexture =
+      toolMap[normalizedId] || TIERED_TOOL_TEXTURES[normalizedId];
     const alias = directToolTexture
       ? normalizedId
       : this.resolveIconAlias(normalizedId) || normalizedId;

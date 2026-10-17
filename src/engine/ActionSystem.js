@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { tickAllFurnaces } from '../blocks/handlers/FurnaceHandler.js';
 
 /**
  * ActionSystem
@@ -15,7 +16,6 @@ export class ActionSystem {
     this._lastTargetId = null;
     this._camHead = new THREE.Vector3();
     this._camLook = new THREE.Vector3();
-    this.smeltTimer = 0;
 
     // Performance Caching
     this._tempV1 = new THREE.Vector3();
@@ -25,12 +25,8 @@ export class ActionSystem {
   }
 
   update(delta) {
-    // 1. Smelting Logic
-    this.smeltTimer += delta;
-    if (this.smeltTimer > 3.0) {
-      this.processSmelting();
-      this.smeltTimer = 0;
-    }
+    // 1. Furnaces keep smelting while their UI is closed.
+    tickAllFurnaces(this.game.world, delta);
 
     // 2. Continuous actions (like mining)
     if (
@@ -310,34 +306,6 @@ export class ActionSystem {
       }
       this.game.world.visuals.updateHover(0, 0, 0, false);
       this.game.world.visuals.updatePlacement(0, 0, 0, false);
-    }
-  }
-
-  processSmelting() {
-    if (!this.gameState?.inventory) return;
-    const inv = this.gameState.inventory;
-    const coalIdx = inv.findIndex((item) => item?.id === 'coal');
-    if (coalIdx === -1) return;
-
-    const recipes = {
-      iron_ore: 'iron_ingot',
-      gold_ore: 'gold_ingot',
-      mythril_ore: 'mythril_ingot',
-    };
-
-    for (let i = 0; i < inv.length; i++) {
-      const item = inv[i];
-      if (item && recipes[item.id]) {
-        const result = recipes[item.id];
-        inv[i].count--;
-        if (inv[i].count <= 0) inv[i] = null;
-
-        inv[coalIdx].count--;
-        if (inv[coalIdx].count <= 0) inv[coalIdx] = null;
-
-        this.gameState.addBlockToInventory(result, 1);
-        break;
-      }
     }
   }
 

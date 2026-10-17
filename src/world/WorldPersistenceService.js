@@ -1,3 +1,5 @@
+import { migrateWorldBlockId } from '../data/blockMigrations.js';
+
 export class WorldPersistenceService {
   constructor(world) {
     this.world = world;
@@ -17,6 +19,9 @@ export class WorldPersistenceService {
       blockData: Array.from(this.world.state.blockData.entries()),
       chestInventories: Array.from(
         this.world.state.chestInventories?.entries() ?? []
+      ),
+      furnaceStates: Array.from(
+        this.world.state.furnaceStates?.entries() ?? []
       ),
     };
   }
@@ -59,14 +64,16 @@ export class WorldPersistenceService {
       this.world.state.chestInventories = new Map(data.chestInventories);
     }
 
+    if (Array.isArray(data.furnaceStates)) {
+      this.world.state.furnaceStates = new Map(data.furnaceStates);
+    }
+
     // Logic to refresh chunks after load
     this.world.chunkManager.clearAll();
   }
 
   migrateBlockId(id) {
     if (!id) return id;
-    // logic moved from World.js migrateBlockId
-    if (id === 'short_grass') return 'short_grass'; // confirmed not aliased
-    return id;
+    return migrateWorldBlockId(id);
   }
 }

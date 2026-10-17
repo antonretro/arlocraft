@@ -335,11 +335,11 @@ export class MobEntity {
     const gameState = this.game.gameState;
     if (!Array.isArray(drops) || !gameState?.addItemToInventory) return;
     for (const drop of drops) {
-      if (!this.game.world?.getBlockData?.(drop.id)) continue;
       const min = drop.min ?? 1;
       const max = drop.max ?? min;
       const count = min + Math.floor(Math.random() * (max - min + 1));
-      if (count > 0) gameState.addItemToInventory(drop.id, count, 'block');
+      // addItemToInventory resolves the kind (block, item, tool) from the id.
+      if (count > 0) gameState.addItemToInventory(drop.id, count);
     }
   }
 
@@ -480,8 +480,11 @@ export class MobEntity {
     if (distToPlayer > reach + this.halfHeight || verticalGap > 2.2) return;
     if (this.contactCooldown > 0) return;
 
-    const damage = this.config.boss ? 3 : this.config.hp >= 40 ? 2 : 1;
-    this.game.gameState.takeDamage(damage);
+    // Minecraft-like melee damage (zombie 3 = 1.5 hearts); armor reduces it.
+    const damage =
+      this.config.attackDamage ??
+      (this.config.boss ? 8 : this.config.hp >= 40 ? 5 : 3);
+    this.game.gameState.takeDamage(damage, { cause: this.config.id });
     const knock = this.tmpKnockbackDir.subVectors(
       playerPos,
       this.mesh.position

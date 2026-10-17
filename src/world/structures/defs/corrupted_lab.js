@@ -18,7 +18,7 @@ export const corrupted_lab = {
               x: x + dx,
               y: y + dy,
               z: z + dz,
-              id: dy === wallHeight ? 'glass' : 'iron',
+              id: dy === wallHeight ? 'glass' : 'iron_block',
             });
           }
         }

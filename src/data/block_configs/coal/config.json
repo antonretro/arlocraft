@@ -1,5 +1,7 @@
 {
+  "id": "coal_ore",
   "name": "Coal Ore",
+  "textureId": "coal_ore",
   "hardness": 3,
   "xp": 8,
   "color": "0x3b3f47"

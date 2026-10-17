@@ -1,4 +1,16 @@
-import { RECIPE_BOOK } from '../data/recipeBook.js';
+import { RECIPE_BOOK, ITEM_TAGS } from '../data/recipeBook.js';
+
+const tagSets = new Map(
+  Object.entries(ITEM_TAGS).map(([tag, ids]) => [tag, new Set(ids)])
+);
+
+// A recipe ingredient is an item id or '#tag' (see ITEM_TAGS).
+function ingredientMatches(required, id) {
+  if (!required || !id) return false;
+  if (required.startsWith('#'))
+    return tagSets.get(required.slice(1))?.has(id) ?? false;
+  return required === id;
+}
 
 function cloneResult(result) {
   return { ...result };
@@ -81,7 +93,13 @@ function mapsEqual(a, b) {
 
 export class CraftingSystem {
   constructor(recipeBook = RECIPE_BOOK) {
-    this.recipes = recipeBook.map((recipe) => this.compileRecipe(recipe));
+    this.recipeBook = recipeBook;
+    this.compile();
+  }
+
+  compile() {
+    this.recipes = this.recipeBook.map((recipe) => this.compileRecipe(recipe));
+    this.compiledCount = this.recipeBook.length;
   }
 
   compileRecipe(recipe) {
@@ -90,6 +108,7 @@ export class CraftingSystem {
       return {
         ...recipe,
         ingredientCounts: idCounts,
+        hasTags: recipe.ingredients.some((id) => id?.startsWith('#')),
       };
     }
 
@@ -102,13 +121,17 @@ export class CraftingSystem {
   }
 
   match(craftingGrid) {
+    // Mods can push recipes after this system was built.
+    if (this.recipeBook.length !== this.compiledCount) this.compile();
     const ids = gridToIds(craftingGrid);
     const normalizedGrid = normalizeIdGrid(ids);
 
     for (const recipe of this.recipes) {
       if (recipe.type === 'shapeless') {
-        const gridCounts = countIds(ids);
-        if (!mapsEqual(gridCounts, recipe.ingredientCounts)) continue;
+        const matched = recipe.hasTags
+          ? this.matchesShapelessTags(ids, recipe.ingredients)
+          : mapsEqual(countIds(ids), recipe.ingredientCounts);
+        if (!matched) continue;
         return {
           recipeId: recipe.id,
           recipeName: recipe.name,
@@ -150,8 +173,23 @@ export class CraftingSystem {
           continue;
         }
         const requiredId = keyMap[symbol] ?? null;
-        if (!requiredId || gridId !== requiredId) return false;
+        if (!ingredientMatches(requiredId, gridId)) return false;
       }
+    }
+    return true;
+  }
+
+  matchesShapelessTags(ids, ingredients) {
+    const remaining = ids.filter(Boolean);
+    if (remaining.length !== ingredients.length) return false;
+    // Exact ids first so tags do not steal items a later exact id needs.
+    const ordered = [...ingredients].sort(
+      (a, b) => Number(a.startsWith('#')) - Number(b.startsWith('#'))
+    );
+    for (const required of ordered) {
+      const idx = remaining.findIndex((id) => ingredientMatches(required, id));
+      if (idx === -1) return false;
+      remaining.splice(idx, 1);
     }
     return true;
   }

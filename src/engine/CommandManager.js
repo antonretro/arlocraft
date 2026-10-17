@@ -80,7 +80,9 @@ export class CommandManager {
           else if (val === 'midnight') time = 18000;
           else time = parseInt(val) || 0;
 
-          this.game.dayNight?.setTime(time);
+          // Minecraft ticks (0 = 6:00 AM, 24000 per day) -> day fraction
+          // (0 = midnight, 0.25 = sunrise).
+          this.game.dayNight?.setTime((time / 24000 + 0.25) % 1);
           this.game.chat?.addMessage('SYSTEM', `Time set to ${time}`, 'system');
         } else {
           throw new Error('Usage: /time set [value]');
