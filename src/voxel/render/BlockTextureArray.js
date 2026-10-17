@@ -56,7 +56,13 @@ export class BlockTextureArray {
     // Animated textures are vertical strips of square frames: use frame 0.
     const frame = Math.min(image.width, image.height);
     ctx.clearRect(0, 0, size, size);
+    // Array textures are not flipped on upload, so store rows bottom-up
+    // (v = 0 at the bottom of the image) to match the mesh UVs.
+    ctx.save();
+    ctx.translate(0, size);
+    ctx.scale(1, -1);
     ctx.drawImage(image, 0, 0, frame, frame, 0, 0, size, size);
+    ctx.restore();
     const pixels = ctx.getImageData(0, 0, size, size).data;
     this.data.set(pixels, layer * size * size * 4);
     // Upload only the changed layer when three.js supports it.
