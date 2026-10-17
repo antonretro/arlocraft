@@ -21,6 +21,14 @@ import { rollLoot } from '../data/LootTables.js';
 import { VoxelStore } from '../voxel/VoxelStore.js';
 import { ChangeLog } from '../voxel/ChangeLog.js';
 
+const REDSTONE_FACING_BLOCKS = new Set([
+  'repeater',
+  'comparator',
+  'observer',
+  'piston',
+  'sticky_piston',
+]);
+
 export class World {
   constructor(scene, game) {
     this.scene = scene;
@@ -754,11 +762,6 @@ export class World {
       'barrel',
       'dispenser',
       'dropper',
-      'observer',
-      'repeater',
-      'comparator',
-      'piston',
-      'sticky_piston',
       'stonecutter',
       'loom',
       'cartography_table',
@@ -781,10 +784,6 @@ export class World {
       else if (absYaw >= (5 * Math.PI) / 4 && absYaw < (7 * Math.PI) / 4)
         dir = 'e';
 
-      // Observers watch the player; everything else faces away from them.
-      if (blockId === 'observer') {
-        dir = { n: 's', s: 'n', e: 'w', w: 'e' }[dir];
-      }
       finalId = `${blockId}_${dir}`;
     }
 
@@ -839,9 +838,7 @@ export class World {
     if (
       blockId.includes('_stairs') ||
       blockId.includes('_door') ||
-      blockId.includes('glazed_terracotta') ||
-      blockId === 'repeater' ||
-      blockId === 'comparator'
+      blockId.includes('glazed_terracotta')
     ) {
       const yaw =
         ((camera.rotation.y % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
@@ -852,29 +849,27 @@ export class World {
       else finalId += '_w';
     }
 
-    // 6-Way Orientation for Machines
-    if (
-      blockId === 'observer' ||
-      blockId === 'piston' ||
-      blockId === 'sticky_piston'
-    ) {
-      const pitch = camera.rotation.x;
+    // Redstone parts carry the direction they output (or push) towards, like
+    // in Minecraft: repeaters, comparators and observers point away from
+    // you, pistons push back towards you (up or down when you look steeply).
+    if (REDSTONE_FACING_BLOCKS.has(blockId)) {
       const yaw =
         ((camera.rotation.y % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      const pitch = camera.rotation.x;
       const pi = Math.PI;
-
-      if (pitch > pi / 4)
-        finalId += '_u'; // Facing Up
-      else if (pitch < -pi / 4)
-        finalId += '_d'; // Facing Down
-      else {
-        // Horizontal orientation
-        if (yaw >= (7 * pi) / 4 || yaw < pi / 4) finalId += '_s';
-        else if (yaw < (3 * pi) / 4) finalId += '_e';
-        else if (yaw < (5 * pi) / 4) finalId += '_n';
-        else finalId += '_w';
-      }
+      // Camera yaw 0 looks towards -Z (north), pi/2 towards -X (west).
+      let look = 'n';
+      if (yaw >= pi / 4 && yaw < (3 * pi) / 4) look = 'w';
+      else if (yaw >= (3 * pi) / 4 && yaw < (5 * pi) / 4) look = 's';
+      else if (yaw >= (5 * pi) / 4 && yaw < (7 * pi) / 4) look = 'e';
+      const sixWay = blockId !== 'repeater' && blockId !== 'comparator';
+      if (sixWay && pitch > pi / 4) look = 'u';
+      else if (sixWay && pitch < -pi / 4) look = 'd';
+      const opposite = { n: 's', s: 'n', e: 'w', w: 'e', u: 'd', d: 'u' };
+      const isPiston = blockId === 'piston' || blockId === 'sticky_piston';
+      finalId = `${blockId}_${isPiston ? opposite[look] : look}`;
     }
+
     const cx = this.getChunkCoord(px);
     const cy = this.getChunkCoord(py);
     const cz = this.getChunkCoord(pz);

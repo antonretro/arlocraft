@@ -164,6 +164,8 @@ export class BlockRenderTable {
         flags |= 0b110011 | FLAG_MASKED_SIDES;
       }
     }
+    this.applyFacing(id, baseId, base);
+
     const isFoliage =
       baseId.includes('leaves') || baseId === 'vine' || baseId === 'vines';
     if (isFoliage) flags |= FLAG_FOLIAGE;
@@ -177,4 +179,37 @@ export class BlockRenderTable {
     t[base + 7] = flags;
     t[base + 8] = blockData?.emissive ? 255 : 0;
   }
+
+  /**
+   * Pistons and observers face one of six directions (`piston_e`, ...).
+   * Put the front texture on that face, the back on the opposite one and
+   * the side texture everywhere else.
+   */
+  applyFacing(id, baseId, base) {
+    const textures = FACING_TEXTURES[baseId];
+    const match = id.match(/_([nsewud])$/);
+    if (!textures || !match) return;
+    const rm = this.world.blockRegistry.resourceManager;
+    const layer = (name) => {
+      const url = rm.getTextureUrl(name);
+      return url
+        ? this.textures.layerFor(this.world.blockRegistry.loadTexture(url))
+        : 0;
+    };
+    const front = FACE_INDEX[match[1]];
+    const back = front ^ 1;
+    const [frontTex, backTex, sideTex] = textures.map(layer);
+    for (let f = 0; f < 6; f++) {
+      this.table[base + 1 + f] =
+        f === front ? frontTex : f === back ? backTex : sideTex;
+    }
+  }
 }
+
+// Face order of the mesher: +x, -x, +y, -y, +z, -z.
+const FACE_INDEX = { e: 0, w: 1, u: 2, d: 3, s: 4, n: 5 };
+const FACING_TEXTURES = {
+  piston: ['piston_top', 'piston_bottom', 'piston_side'],
+  sticky_piston: ['piston_top_sticky', 'piston_bottom', 'piston_side'],
+  observer: ['observer_back', 'observer_front', 'observer_side'],
+};

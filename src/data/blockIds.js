@@ -14,7 +14,8 @@ export function normalizeBlockVariantId(id) {
     }
   }
 
-  const dirMatch = base.match(/^(.*)_[nswe]$/);
+  // Facing suffix: n/s/e/w, or u/d for pistons and observers.
+  const dirMatch = base.match(/^(.*)_[nsweud]$/);
   if (dirMatch) base = dirMatch[1];
 
   const shapeMatch = base.match(/^(.*)__(inner|outer)$/);
