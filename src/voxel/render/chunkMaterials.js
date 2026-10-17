@@ -15,16 +15,19 @@ function patchForTextureArray(material, textureArray) {
         `#include <common>
 attribute float layer;
 attribute float emit;
+attribute vec4 tint;
 varying vec2 vBlockUv;
 varying float vLayer;
-varying float vEmit;`
+varying float vEmit;
+varying vec4 vTint;`
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
 vBlockUv = uv;
 vLayer = layer;
-vEmit = emit;`
+vEmit = emit;
+vTint = tint;`
       );
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -34,11 +37,17 @@ precision highp sampler2DArray;
 uniform sampler2DArray uBlockTextures;
 varying vec2 vBlockUv;
 varying float vLayer;
-varying float vEmit;`
+varying float vEmit;
+varying vec4 vTint;`
       )
       .replace(
         '#include <map_fragment>',
         `vec4 blockTexel = texture(uBlockTextures, vec3(vBlockUv, floor(vLayer + 0.5)));
+// Biome tint. Masked faces (grass block sides) only tint grey texels, so
+// the dirt stays brown while the grass overlay takes the biome colour.
+float texelSat = max(blockTexel.r, max(blockTexel.g, blockTexel.b)) - min(blockTexel.r, min(blockTexel.g, blockTexel.b));
+float tintAmount = vTint.a > 0.5 ? 1.0 - smoothstep(0.05, 0.14, texelSat) : 1.0;
+blockTexel.rgb *= mix(vec3(1.0), vTint.rgb, tintAmount);
 diffuseColor *= blockTexel;`
       )
       .replace(

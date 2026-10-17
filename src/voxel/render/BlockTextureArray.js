@@ -41,6 +41,22 @@ export class BlockTextureArray {
     return layer;
   }
 
+  /**
+   * A layer made of `base` with the opaque pixels of `overlay` drawn over
+   * it (grass block sides: dirt + grey grass overlay that gets tinted).
+   */
+  layerForComposite(key, base, overlay) {
+    const existing = this.layers.get(key);
+    if (existing !== undefined) return existing;
+    if (this.nextLayer >= this.capacity) return 0;
+    const layer = this.nextLayer++;
+    this.layers.set(key, layer);
+    const composite = { uuid: key, parts: [base, overlay] };
+    if (!this.tryCopy(composite, layer))
+      this.pending.push({ texture: composite, layer });
+    return layer;
+  }
+
   imageOf(texture) {
     const image = texture.image ?? texture.source?.data;
     if (!image) return null;
@@ -50,6 +66,7 @@ export class BlockTextureArray {
   }
 
   tryCopy(texture, layer) {
+    if (texture.parts) return this.tryCopyComposite(texture.parts, layer);
     const image = this.imageOf(texture);
     if (!image) return false;
     const { size, ctx } = this;
@@ -66,6 +83,30 @@ export class BlockTextureArray {
     const pixels = ctx.getImageData(0, 0, size, size).data;
     this.data.set(pixels, layer * size * size * 4);
     // Upload only the changed layer when three.js supports it.
+    if (typeof this.texture.addLayerUpdate === 'function') {
+      this.texture.addLayerUpdate(layer);
+    }
+    this.texture.needsUpdate = true;
+    return true;
+  }
+
+  tryCopyComposite(parts, layer) {
+    const images = parts.map((t) => this.imageOf(t));
+    if (images.some((img) => !img)) return false;
+    const { size, ctx } = this;
+    ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    ctx.translate(0, size);
+    ctx.scale(1, -1);
+    for (const image of images) {
+      const frame = Math.min(image.width, image.height);
+      ctx.drawImage(image, 0, 0, frame, frame, 0, 0, size, size);
+    }
+    ctx.restore();
+    this.data.set(
+      ctx.getImageData(0, 0, size, size).data,
+      layer * size * size * 4
+    );
     if (typeof this.texture.addLayerUpdate === 'function') {
       this.texture.addLayerUpdate(layer);
     }

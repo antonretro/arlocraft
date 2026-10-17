@@ -11,7 +11,10 @@ import {
   KIND_SPECIAL,
   FLAG_SAME_FACES,
   FLAG_OCCLUDES,
+  FLAG_FOLIAGE,
+  FLAG_MASKED_SIDES,
 } from '../mesh/meshChunk.js';
+import { FIXED_FOLIAGE } from './Colormaps.js';
 
 const WATER_COLOR = 0x3f76e4;
 
@@ -145,8 +148,33 @@ export class BlockRenderTable {
       flags |= FLAG_OCCLUDES;
     }
 
+    // Grass block sides: dirt with the grey overlay on top, tinted like the
+    // top so the green strip always matches the biome.
+    if (baseId === 'grass_block') {
+      const rm = registry.resourceManager;
+      const sideUrl = rm.getTextureUrl('dirt');
+      const overlayUrl = rm.getTextureUrl('grass_block_side_overlay');
+      if (sideUrl && overlayUrl) {
+        const layer = this.textures.layerForComposite(
+          'grass_block_side_composite',
+          registry.loadTexture(sideUrl),
+          registry.loadTexture(overlayUrl)
+        );
+        for (const f of [0, 1, 4, 5]) t[base + 1 + f] = layer;
+        flags |= 0b110011 | FLAG_MASKED_SIDES;
+      }
+    }
+    const isFoliage =
+      baseId.includes('leaves') || baseId === 'vine' || baseId === 'vines';
+    if (isFoliage) flags |= FLAG_FOLIAGE;
+    if (FIXED_FOLIAGE[baseId]) {
+      // Spruce and birch keep their own colour in every biome.
+      flags &= ~0b111111;
+      t[base + 9] = FIXED_FOLIAGE[baseId];
+    } else if (first?.color) {
+      t[base + 9] = first.color.getHex();
+    }
     t[base + 7] = flags;
     t[base + 8] = blockData?.emissive ? 255 : 0;
-    if (first?.color) t[base + 9] = first.color.getHex();
   }
 }

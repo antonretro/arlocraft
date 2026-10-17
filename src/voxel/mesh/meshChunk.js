@@ -9,7 +9,7 @@
  *   cross  - X-shaped plants, double sided
  *   liquid - water and other translucent cubes, drawn after the rest
  */
-import { CHUNK_SIZE } from '../VoxelStore.js';
+import { CHUNK_SIZE, CHUNK_AREA } from '../VoxelStore.js';
 
 export const PAD = CHUNK_SIZE + 2;
 
@@ -30,8 +30,13 @@ export const KIND_SPECIAL = 6; // drawn by the instanced renderer instead
 export const TABLE_STRIDE = 10;
 export const FLAG_SAME_FACES = 1 << 6;
 export const FLAG_OCCLUDES = 1 << 7;
+// bit 8: tinted faces use the foliage colour instead of the grass colour
+// bit 9: tinted side faces only tint grey pixels (grass block overlay)
+export const FLAG_FOLIAGE = 1 << 8;
+export const FLAG_MASKED_SIDES = 1 << 9;
 
 const LIQUID_TOP = 0.875;
+const NO_TINT = [1, 1, 1, 0];
 const AO_CURVE = [0.45, 0.65, 0.82, 1.0];
 
 // Face definitions: normal, the four corner offsets (counter-clockwise when
@@ -106,17 +111,21 @@ class GroupBuilder {
     this.uv = [];
     this.layer = [];
     this.col = [];
+    this.tint = [];
     this.emit = [];
     this.idx = [];
     this.count = 0;
   }
 
-  vertex(x, y, z, nx, ny, nz, u, v, layer, r, g, b, e) {
+  // r,g,b: ambient occlusion x base colour; tint: biome tint (a = 1 means
+  // only grey texels are tinted, used for grass block sides).
+  vertex(x, y, z, nx, ny, nz, u, v, layer, r, g, b, e, tint) {
     this.pos.push(x, y, z);
     this.nrm.push(nx, ny, nz);
     this.uv.push(u, v);
     this.layer.push(layer);
     this.col.push(r, g, b);
+    this.tint.push(tint[0], tint[1], tint[2], tint[3]);
     this.emit.push(e);
     return this.count++;
   }
@@ -135,6 +144,7 @@ class GroupBuilder {
       uv: new Float32Array(this.uv),
       layer: new Float32Array(this.layer),
       color: new Float32Array(this.col),
+      tint: new Float32Array(this.tint),
       emit: new Float32Array(this.emit),
       index: new IndexArray(this.idx),
     };
@@ -148,7 +158,8 @@ function padIndex(x, y, z) {
 /**
  * @param {Uint16Array} padded  PAD³ numeric block ids
  * @param {Int32Array} table    TABLE_STRIDE ints per numeric id
- * @param {Uint32Array} tints   CHUNK_SIZE² 0xRRGGBB biome tint per column (x + z*16)
+ * @param {Uint32Array} tints   2 x CHUNK_SIZE² 0xRRGGBB per column (x + z*16):
+ *                              grass colours, then foliage colours
  */
 export function meshChunk(padded, table, tints) {
   const solid = new GroupBuilder();
@@ -175,7 +186,9 @@ export function meshChunk(padded, table, tints) {
 
         const flags = table[base + 7];
         const emit = table[base + 8] / 255;
-        const tint = tints[x + z * CHUNK_SIZE];
+        const column = x + z * CHUNK_SIZE;
+        const tint =
+          flags & FLAG_FOLIAGE ? tints[CHUNK_AREA + column] : tints[column];
         const tr = ((tint >> 16) & 255) / 255;
         const tg = ((tint >> 8) & 255) / 255;
         const tb = (tint & 255) / 255;
@@ -213,9 +226,9 @@ export function meshChunk(padded, table, tints) {
           if (!faceVisible(kind, num, flags, nNum, kindAt(nNum))) continue;
           const layer = table[base + 1 + f];
           const tinted = (flags >> f) & 1;
-          const r0 = (tinted ? tr : 1) * br;
-          const g0 = (tinted ? tg : 1) * bg;
-          const b0 = (tinted ? tb : 1) * bb;
+          const masked =
+            tinted && flags & FLAG_MASKED_SIDES && f !== 2 && f !== 3;
+          const faceTint = tinted ? [tr, tg, tb, masked ? 1 : 0] : NO_TINT;
 
           const ids = [0, 0, 0, 0];
           const ao = [3, 3, 3, 3];
@@ -257,10 +270,11 @@ export function meshChunk(padded, table, tints) {
               u,
               f !== 2 && f !== 3 && cyo === 1 ? topH : v,
               layer,
-              r0 * shade,
-              g0 * shade,
-              b0 * shade,
-              emit
+              br * shade,
+              bg * shade,
+              bb * shade,
+              emit,
+              faceTint
             );
           }
           // Flip the diagonal so AO gradients interpolate without seams.
@@ -293,9 +307,10 @@ function faceVisible(kind, num, flags, nNum, nKind) {
 }
 
 function emitCross(group, x, y, z, layer, tinted, tr, tg, tb, emit) {
-  const r = tinted ? tr : 1;
-  const g = tinted ? tg : 1;
-  const b = tinted ? tb : 1;
+  const tint = tinted ? [tr, tg, tb, 0] : NO_TINT;
+  const r = 1;
+  const g = 1;
+  const b = 1;
   const inset = 0.15;
   const planes = [
     [inset, inset, 1 - inset, 1 - inset],
@@ -317,7 +332,8 @@ function emitCross(group, x, y, z, layer, tinted, tr, tg, tb, emit) {
       r,
       g,
       b,
-      emit
+      emit,
+      tint
     );
     const b1 = group.vertex(
       x + x1,
@@ -332,7 +348,8 @@ function emitCross(group, x, y, z, layer, tinted, tr, tg, tb, emit) {
       r,
       g,
       b,
-      emit
+      emit,
+      tint
     );
     const c = group.vertex(
       x + x1,
@@ -347,7 +364,8 @@ function emitCross(group, x, y, z, layer, tinted, tr, tg, tb, emit) {
       r,
       g,
       b,
-      emit
+      emit,
+      tint
     );
     const d = group.vertex(
       x + x0,
@@ -362,7 +380,8 @@ function emitCross(group, x, y, z, layer, tinted, tr, tg, tb, emit) {
       r,
       g,
       b,
-      emit
+      emit,
+      tint
     );
     group.quad(a, b1, c, d, false);
   }

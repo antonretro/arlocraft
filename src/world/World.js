@@ -70,6 +70,8 @@ export class World {
 
   async init() {
     await this.registry.init();
+    // Biome colours must be known before the first chunk is meshed.
+    await this.terrain.colormaps.ready;
     this.chunkManager = new ChunkManager(this);
     this.chunkGenerator = new ChunkGenerator(this);
     this.explosions = new ExplosionSystem(this);

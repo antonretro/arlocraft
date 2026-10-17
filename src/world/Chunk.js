@@ -1145,6 +1145,7 @@ export class Chunk {
       geometry.setAttribute('uv', new THREE.BufferAttribute(data.uv, 2));
       geometry.setAttribute('layer', new THREE.BufferAttribute(data.layer, 1));
       geometry.setAttribute('color', new THREE.BufferAttribute(data.color, 3));
+      geometry.setAttribute('tint', new THREE.BufferAttribute(data.tint, 4));
       geometry.setAttribute('emit', new THREE.BufferAttribute(data.emit, 1));
       geometry.setIndex(new THREE.BufferAttribute(data.index, 1));
       const cs = this.world.chunkSize;

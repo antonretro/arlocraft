@@ -2,6 +2,8 @@ import { BIOME_BY_ID, biomeMatches } from '../../data/biomes.js';
 import { Noise } from '../Noise.js';
 import { NoiseRouter } from '../NoiseRouter.js';
 import { getTerrainSampler } from '../../voxel/gen/terrain.js';
+import { Colormaps } from '../../voxel/render/Colormaps.js';
+import { ResourcePackManager } from '../ResourcePackManager.js';
 import { generateSettlementName } from '../naming/SettlementNameGenerator.js';
 import { getContinentMask, isPathAt, isHighwayAt } from './ContinentShaper.js';
 
@@ -18,6 +20,10 @@ export class WorldTerrainService {
     this.biomeCache = world.state.biomeCache;
 
     this._blendedColorCache = new Map();
+    this._latticeCache = new Map();
+    this.colormaps = new Colormaps(
+      ResourcePackManager.getInstance().baseAssetPath
+    );
 
     // Initialize with default seed immediately
     this.setSeed(this.seedString);
@@ -46,6 +52,7 @@ export class WorldTerrainService {
     this.terrainHeightCache.clear();
     this.biomeCache.clear();
     this._blendedColorCache.clear();
+    this._latticeCache?.clear();
   }
 
   getBiomeAt(x, z) {
@@ -93,7 +100,73 @@ export class WorldTerrainService {
   }
 
   // --- FEATURE: Smooth Blending Engine ---
+  // --- Biome colours (Minecraft colormaps) ---
+  // Colours are computed on a 4-block lattice and blended bilinearly, which
+  // smooths biome borders and keeps the cost to a few samples per chunk.
+  _latticeColor(kind, lx, lz) {
+    const key = `${kind}|${lx}|${lz}`;
+    let color = this._latticeCache.get(key);
+    if (color !== undefined) return color;
+    const x = lx * 4;
+    const z = lz * 4;
+    const h = this.getTerrainHeight(x, z);
+    const biome = this.getBiomeAt(x, z);
+    const { temperature, humidity } = this.sampler.climate(x, z, h);
+    color =
+      kind === 'grass'
+        ? this.colormaps.grassColor(
+            biome.id,
+            temperature,
+            humidity,
+            biome.color
+          )
+        : this.colormaps.foliageColor(
+            biome.id,
+            temperature,
+            humidity,
+            biome.color
+          );
+    if (this._latticeCache.size > 200000) this._latticeCache.clear();
+    this._latticeCache.set(key, color);
+    return color;
+  }
+
+  _blendedLattice(kind, x, z) {
+    const fx = x / 4;
+    const fz = z / 4;
+    const lx = Math.floor(fx);
+    const lz = Math.floor(fz);
+    const tx = fx - lx;
+    const tz = fz - lz;
+    const c00 = this._latticeColor(kind, lx, lz);
+    const c10 = this._latticeColor(kind, lx + 1, lz);
+    const c01 = this._latticeColor(kind, lx, lz + 1);
+    const c11 = this._latticeColor(kind, lx + 1, lz + 1);
+    let out = 0;
+    for (const shift of [16, 8, 0]) {
+      const a = (c00 >> shift) & 255;
+      const b = (c10 >> shift) & 255;
+      const c = (c01 >> shift) & 255;
+      const d = (c11 >> shift) & 255;
+      const top = a + (b - a) * tx;
+      const bottom = c + (d - c) * tx;
+      out |= Math.round(top + (bottom - top) * tz) << shift;
+    }
+    return out;
+  }
+
+  /** Biome grass colour at a column (grass blocks, grass and ferns). */
+  getGrassColor(x, z) {
+    return this._blendedLattice('grass', x, z);
+  }
+
+  /** Biome foliage colour at a column (leaves, vines). */
+  getFoliageColor(x, z) {
+    return this._blendedLattice('foliage', x, z);
+  }
+
   getBlendedColor(x, z, property = 'color') {
+    if (property === 'color') return this.getGrassColor(x, z);
     const gx = Math.round(x);
     const gz = Math.round(z);
     // Numeric key: high bits = position, low bit = property (0=color,1=waterColor)

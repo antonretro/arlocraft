@@ -422,17 +422,21 @@ export class ChunkManager {
     return padded;
   }
 
+  /** Grass colours then foliage colours for the 16x16 columns of a chunk. */
   getTints(cx, cz) {
     const key = `${cx}|${cz}`;
     let tints = this.tintCache.get(key);
     if (tints) return tints;
-    tints = new Uint32Array(CHUNK_SIZE * CHUNK_SIZE);
+    tints = new Uint32Array(CHUNK_SIZE * CHUNK_SIZE * 2);
+    const terrain = this.world.terrain;
     const bx = cx * CHUNK_SIZE;
     const bz = cz * CHUNK_SIZE;
     for (let z = 0; z < CHUNK_SIZE; z++) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
-        tints[x + z * CHUNK_SIZE] =
-          this.world.terrain.getBlendedColor(bx + x, bz + z, 'color') >>> 0;
+        const i = x + z * CHUNK_SIZE;
+        tints[i] = terrain.getGrassColor(bx + x, bz + z) >>> 0;
+        tints[CHUNK_SIZE * CHUNK_SIZE + i] =
+          terrain.getFoliageColor(bx + x, bz + z) >>> 0;
       }
     }
     if (this.tintCache.size > 4096) this.tintCache.clear();
