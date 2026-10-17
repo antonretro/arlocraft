@@ -1,3 +1,4 @@
+import { BUILD_LABEL } from '../../data/buildInfo.js';
 import React, { useState, useEffect } from 'react';
 import { getGame } from '../UIManager';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -154,7 +155,7 @@ export const PauseMenu = ({ setIsPaused }) => {
               </div>
 
               <div className="mt-auto flex justify-between items-center px-4">
-                  <span className="text-[10px] opacity-20 uppercase tracking-widest">Build 2026.04.19.EX</span>
+                  <span className="text-[10px] opacity-20 uppercase tracking-widest">{BUILD_LABEL}</span>
                   <div className="flex gap-4 opacity-40 hover:opacity-100 transition-opacity">
                       <span className="text-[10px] font-bold py-1 px-2 bg-white/10 rounded tracking-tighter cursor-help" title={worldSummary.pos}>
                           GPS: {worldSummary.pos}

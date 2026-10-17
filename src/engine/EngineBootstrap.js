@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { VERSION_LABEL } from '../data/buildInfo.js';
 import { Camera } from './Camera.js';
 import { Renderer } from './Renderer.js';
 import { World } from '../world/World.js';
@@ -61,7 +62,7 @@ export class EngineBootstrap {
     game.gameState.initStartingInventory();
 
     game.features = { ...FEATURES };
-    game.currentVersionId = 'v1.1-STABLE';
+    game.currentVersionId = VERSION_LABEL;
 
     // 2. UI Foundation
     game.hud = new HUDCore(game);

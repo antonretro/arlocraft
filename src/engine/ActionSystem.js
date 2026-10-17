@@ -163,6 +163,7 @@ export class ActionSystem {
       selectedSlot
     );
     if (!placed) return;
+    this.game.hand?.swing('place');
     if (this.gameState.mode === 'CREATIVE') return;
 
     selected.count--;

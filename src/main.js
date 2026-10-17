@@ -6,6 +6,7 @@ import {
 } from 'three-mesh-bvh';
 import { Game } from './engine/Game.js';
 import { validateBlocks } from './utils/BlockValidator.js';
+import { BUILD_LABEL, VERSION_LABEL } from './data/buildInfo.js';
 
 console.log('[ArloCraft] main.js fully loading...');
 
@@ -22,7 +23,7 @@ console.log(
   'background: #2563eb; color: #fff; font-size: 20px; font-weight: bold; border-radius: 4px; padding: 4px;'
 );
 console.log(
-  '%c THE VOYAGE OF DISCOVERY %c Build: 2026.04.19.EX ',
+  `%c THE VOYAGE OF DISCOVERY %c ${VERSION_LABEL} · ${BUILD_LABEL} `,
   'color: #3b82f6; font-style: italic;',
   'color: #94a3b8; font-size: 10px;'
 );

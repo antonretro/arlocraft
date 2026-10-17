@@ -576,7 +576,13 @@ export class Game {
       );
     }
 
-    this.hand.update(delta, this.player.bobCycle, speed > 0.1);
+    this.hand.update(
+      delta,
+      this.player.bobCycle,
+      speed > 0.1,
+      speed,
+      grounded || inWater
+    );
 
     const selected = this.gameState.getSelectedItem();
     if (this.hand.lastHeldId !== selected?.id) {

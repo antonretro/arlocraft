@@ -18,6 +18,7 @@ import {
   Volume2,
   Gamepad
 } from 'lucide-react';
+import { BUILD_LABEL } from '../../data/buildInfo.js';
 
 export const MainMenu = ({ setScreen }) => {
   const game = getGame();
@@ -728,7 +729,7 @@ export const MainMenu = ({ setScreen }) => {
 
       {/* Version Footer */}
       <div className="absolute bottom-8 left-8 flex flex-col gap-0.5 opacity-20 hover:opacity-100 transition-opacity pointer-events-none">
-          <span className="text-[10px] font-bold tracking-[0.3em] uppercase">ArloCraft {game.currentVersionId}</span>
+          <span className="text-[10px] font-bold tracking-[0.3em] uppercase">ArloCraft {game.currentVersionId} · {BUILD_LABEL}</span>
           <span className="text-[8px] font-medium opacity-60 uppercase tracking-widest">© 2026 Anton Retro • All Rights Reserved</span>
       </div>
 

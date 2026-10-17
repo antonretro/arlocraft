@@ -73,6 +73,38 @@ const TOOL_MAP = {
 };
 const GRASS_PREVIEW_TINT = 0x79c05a;
 
+// --- Viewmodel animation tuning ---
+const REST_POS = Object.freeze({ x: 0.65, y: -0.55, z: -0.75 });
+const REST_ROT = Object.freeze({ x: 0.1, y: -0.4, z: 0 });
+const WALK_SPEED = 6.2; // Physics.walkSpeed; bob reaches full strength here
+const SWAY_GAIN = 0.045; // offset per rad/s of look velocity
+const SWAY_LIMIT = 0.28;
+const SWAY_STIFFNESS = 140;
+const SWAY_DAMPING = 15;
+const EQUIP_DURATION = 0.3;
+const SWING_DURATIONS = Object.freeze({
+  SLASH: 0.34,
+  CHOP: 0.36,
+  RECOIL: 0.32,
+  SHAKE: 0.28,
+  PUNCH: 0.28,
+  PLACE: 0.22,
+});
+
+/** Frame-rate independent exponential smoothing. */
+function damp(current, target, lambda, dt) {
+  return current + (target - current) * (1 - Math.exp(-lambda * dt));
+}
+
+function wrapAngle(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function easeOutCubic(t) {
+  const inv = 1 - t;
+  return 1 - inv * inv * inv;
+}
+
 function disposeMaterialResources(material) {
   const materials = Array.isArray(material) ? material : [material];
   for (const entry of materials) {
@@ -88,8 +120,8 @@ function disposeMaterialResources(material) {
 export class PlayerHand {
   constructor() {
     this.group = new THREE.Group();
-    this.group.position.set(0.65, -0.55, -0.75); // Natural FPS position
-    this.group.rotation.set(0.1, -0.4, 0);
+    this.group.position.set(REST_POS.x, REST_POS.y, REST_POS.z); // Natural FPS position
+    this.group.rotation.set(REST_ROT.x, REST_ROT.y, REST_ROT.z);
 
     // Arm Mesh (Textured with Player Skin) - Proportions: 4x12x4 (Minecraft ratio)
     this.armGeometry = new THREE.BoxGeometry(0.21, 0.63, 0.21);
@@ -109,8 +141,16 @@ export class PlayerHand {
 
     this.heldItemMesh = null;
     this.swingTime = 0;
-    this.swingType = 'CHOP';
+    this.swingDuration = SWING_DURATIONS.PUNCH;
+    this.swingType = 'PUNCH'; // Style for the held item
+    this.swingStyle = 'PUNCH'; // Style of the swing currently playing
     this.bobCycle = 0;
+    this.bobAmount = 0;
+    this.elapsed = 0;
+    this.equipTime = 0;
+    this.lastYaw = 0;
+    this.lastPitch = 0;
+    this.hasLookSample = false;
     this.toolById = new Map(TOOLS.map((tool) => [tool.id, tool]));
     this.canvas = document.createElement('canvas'); // For pixel reading
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
@@ -118,8 +158,8 @@ export class PlayerHand {
     this.textureCache = new Map();
     this.pendingTextureLoads = new Map();
     this.geometryCache = new Map(); // Cache for merged voxel geometries
-    this.lastParentRot = new THREE.Euler();
-    this.swayOffset = new THREE.Vector2();
+    this.swayOffset = new THREE.Vector2(); // x: yaw lag, y: pitch lag
+    this.swayVelocity = new THREE.Vector2();
     this.disposed = false;
   }
 
@@ -427,7 +467,13 @@ export class PlayerHand {
     }
     this.heldItemMesh = null;
 
-    if (!itemId) return;
+    // Re-equip dip: the new item rises into view from below.
+    this.equipTime = EQUIP_DURATION;
+
+    if (!itemId) {
+      this.swingType = 'PUNCH';
+      return;
+    }
 
     const normalizedId = normalizeBlockVariantId(itemId);
     const tool = this.toolById.get(normalizedId);
@@ -576,107 +622,204 @@ export class PlayerHand {
     this.heldItemMesh = mesh;
   }
 
-  swing() {
+  /**
+   * Trigger an action swing.
+   * @param {'attack'|'place'} [kind='attack'] - 'attack' (mine/hit) uses the
+   *   held item's swing style; 'place' is a short forward "use" jab.
+   */
+  swing(kind = 'attack') {
+    if (kind === 'place') {
+      // Discrete click: always restart so rapid placing reads clearly.
+      this.swingStyle = 'PLACE';
+      this.swingDuration = SWING_DURATIONS.PLACE;
+      this.swingTime = this.swingDuration;
+      return;
+    }
+    // Held mining calls this every frame; let the current arc finish so the
+    // animation loops cleanly instead of restarting mid-stroke.
     if (this.swingTime > 0) return;
-    this.swingTime = 0.35; // Duration of one swing
+    this.swingStyle = this.swingType;
+    this.swingDuration =
+      SWING_DURATIONS[this.swingType] ?? SWING_DURATIONS.SHAKE;
+    this.swingTime = this.swingDuration;
   }
 
-  update(delta, bobCycle, isMoving) {
-    // Item Sway (Procedural weight/inertia)
-    const parent = this.group.parent;
-    if (parent) {
-      const rotDeltaX = parent.rotation.x - this.lastParentRot.x;
-      const rotDeltaY = parent.rotation.y - this.lastParentRot.y;
-
-      // Limit deltas to avoid massive snaps on wrap-around
-      const safeDX = Math.abs(rotDeltaX) > 1 ? 0 : rotDeltaX;
-      const safeDY = Math.abs(rotDeltaY) > 1 ? 0 : rotDeltaY;
-
-      this.swayOffset.x = THREE.MathUtils.lerp(
-        this.swayOffset.x,
-        safeDY * 0.45,
-        delta * 10
-      );
-      this.swayOffset.y = THREE.MathUtils.lerp(
-        this.swayOffset.y,
-        safeDX * 0.45,
-        delta * 10
-      );
-
-      this.lastParentRot.copy(parent.rotation);
+  /** Find the camera driving the viewmodel (group -> viewmodelGroup -> camera). */
+  resolveLookSource() {
+    let node = this.group.parent;
+    while (node) {
+      if (node.isCamera) return node;
+      node = node.parent;
     }
+    return null;
+  }
 
-    // Apply animations
-    if (isMoving) {
-      this.bobCycle = bobCycle;
-      const bobX = Math.sin(this.bobCycle * 0.5) * 0.014 + this.swayOffset.x;
-      const bobY =
-        Math.abs(Math.cos(this.bobCycle)) * 0.018 + this.swayOffset.y;
-      this.group.position.x = 0.65 + bobX;
-      this.group.position.y = -0.62 + bobY;
-    } else {
-      // Idle breathing
-      const breathe = Math.sin(performance.now() * 0.002) * 0.015;
-      this.group.position.y = THREE.MathUtils.lerp(
-        this.group.position.y,
-        -0.55 + breathe + this.swayOffset.y,
-        delta * 4
-      );
-      this.group.position.x = THREE.MathUtils.lerp(
-        this.group.position.x,
-        0.65 + this.swayOffset.x,
-        delta * 4
-      );
-    }
+  /**
+   * Per-frame viewmodel animation. All motion is composed as offsets from a
+   * fixed rest pose each frame, so effects layer without fighting each other.
+   * Allocation-free and frame-rate independent.
+   * @param {number} delta - seconds since last frame
+   * @param {number} bobCycle - shared walk phase (Player.bobCycle)
+   * @param {boolean} isMoving - legacy flag; used when moveSpeed is omitted
+   * @param {number} [moveSpeed] - horizontal speed in blocks/s
+   * @param {boolean} [grounded=true] - whether the player is on the ground
+   */
+  update(delta, bobCycle, isMoving, moveSpeed, grounded = true) {
+    // Clamp so a hitch (tab switch, GC) can't explode the springs.
+    const dt = Math.min(Math.max(delta || 0, 0), 0.05);
+    if (dt <= 0) return;
+    this.elapsed += dt;
+    this.bobCycle = bobCycle;
 
-    // Action Swing Animation
-    if (this.swingTime > 0) {
-      this.swingTime -= delta;
-      const t = 1 - this.swingTime / 0.35; // 0 to 1
-      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    // --- Walk bob amount, smoothed and tied to horizontal speed ---
+    const speed = Number.isFinite(moveSpeed)
+      ? moveSpeed
+      : isMoving
+        ? WALK_SPEED
+        : 0;
+    const targetBob = grounded ? Math.min(speed / WALK_SPEED, 1.35) : 0;
+    this.bobAmount = damp(this.bobAmount, targetBob, 8, dt);
 
-      if (this.swingType === 'SLASH') {
-        const angle = eased * Math.PI * 1.2 - Math.PI / 2;
-        this.group.rotation.y = -0.4 + Math.sin(angle) * 1.5;
-        this.group.rotation.z = Math.cos(angle) * 0.8;
-        this.group.position.x = 0.65 + Math.sin(angle) * 0.4;
-      } else if (this.swingType === 'CHOP') {
-        const chop = Math.sin(t * Math.PI);
-        this.group.rotation.x = 0.1 - chop * 1.6;
-        this.group.position.z = -0.75 - chop * 0.4;
-      } else if (this.swingType === 'RECOIL') {
-        const recoil = Math.sin(t * Math.PI * 0.5); // Peak at the very start
-        const snap = Math.pow(1 - t, 4); // Quick recovery
-        this.group.position.z = -0.75 + snap * 0.25;
-        this.group.rotation.x = 0.1 - snap * 0.6;
-      } else {
-        // SHAKE (Blocks)
-        const shake = Math.sin(t * Math.PI * 2) * 0.15;
-        this.group.position.x = 0.65 + shake;
-        this.group.rotation.z = shake * 0.5;
+    // --- Look sway: spring toward a lag offset driven by look angular velocity ---
+    const cam = this.resolveLookSource();
+    let targetYaw = 0;
+    let targetPitch = 0;
+    if (cam) {
+      const yaw = cam.rotation.y;
+      const pitch = cam.rotation.x;
+      if (this.hasLookSample) {
+        const dYaw = wrapAngle(yaw - this.lastYaw);
+        const dPitch = pitch - this.lastPitch;
+        // Ignore teleports / respawn snaps.
+        if (Math.abs(dYaw) < 0.6 && Math.abs(dPitch) < 0.6) {
+          targetYaw = THREE.MathUtils.clamp(
+            (dYaw / dt) * SWAY_GAIN,
+            -SWAY_LIMIT,
+            SWAY_LIMIT
+          );
+          targetPitch = THREE.MathUtils.clamp(
+            (dPitch / dt) * SWAY_GAIN,
+            -SWAY_LIMIT,
+            SWAY_LIMIT
+          );
+        }
       }
-    } else {
-      this.group.position.z = THREE.MathUtils.lerp(
-        this.group.position.z,
-        -0.75,
-        delta * 6
-      );
-      this.group.rotation.x = THREE.MathUtils.lerp(
-        this.group.rotation.x,
-        0.1,
-        delta * 6
-      );
-      this.group.rotation.y = THREE.MathUtils.lerp(
-        this.group.rotation.y,
-        -0.4,
-        delta * 6
-      );
-      this.group.rotation.z = THREE.MathUtils.lerp(
-        this.group.rotation.z,
-        0,
-        delta * 6
-      );
+      this.lastYaw = yaw;
+      this.lastPitch = pitch;
+      this.hasLookSample = true;
     }
+    // Semi-implicit damped spring (slight overshoot = sense of weight).
+    const sv = this.swayVelocity;
+    const so = this.swayOffset;
+    sv.x += (targetYaw - so.x) * SWAY_STIFFNESS * dt;
+    sv.y += (targetPitch - so.y) * SWAY_STIFFNESS * dt;
+    const swayDamp = Math.exp(-SWAY_DAMPING * dt);
+    sv.x *= swayDamp;
+    sv.y *= swayDamp;
+    so.x += sv.x * dt;
+    so.y += sv.y * dt;
+
+    // --- Equip dip: snap down on slot change, ease-out back up ---
+    let equipDip = 0;
+    if (this.equipTime > 0) {
+      this.equipTime = Math.max(0, this.equipTime - dt);
+      equipDip = 1 - easeOutCubic(1 - this.equipTime / EQUIP_DURATION);
+    }
+
+    // --- Rest pose ---
+    let px = REST_POS.x;
+    let py = REST_POS.y;
+    let pz = REST_POS.z;
+    let rx = REST_ROT.x;
+    let ry = REST_ROT.y;
+    let rz = REST_ROT.z;
+
+    // Walk bob: one lateral sway per stride, a dip on each footfall, a touch of roll.
+    const b = this.bobAmount;
+    const stride = Math.sin(bobCycle);
+    const step = Math.abs(Math.cos(bobCycle));
+    px += stride * 0.022 * b;
+    py += (step - 0.5) * 0.026 * b;
+    rz += stride * 0.035 * b;
+    rx += (step - 0.5) * 0.03 * b;
+
+    // Idle breathe: fades out as walk bob takes over.
+    const idle = Math.max(0, 1 - b);
+    const breathe = Math.sin(this.elapsed * 1.7);
+    py += breathe * 0.007 * idle;
+    rx += breathe * 0.012 * idle;
+    px += Math.sin(this.elapsed * 0.9) * 0.003 * idle;
+
+    // Look sway: hand trails behind the view (yaw+ = turning left,
+    // pitch+ = looking up), so offsets oppose the look direction.
+    px -= so.x * 0.35;
+    py -= so.y * 0.35;
+    ry -= so.x * 0.5;
+    rx -= so.y * 0.4;
+    rz += so.x * 0.3;
+
+    // Equip dip.
+    py -= equipDip * 0.5;
+    rx -= equipDip * 0.6;
+
+    // --- Action swing: fast strike, eased recovery ---
+    if (this.swingTime > 0) {
+      this.swingTime = Math.max(0, this.swingTime - dt);
+      const p = 1 - this.swingTime / this.swingDuration; // 0 -> 1
+      // sin(sqrt(p)*PI) snaps to its peak in the first quarter, then eases out.
+      const arc = Math.sin(Math.sqrt(p) * Math.PI);
+      const arc2 = Math.sin(Math.sqrt(p) * Math.PI * 2);
+      const out = Math.sin(p * Math.PI);
+
+      switch (this.swingStyle) {
+        case 'SLASH':
+          // Diagonal sweep from upper-right across the screen.
+          px -= arc * 0.42;
+          py += arc2 * 0.12;
+          pz -= out * 0.18;
+          ry += arc * 1.05;
+          rz += arc * 0.7;
+          rx -= arc * 0.35;
+          break;
+        case 'CHOP':
+          // Overhead strike that bites forward and down.
+          rx -= arc * 1.25;
+          py += arc2 * 0.1;
+          pz -= arc * 0.32;
+          px -= arc * 0.12;
+          ry += arc * 0.25;
+          break;
+        case 'RECOIL': {
+          // Instant kick back, slow settle.
+          const inv = 1 - p;
+          const kick = inv * inv * inv;
+          pz += kick * 0.22;
+          py += kick * 0.04;
+          rx += kick * 0.55;
+          break;
+        }
+        case 'PLACE':
+          // Short forward "use" jab with a slight inward tuck.
+          pz -= arc * 0.22;
+          py += arc * 0.05;
+          px -= arc * 0.08;
+          rx -= arc * 0.35;
+          ry += arc * 0.15;
+          break;
+        default:
+          // PUNCH / SHAKE: Minecraft-style hook toward the crosshair.
+          px -= arc * 0.3;
+          py += arc2 * 0.16;
+          pz -= out * 0.24;
+          ry += arc * 0.6;
+          rz += arc2 * 0.25;
+          rx -= arc * 0.55;
+          break;
+      }
+    }
+
+    this.group.position.set(px, py, pz);
+    this.group.rotation.set(rx, ry, rz);
   }
 
   updateArmSkin(armMaterials) {
