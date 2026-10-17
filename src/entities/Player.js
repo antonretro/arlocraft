@@ -61,27 +61,17 @@ export class Player {
         this.morphModel = model;
         this.mesh.add(model.group);
 
-        // Try to load texture
-        const mobConfig = this.game.entities.game.world.state.blockData
-          .get('mobs')
-          ?.find((m) => m.id === morphId) || {
+        // Load the mob's texture (custom art first, resource pack fallback).
+        const mobConfig = this.game.entities.getMobConfig?.(morphId) || {
           id: morphId,
           textureKey: morphId,
         };
-        const textureUrl =
-          this.game.entities.resolveTextureUrl(mobConfig) ||
-          this.game.entities.resolveTextureUrl({
-            id: morphId,
-            textureKey: morphId,
-          });
-
-        if (textureUrl) {
-          this.game.entities
-            .loadEntityTexture(textureUrl, 'billboard')
-            .then((tex) => {
-              if (tex && this.morphModel) this.morphModel.setTexture(tex);
-            });
-        }
+        this.game.entities
+          .loadMobTexture(mobConfig)
+          .then((tex) => {
+            if (tex && this.morphModel) this.morphModel.setTexture(tex);
+          })
+          .catch(() => {});
       }
     }
   }
