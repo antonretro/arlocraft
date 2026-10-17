@@ -161,6 +161,10 @@ export class Input {
         event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA';
       if (preventCodes.has(event.code) && !isInput) event.preventDefault();
 
+      // While typing in chat no key reaches the game; the chat box handles
+      // Enter, Tab, arrows and Escape itself (Escape must not pause).
+      if (this.game.chat?.visible || event.target?.id === 'chat-input') return;
+
       if (event.code === 'Escape') {
         if (this.game.gameState.isDead) return;
         if (this.game.gameState.isInventoryOpen && !this.game.isPaused) {
@@ -233,7 +237,10 @@ export class Input {
         return;
       }
 
-      if (event.code === 'Slash' && !this.game.chat?.visible) {
+      if (
+        (event.code === 'Slash' || event.key === '/') &&
+        !this.game.chat?.visible
+      ) {
         event.preventDefault();
         window.dispatchEvent(
           new CustomEvent('chat-open', { detail: { prefill: '/' } })
@@ -276,6 +283,20 @@ export class Input {
     };
 
     this.handlers.onMouseDown = (event) => {
+      // Clicking the world after closing chat takes the cursor back.
+      const canvas = this.game?.renderer?.instance?.domElement;
+      if (
+        !this.isLocked &&
+        event.target === canvas &&
+        this.game.hasStarted &&
+        !this.game.isPaused &&
+        !this.game.gameState.isInventoryOpen &&
+        !this.game.chat?.visible &&
+        !this.game.touchControls
+      ) {
+        this.setPointerLock();
+        return;
+      }
       if (
         !this.isLocked ||
         this.game.isPaused ||

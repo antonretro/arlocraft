@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { ItemIcon } from './ItemIcon';
 import { MiniMap } from './MiniMap';
+import { ChatBox } from './ChatBox';
 
 export const HUD = () => {
   const game = getGame();
@@ -166,7 +167,7 @@ export const HUD = () => {
         </div>
       </div>
 
-      {/* Chat Interface (NEW) */}
+      {/* Chat and command helper */}
       <ChatBox game={game} />
 
       {/* Centered Crosshair */}
@@ -177,106 +178,6 @@ export const HUD = () => {
 
       {/* Modern Debug Overlay (F3) */}
       <DebugOverlay />
-    </div>
-  );
-};
-
-const ChatBox = ({ game }) => {
-  const [messages, setMessages] = useState([]);
-  const [isOpen, setIsOpen] = useState(false);
-  const [inputValue, setInputValue] = useState('');
-  const chatRef = React.useRef();
-  const inputRef = React.useRef();
-
-  useEffect(() => {
-    const handleOpen = () => {
-      setIsOpen(true);
-      game.chat.visible = true;
-      if (document.pointerLockElement) document.exitPointerLock();
-      setTimeout(() => inputRef.current?.focus(), 50);
-    };
-
-    const handleUpdate = (e) => setMessages([...e.detail]);
-
-    window.addEventListener('chat-open', handleOpen);
-    window.addEventListener('chat-updated', handleUpdate);
-
-    return () => {
-      window.removeEventListener('chat-open', handleOpen);
-      window.removeEventListener('chat-updated', handleUpdate);
-    };
-  }, [game]);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (inputValue.trim()) {
-      game.chat.sendMessage(inputValue);
-      setInputValue('');
-    }
-    setIsOpen(false);
-    game.chat.visible = false;
-    // Re-lock pointer if possible
-    if (game.hasStarted && !game.isPaused && !game.gameState.isInventoryOpen) {
-        game.input?.setPointerLock();
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      setIsOpen(false);
-      game.chat.visible = false;
-      if (game.hasStarted && !game.isPaused && !game.gameState.isInventoryOpen) {
-          game.input?.setPointerLock();
-      }
-    }
-  };
-
-  return (
-    <div className={`absolute bottom-40 left-4 md:bottom-48 md:left-8 w-full max-w-sm flex flex-col gap-2 transition-all duration-300 ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-      {/* Message List */}
-      <div className="flex flex-col gap-1 overflow-hidden h-48 justify-end">
-        <AnimatePresence initial={false}>
-          {messages.slice(-8).map((msg, i) => (
-            <motion.div
-              key={msg.id}
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className={`px-3 py-1.5 rounded text-[11px] font-medium max-w-fit shadow-lg shadow-black/20
-                ${msg.type === 'system' ? 'bg-arlo-blue/20 text-arlo-blue border border-arlo-blue/30 italic' : 
-                  msg.type === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                  'bg-black/40 text-white border border-white/5 backdrop-blur-sm'}`}
-            >
-              <span className={msg.type === 'user' ? 'text-arlo-blue/80 mr-2 font-bold' : ''}>
-                {msg.type === 'user' ? `<${msg.sender}>` : ''}
-              </span>
-              <span className="leading-relaxed tracking-wide">{msg.text}</span>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-
-      {/* Input Field */}
-      {isOpen && (
-        <motion.form
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          onSubmit={handleSubmit}
-          className="flex gap-2"
-        >
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1 bg-black/60 backdrop-blur-2xl border border-arlo-blue/50 rounded-lg px-4 py-3 text-xs text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-arlo-blue/30 shadow-2xl"
-            placeholder="Say something, or type / for commands"
-          />
-          <button type="submit" className="hidden">Send</button>
-        </motion.form>
-      )}
     </div>
   );
 };

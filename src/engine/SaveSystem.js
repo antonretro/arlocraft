@@ -71,6 +71,8 @@ export class SaveSystem {
       offhand: g.gameState.offhand,
       armor: g.gameState.armor,
       craftingGrid: g.gameState.craftingGrid,
+      // Build Bots are the only mobs that are saved; others respawn naturally.
+      companions: g.entities?.serializeCompanions?.() ?? [],
     };
   }
 
@@ -87,6 +89,7 @@ export class SaveSystem {
     g.particles?.clear();
     g.world.loadFromData(data.world);
     g.resetEntities();
+    g.entities?.restoreCompanions?.(data.companions);
 
     const seedInput = document.getElementById('seed-input');
     if (seedInput) seedInput.value = g.world.seedString;

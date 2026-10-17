@@ -1173,7 +1173,122 @@ const CHICKEN = {
   ],
 };
 
+/**
+ * Lays each part's texture net out on its own patch of a texWidth-wide
+ * sheet (simple shelf packing) so a painted sheet can give every part a
+ * flat colour. Used by models that are coloured in code, not from a PNG.
+ */
+function packPartUVs(parts, texWidth) {
+  let x = 0;
+  let y = 0;
+  let shelf = 0;
+  for (const part of parts) {
+    const [, , , w, h, d] = part.box;
+    const netW = Math.ceil(2 * (w + d));
+    const netH = Math.ceil(h + d);
+    if (x + netW > texWidth) {
+      x = 0;
+      y += shelf;
+      shelf = 0;
+    }
+    part.uv = [x, y];
+    x += netW;
+    shelf = Math.max(shelf, netH);
+  }
+  return parts;
+}
+
+// The Build Bot companion: a stubby robot with a visor, an antenna and
+// claw hands. Colours are painted onto a generated sheet (see BuildBot).
+const BUILD_BOT = {
+  texWidth: 128,
+  texHeight: 128,
+  swing: 0.7,
+  parts: packPartUVs(
+    [
+      {
+        name: 'legR',
+        box: [-1.5, 0, -1.5, 3, 5, 3],
+        pivot: [-2, 19, 0],
+        anim: 'legA',
+        color: '#4b5058',
+      },
+      {
+        name: 'legL',
+        box: [-1.5, 0, -1.5, 3, 5, 3],
+        pivot: [2, 19, 0],
+        anim: 'legB',
+        color: '#4b5058',
+      },
+      {
+        name: 'footR',
+        box: [-2, 4, -2.5, 4, 1, 4],
+        pivot: [-2, 19, 0],
+        anim: 'legA',
+        color: '#2c3036',
+      },
+      {
+        name: 'footL',
+        box: [-2, 4, -2.5, 4, 1, 4],
+        pivot: [2, 19, 0],
+        anim: 'legB',
+        color: '#2c3036',
+      },
+      { name: 'body', box: [-4, 11, -3, 8, 8, 6], color: '#e0a72a' },
+      { name: 'belly', box: [-2.5, 13, -3.4, 5, 4, 0.5], color: '#5fae3c' },
+      { name: 'backpack', box: [-3, 12, 3, 6, 6, 2], color: '#7a7f88' },
+      {
+        name: 'armR',
+        box: [-1, 0, -1, 2, 6, 2],
+        pivot: [-5, 12, 0],
+        anim: 'armA',
+        color: '#9aa1ab',
+      },
+      {
+        name: 'armL',
+        box: [-1, 0, -1, 2, 6, 2],
+        pivot: [5, 12, 0],
+        anim: 'armB',
+        color: '#9aa1ab',
+      },
+      {
+        name: 'clawR',
+        box: [-1.5, 6, -1.5, 3, 2, 3],
+        pivot: [-5, 12, 0],
+        anim: 'armA',
+        color: '#2c3036',
+      },
+      {
+        name: 'clawL',
+        box: [-1.5, 6, -1.5, 3, 2, 3],
+        pivot: [5, 12, 0],
+        anim: 'armB',
+        color: '#2c3036',
+      },
+      { name: 'neck', box: [-1.5, 10, -1.5, 3, 1, 3], color: '#2c3036' },
+      { name: 'head', box: [-4.5, 3, -4, 9, 7, 8], color: '#c9ced6' },
+      { name: 'visor', box: [-3.5, 5, -4.4, 7, 3, 0.5], color: '#16181c' },
+      {
+        name: 'eyeR',
+        box: [-2.75, 5.75, -4.6, 1.5, 1.5, 0.3],
+        color: '#ffe066',
+      },
+      {
+        name: 'eyeL',
+        box: [1.25, 5.75, -4.6, 1.5, 1.5, 0.3],
+        color: '#ffe066',
+      },
+      { name: 'earR', box: [-5.5, 5, -1, 1, 3, 2], color: '#e0a72a' },
+      { name: 'earL', box: [4.5, 5, -1, 1, 3, 2], color: '#e0a72a' },
+      { name: 'antenna', box: [-0.5, 0.5, -0.5, 1, 2.5, 1], color: '#2c3036' },
+      { name: 'antennaTip', box: [-1, -1, -1, 2, 1.5, 2], color: '#e8312f' },
+    ],
+    128
+  ),
+};
+
 export const MOB_MODEL_SPECS = {
+  build_bot: BUILD_BOT,
   cow: COW,
   sheep: SHEEP,
   chicken: CHICKEN,

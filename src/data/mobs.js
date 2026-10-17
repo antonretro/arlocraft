@@ -462,4 +462,17 @@ export const MOBS = [
     textureKey: 'strider/strider',
     model: 'strider',
   },
+  {
+    // Companion robot summoned with /summon build_bot. It never spawns
+    // naturally (no biomes, no XP) and cannot be hurt.
+    id: 'build_bot',
+    name: 'Build Bot',
+    hp: 40,
+    speed: 4,
+    xp: 0,
+    friendly: true,
+    companion: true,
+    chat: ['Beep boop!'],
+    model: 'build_bot',
+  },
 ];
