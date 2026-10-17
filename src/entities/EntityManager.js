@@ -6,6 +6,10 @@ import { HumanoidModel } from './models/HumanoidModel.js';
 import { Snowball } from './throwables/Snowball.js';
 import { Egg } from './throwables/Egg.js';
 import { EnderPearl } from './throwables/EnderPearl.js';
+import { BuildBot } from './buildbot/BuildBot.js';
+import { parseAddress, parseIntent } from './buildbot/BuildBotBrain.js';
+
+export const MAX_BUILD_BOTS = 3;
 
 const base = import.meta.env.BASE_URL || '/';
 const RESOURCE_PACK_URL =
@@ -128,6 +132,9 @@ export class EntityManager {
     this.remotePlayers = new Map(); // PeerID -> {group, parts}
     this.projectiles = [];
     this.failedTextureUrls = new Set();
+    // Blocks a Build Bot has reserved, so several bots split the work.
+    this.botClaims = new Set();
+    this.pendingCompanions = null;
   }
 
   // --- Remote Players (Multiplayer) ---
@@ -200,14 +207,15 @@ export class EntityManager {
     }
   }
 
-  spawn(typeId, x, y, z) {
-    if (this.entities.length >= this.maxEntities) return null;
+  spawn(typeId, x, y, z, saved = null) {
     const config = resolveMobConfig(typeId);
     if (!config) {
       console.warn(`[EntityManager] Unknown mob id: ${typeId}`);
       return null;
     }
     if (![x, y, z].every(Number.isFinite)) return null;
+    if (config.companion) return this.spawnBuildBot(config, x, y, z, saved);
+    if (this.entities.length >= this.maxEntities) return null;
 
     const entity = new MobEntity(this.game, config, x, y, z);
 
@@ -242,6 +250,95 @@ export class EntityManager {
     }
     this.game.renderer.scene.add(entity.mesh);
     return entity;
+  }
+
+  getBuildBots() {
+    return this.entities.filter((e) => e.isCompanion && !e.dead);
+  }
+
+  /** Build Bots ignore the mob cap but are limited to MAX_BUILD_BOTS. */
+  spawnBuildBot(config, x, y, z, saved = null) {
+    const bots = this.getBuildBots();
+    if (bots.length >= MAX_BUILD_BOTS) return null;
+    const used = new Set(bots.map((b) => b.botNumber));
+    let number = saved?.number;
+    if (!number || used.has(number)) {
+      number = 1;
+      while (used.has(number)) number++;
+    }
+    const bot = new BuildBot(this.game, config, x, y, z, { ...saved, number });
+    this.entities.push(bot);
+    this.game.renderer.scene.add(bot.mesh);
+    return bot;
+  }
+
+  /**
+   * Chat typed by the local player. Messages addressed to a Build Bot
+   * ("hey build bot mine trees") go to the nearest bot, or to all of them
+   * for "build bots …". Returns true when a bot took the message.
+   */
+  handleChatMessage(text) {
+    const address = parseAddress(text);
+    if (!address) return false;
+    const bots = this.getBuildBots();
+    if (bots.length === 0) {
+      if (address.command.length > 0 || /build/i.test(text)) {
+        this.game.chat?.addMessage(
+          'SYSTEM',
+          'No Build Bot is here. Summon one with /summon build_bot',
+          'system'
+        );
+      }
+      return false;
+    }
+    const intent = parseIntent(address.command);
+    let targets = bots;
+    if (!address.plural) {
+      const p = this.game.getPlayerPosition();
+      targets = [
+        bots.reduce((best, b) =>
+          b.mesh.position.distanceToSquared(p) <
+          best.mesh.position.distanceToSquared(p)
+            ? b
+            : best
+        ),
+      ];
+    }
+    for (const bot of targets) bot.handleIntent(intent);
+    return true;
+  }
+
+  serializeCompanions() {
+    return this.getBuildBots().map((b) => b.serialize());
+  }
+
+  /** Saved bots come back next to the player once the world around is loaded. */
+  restoreCompanions(list) {
+    this.pendingCompanions = Array.isArray(list) && list.length ? list : null;
+  }
+
+  spawnPendingCompanions() {
+    const list = this.pendingCompanions;
+    const world = this.game.world;
+    const p = this.game.getPlayerPosition();
+    const key = world.getChunkKey(
+      world.getChunkCoord(p.x),
+      world.getChunkCoord(p.y),
+      world.getChunkCoord(p.z)
+    );
+    if (!world.chunks?.has(key)) return;
+    this.pendingCompanions = null;
+    list.slice(0, MAX_BUILD_BOTS).forEach((saved, i) => {
+      if (saved?.type !== 'build_bot') return;
+      // Saved spot if it is close, else just behind the player.
+      const near =
+        Number.isFinite(saved.x) &&
+        Math.hypot(saved.x - p.x, saved.z - p.z) < 24;
+      const x = near ? saved.x : p.x + 1.5 + i;
+      const y = near ? saved.y : p.y;
+      const z = near ? saved.z : p.z + 1.5;
+      this.spawn('build_bot', x, y, z, saved);
+    });
   }
 
   getMobConfig(typeId) {
@@ -558,8 +655,16 @@ export class EntityManager {
     );
     frustum.setFromProjectionMatrix(projScreenMatrix);
 
+    if (this.pendingCompanions) this.spawnPendingCompanions();
+
     this.entities.forEach((entity) => {
       const pos = entity.mesh.position;
+
+      // Companions never despawn and keep working off-screen.
+      if (entity.persistent && !entity.dead) {
+        entity.update(delta);
+        return;
+      }
 
       // 1. Distance Despawn
       const farDistanceSq = pos.distanceToSquared(playerPos);
@@ -691,6 +796,8 @@ export class EntityManager {
   }
 
   reset() {
+    this.botClaims.clear();
+    this.pendingCompanions = null;
     for (const entity of this.entities) {
       if (entity.dispose) entity.dispose();
       this.game.renderer.scene.remove(entity.mesh);

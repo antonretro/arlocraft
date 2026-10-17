@@ -218,3 +218,87 @@
   image-rendering: pixelated;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
 }
+
+/* ── Chat and command helper ─────────────────────────────────────────── */
+.chat-msg {
+  max-width: 100%;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  background: rgba(22, 24, 28, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+  overflow-wrap: anywhere;
+}
+.chat-msg-system { color: #ffe9a3; }
+.chat-msg-error {
+  color: #ff8a80;
+  border-color: rgba(232, 49, 47, 0.35);
+  background: rgba(40, 16, 18, 0.78);
+}
+.chat-msg-bot {
+  border-color: rgba(95, 174, 60, 0.4);
+  box-shadow: inset 3px 0 0 #5fae3c;
+}
+.chat-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; }
+
+.chat-input {
+  width: 100%;
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-size: 14px;
+  color: #fff;
+  outline: none;
+  background: rgba(10, 11, 13, 0.78);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.35), 0 10px 26px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.chat-input:focus { border-color: #ffe066; }
+.chat-input::placeholder { color: rgba(255, 255, 255, 0.28); font-family: var(--font-outfit); }
+
+.chat-helper {
+  overflow: hidden;
+  border-radius: 12px;
+  color: #fff;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 40%),
+    rgba(22, 24, 28, 0.94);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.35),
+    0 14px 30px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(14px);
+}
+.chat-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 12px;
+  text-align: left;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+.chat-suggestion:hover { background: rgba(255, 255, 255, 0.05); }
+.chat-suggestion.is-selected {
+  background: rgba(95, 174, 60, 0.18);
+  border-left-color: #5fae3c;
+}
+.chat-kbd {
+  display: inline-block;
+  padding: 0 4px;
+  margin-right: 3px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}

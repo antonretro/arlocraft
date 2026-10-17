@@ -359,6 +359,9 @@ export class Game {
     // The death screen owns the cursor until the player respawns.
     if (this.gameState.isDead) return;
 
+    // Chat releases the cursor so you can type; that is not a pause.
+    if (this.chat?.visible) return;
+
     if (this.isPaused) {
       this.showPause(true);
       this.helpPanel.setState('paused');
