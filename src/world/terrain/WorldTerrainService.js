@@ -1,7 +1,8 @@
-import { BIOME_BY_ID, biomeMatches } from '../../data/biomes.js';
+import { BIOME_BY_ID } from '../../data/biomes.js';
 import { Noise } from '../Noise.js';
 import { NoiseRouter } from '../NoiseRouter.js';
 import { getTerrainSampler } from '../../voxel/gen/terrain.js';
+import { getStructurePlanner } from '../structures/StructurePlanner.js';
 import { Colormaps } from '../../voxel/render/Colormaps.js';
 import { ResourcePackManager } from '../ResourcePackManager.js';
 import { generateSettlementName } from '../naming/SettlementNameGenerator.js';
@@ -48,6 +49,8 @@ export class WorldTerrainService {
     this.noise = new Noise(this.seedString);
     // Terrain v2: same sampler the chunk generator uses.
     this.sampler = getTerrainSampler(this.seedString);
+    // Villages and wilderness structures (shared with the chunk worker).
+    this.structures = getStructurePlanner(this.seedString);
     this.router = new NoiseRouter(this.seedString);
     this.terrainHeightCache.clear();
     this.biomeCache.clear();
@@ -549,47 +552,23 @@ export class WorldTerrainService {
           : 'obsidian';
   }
 
-  getStructureChunkScore(cx, cz) {
-    return this.hash2D(cx * 47 + 113, cz * 47 - 271);
-  }
-
-  isStructureChunkAnchor(cx, cz, radius = 2) {
-    const score = this.getStructureChunkScore(cx, cz);
-    for (let dx = -radius; dx <= radius; dx++) {
-      for (let dz = -radius; dz <= radius; dz++) {
-        if (dx === 0 && dz === 0) continue;
-        if (this.getStructureChunkScore(cx + dx, cz + dz) >= score)
-          return false;
-      }
-    }
-    return true;
-  }
-
+  /** True when chunk column (cx, cz) anchors a village. */
   shouldPlaceVillageChunk(cx, cz) {
-    if (Math.abs(cx) <= 1 && Math.abs(cz) <= 1) return false;
-
-    // Check for road affinity
-    const wx =
-      cx * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
-    const wz =
-      cz * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
-    if (this.hash2D(cx * 31 + 71, cz * 31 - 19) < 0.988) return false;
-
-    const biome = this.getBiomeAt(wx, wz);
-    return ['plains', 'forest', 'meadow', 'desert'].some((id) =>
-      biomeMatches(biome, id)
-    );
+    return Boolean(this.structures.villageAnchoredAt(cx, cz));
   }
 
   getSettlementNameAt(x, z) {
     return generateSettlementName(this.seed, Math.round(x), Math.round(z));
   }
 
+  /** True when chunk column (cx, cz) anchors a wilderness structure. */
   shouldPlaceStructureChunk(cx, cz) {
-    if (Math.abs(cx) <= 2 && Math.abs(cz) <= 2) return false;
-    if (this.shouldPlaceVillageChunk(cx, cz)) return false;
-    if (this.getStructureChunkScore(cx, cz) < 0.88) return false;
-    // Radius 5 = ~160 blocks minimum between structures
-    return this.isStructureChunkAnchor(cx, cz, 5);
+    return Boolean(
+      this.structures.randomStructureAt(
+        cx,
+        cz,
+        Boolean(this.world.corruptionEnabled)
+      )
+    );
   }
 }

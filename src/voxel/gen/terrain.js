@@ -18,7 +18,10 @@ export const MAX_Y = 160;
 
 const SPAWN_FLAT_RADIUS = 20;
 const SPAWN_BLEND_RADIUS = 34;
-const RIVER_WIDTH = 0.04;
+// River shape in units of the (warped) river noise: the water channel sits
+// inside a wider valley whose floor slopes gently up to the surrounding land.
+const RIVER_CHANNEL = 0.02;
+const RIVER_VALLEY = 0.13;
 
 function clamp(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
@@ -64,35 +67,68 @@ export class TerrainSampler {
   sampleShape(x, z) {
     const c = fbm(this.continent, x / 1100, z / 1100, 3) + 0.12;
     const e = fbm(this.erosion, x / 700, z / 700, 2);
-    const pv = 1 - Math.abs(fbm(this.peaks, x / 320, z / 320, 3));
-    const hills = fbm(this.hills, x / 70, z / 70, 3);
-    const riverRaw = Math.abs(fbm(this.river, x / 780, z / 780, 2));
-    return { c, e, pv, hills, riverRaw };
+    // Ridged noise for mountain ranges plus a craggy detail layer that only
+    // shows near the summits (foothills stay smooth, like eroded rock).
+    const p = fbm(this.peaks, x / 340, z / 340, 2);
+    const detail = this.peaks.simplex2D(x / 72 + 31.7, z / 72 - 18.3);
+    const spur = this.peaks.simplex2D(x / 150 - 71.3, z / 150 + 12.9);
+    const hills = fbm(this.hills, x / 120, z / 120, 2);
+    const hillsFine = this.hills.simplex2D(x / 38 + 9.1, z / 38 - 4.7);
+    // Domain-warped river noise makes rivers meander instead of following
+    // the smooth contour lines of a single noise field.
+    const wx = x + this.river.simplex2D(x / 260 + 50.3, z / 260) * 70;
+    const wz = z + this.river.simplex2D(x / 260, z / 260 - 70.1) * 70;
+    const riverRaw = Math.abs(fbm(this.river, wx / 820, wz / 820, 2));
+    return { c, e, p, detail, spur, hills, hillsFine, riverRaw };
   }
 
-  heightFromShape({ c, e, pv, hills, riverRaw }) {
-    // Base elevation from continentalness.
+  heightFromShape(shape) {
+    const { c, e, p, detail, hills, hillsFine, riverRaw } = shape;
+    // Base elevation from continentalness, with a gentle shelf at the coast
+    // so shores become wide beaches instead of steps.
     let base;
     if (c < -0.45) base = lerp(-34, -18, (c + 1) / 0.55);
-    else if (c < -0.15) base = lerp(-18, -4, (c + 0.45) / 0.3);
-    else if (c < 0.02) base = lerp(-4, 2, (c + 0.15) / 0.17);
-    else base = lerp(2, 20, smoothstep((c - 0.02) / 0.6));
+    else if (c < -0.16) base = lerp(-18, -5, (c + 0.45) / 0.29);
+    else if (c < 0.04) base = lerp(-5, 2, smoothstep((c + 0.16) / 0.2));
+    else base = 2 + 18 * smoothstep((c - 0.04) / 0.6);
 
-    const inland = smoothstep((c - 0.02) / 0.35);
-    // Low erosion inland grows mountain ranges along the ridges.
-    const rugged = smoothstep((0.15 - e) / 0.65) * inland;
-    const ridge = Math.pow(clamp(pv, 0, 1), 2.2);
-    const mountains = ridge * 105 * rugged;
-    // Rolling hills, flatter where erosion is high.
-    const hillAmp = lerp(9, 3, smoothstep((e + 0.6) / 1.2)) * inland + 1.5;
-    let h = SEA_LEVEL + base + mountains + hills * hillAmp;
+    const inland = smoothstep((c - 0.03) / 0.3);
+    // Low erosion inland grows mountain ranges along the ridges. The
+    // profile is concave (gentle foothills, steep summits), and ridged
+    // detail noise carves spurs and gullies into the upper slopes so peaks
+    // read as eroded rock rather than smooth domes.
+    const rugged = smoothstep((0.12 - e) / 0.6) * inland;
+    let mountains = 0;
+    if (rugged > 0) {
+      const base = smoothstep((1 - Math.abs(p) - 0.25) / 0.75);
+      const spurs = 1 - Math.abs(shape.spur);
+      const crags = 1 - Math.abs(detail);
+      mountains =
+        rugged *
+        (Math.pow(base, 2.2) * 80 +
+          base * base * spurs * spurs * 26 +
+          Math.pow(base, 3) * crags * 18);
+    }
+    // Rolling hills; high erosion flattens them into calm plains.
+    const flat = smoothstep((e + 0.4) / 0.9);
+    const hillAmp = lerp(6.5, 2, flat) * inland + 1;
+    let h = SEA_LEVEL + base + mountains + (hills + hillsFine * 0.22) * hillAmp;
+    shape.mountains = mountains;
 
-    // Rivers carve down to just below sea level on land.
-    if (c > -0.12 && riverRaw < RIVER_WIDTH) {
-      const t = smoothstep(1 - riverRaw / RIVER_WIDTH);
-      const bed = SEA_LEVEL - 3;
-      // Mountains keep a gorge instead of being flattened completely.
-      h = lerp(h, Math.min(h, bed + mountains * 0.35), t);
+    // Rivers: a channel below sea level inside a valley that slopes up to
+    // the land around it. In mountains the same profile becomes a gorge.
+    const fade = smoothstep((c + 0.16) / 0.12);
+    if (fade > 0 && riverRaw < RIVER_VALLEY) {
+      let target;
+      if (riverRaw < RIVER_CHANNEL) {
+        target = SEA_LEVEL - 1.6 - 2.4 * (1 - riverRaw / RIVER_CHANNEL);
+      } else {
+        const t = smoothstep(
+          (riverRaw - RIVER_CHANNEL) / (RIVER_VALLEY - RIVER_CHANNEL)
+        );
+        target = lerp(SEA_LEVEL + 0.6, h, Math.pow(t, 1.3));
+      }
+      h = Math.min(h, lerp(h, target, fade));
     }
     return h;
   }
@@ -118,15 +154,24 @@ export class TerrainSampler {
     return clamp(Math.round(h), MIN_Y + 4, MAX_Y);
   }
 
-  /** River strength 0..1 at a column (1 = river centre). */
-  riverAt(x, z) {
-    const { c, riverRaw } = this.sampleShape(x, z);
-    if (c <= -0.12 || riverRaw >= RIVER_WIDTH) return 0;
-    return 1 - riverRaw / RIVER_WIDTH;
+  riverStrength(shape) {
+    if (shape.c <= -0.16 || shape.riverRaw >= RIVER_CHANNEL * 1.6) return 0;
+    return 1 - shape.riverRaw / (RIVER_CHANNEL * 1.6);
   }
 
-  climate(x, z, h) {
+  /** River strength 0..1 at a column (1 = river centre). */
+  riverAt(x, z) {
+    return this.riverStrength(this.sampleShape(x, z));
+  }
+
+  climate(x, z, h, shape = null) {
     const altitude = Math.max(0, h - SEA_LEVEL);
+    // Jitter the climate lookup a little so biome borders wander naturally
+    // instead of tracing smooth noise contours.
+    if (shape) {
+      x += shape.hillsFine * 12;
+      z += shape.detail * 12;
+    }
     return {
       // Cools with altitude so tall mountains get snow caps.
       temperature:
@@ -138,28 +183,36 @@ export class TerrainSampler {
     };
   }
 
-  /** Height, biome id and river strength for a column in one pass. */
+  /**
+   * Everything the chunk generator needs for a column in one pass:
+   * height, biome id, river strength and the raw shape fields.
+   */
   column(x, z) {
     const shape = this.sampleShape(x, z);
     const h = this.heightWithSpawn(this.heightFromShape(shape), x, z);
-    const river =
-      shape.c > -0.12 && shape.riverRaw < RIVER_WIDTH
-        ? 1 - shape.riverRaw / RIVER_WIDTH
-        : 0;
     return {
       h,
       biomeId: this.biomeId(x, z, h, shape),
-      river,
+      river: this.riverStrength(shape),
       erosion: shape.e,
+      mountains: shape.mountains,
+      shape,
     };
   }
 
   /** Biome id for a column of height `h`. */
-  biomeId(x, z, h = this.height(x, z), shape = this.sampleShape(x, z)) {
-    const { temperature: t, humidity: m, weird: w } = this.climate(x, z, h);
+  biomeId(x, z, h, shape = this.sampleShape(x, z)) {
+    if (h === undefined) {
+      h = this.heightWithSpawn(this.heightFromShape(shape), x, z);
+    }
+    const {
+      temperature: t,
+      humidity: m,
+      weird: w,
+    } = this.climate(x, z, h, shape);
 
     if (h < SEA_LEVEL - 1) {
-      if (shape.c > -0.12 && shape.riverRaw < RIVER_WIDTH * 0.85) {
+      if (shape.c > -0.16 && shape.riverRaw < RIVER_CHANNEL * 1.4) {
         return t < -0.5 ? 'frozen_ocean' : 'river';
       }
       if (t < -0.5) return 'frozen_ocean';
@@ -167,16 +220,17 @@ export class TerrainSampler {
       return 'ocean';
     }
 
-    if (h <= SEA_LEVEL + 2 && shape.c < 0.03) {
+    if (h <= SEA_LEVEL + 1 && shape.c < 0.06) {
       if (t < -0.5) return 'snowy_plains';
       if (shape.e < -0.35) return 'stony_shore';
       if (m > 0.45 && t > 0.2) return 'mangrove_swamp';
       return 'beach';
     }
 
-    const elevation = h - SEA_LEVEL;
-    if (elevation > 85) return t < 0.05 ? 'snowy_peaks' : 'stony_peaks';
-    if (elevation > 52) {
+    // Jittered altitude bands so mountain biomes do not follow contours.
+    const elevation = h - SEA_LEVEL + shape.detail * 5;
+    if (elevation > 88) return t < 0.05 ? 'snowy_peaks' : 'stony_peaks';
+    if (elevation > 55) {
       if (t < -0.25) return 'snowy_slopes';
       if (t < 0 && m > 0.1) return 'grove';
       if (w > 0.35 && t > 0) return 'cherry_grove';
@@ -207,8 +261,10 @@ export class TerrainSampler {
     return w > 0.5 ? 'meadow' : 'plains';
   }
 
-  biome(x, z, h) {
-    return BIOME_BY_ID.get(this.biomeId(x, z, h)) ?? BIOME_BY_ID.get('plains');
+  biome(x, z, h, shape) {
+    return (
+      BIOME_BY_ID.get(this.biomeId(x, z, h, shape)) ?? BIOME_BY_ID.get('plains')
+    );
   }
 }
 

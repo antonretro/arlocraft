@@ -1,4 +1,5 @@
 import { BLOCKS } from '../../data/blocks.js';
+import { BIOME_BY_ID } from '../../data/biomes.js';
 import { Noise } from '../../world/Noise.js';
 import {
   getCaveCell,
@@ -8,6 +9,7 @@ import { BIOME_GROUND_LIFE } from '../../world/terrain/DecorationPlacer.js';
 import { CHUNK_SIZE, CHUNK_MASK, localIndex } from '../VoxelStore.js';
 import { getTerrainSampler, SEA_LEVEL, MIN_Y } from './terrain.js';
 import { TREE_BUILDERS, pickTreeType } from './trees.js';
+import { getStructurePlanner } from '../../world/structures/StructurePlanner.js';
 
 /**
  * Generates one CHUNK_SIZE³ chunk of terrain. Pure and deterministic for a
@@ -60,6 +62,11 @@ function hash3D(x, y, z, salt) {
 }
 
 /** Small deterministic RNG (mulberry32). */
+function smoothstep01(t) {
+  const c = t < 0 ? 0 : t > 1 ? 1 : t;
+  return c * c * (3 - 2 * c);
+}
+
 function rngFrom(seed) {
   let a = seed >>> 0;
   return () => {
@@ -77,27 +84,58 @@ function rngFrom(seed) {
 const columnCache = new Map();
 const COLUMN_CACHE_LIMIT = 1024;
 const PADDED = CHUNK_SIZE + 2;
+const NO_EXCLUSION = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
+let exclusionCorruption = false;
+
+/** Columns kept free of trees for villages and structures. */
+function getTreeExclusion(cx, cz) {
+  return (
+    getStructurePlanner(currentSeedString).treeExclusion(
+      cx,
+      cz,
+      exclusionCorruption
+    ) ?? NO_EXCLUSION
+  );
+}
 
 function getColumnInfo(terrain, cx, cz) {
   const key = `${cx}|${cz}`;
   let info = columnCache.get(key);
   if (info) return info;
 
-  // Heights include a one-block border for slope detection.
+  const area = CHUNK_SIZE * CHUNK_SIZE;
+  info = {
+    heights: new Int32Array(area),
+    slopes: new Uint8Array(area),
+    biomes: new Array(area),
+    river: new Float32Array(area),
+    // Low-frequency patch noise (-1..1) for surface variety and plants.
+    patch: new Float32Array(area),
+    // 1 where trees must not grow (villages and other structures).
+    noTrees: getTreeExclusion(cx, cz),
+  };
+  // Heights include a one-block border for slope detection. Interior
+  // columns get their biome from the same shape sample as their height.
   const padded = new Int32Array(PADDED * PADDED);
   for (let pz = 0; pz < PADDED; pz++) {
     for (let px = 0; px < PADDED; px++) {
-      padded[px + pz * PADDED] = terrain.height(
-        cx * CHUNK_SIZE + px - 1,
-        cz * CHUNK_SIZE + pz - 1
-      );
+      const wx = cx * CHUNK_SIZE + px - 1;
+      const wz = cz * CHUNK_SIZE + pz - 1;
+      const interior =
+        px >= 1 && px <= CHUNK_SIZE && pz >= 1 && pz <= CHUNK_SIZE;
+      if (!interior) {
+        padded[px + pz * PADDED] = terrain.height(wx, wz);
+        continue;
+      }
+      const col = terrain.column(wx, wz);
+      const i = px - 1 + (pz - 1) * CHUNK_SIZE;
+      padded[px + pz * PADDED] = col.h;
+      info.biomes[i] =
+        BIOME_BY_ID.get(col.biomeId) ?? BIOME_BY_ID.get('plains');
+      info.river[i] = col.river;
+      info.patch[i] = caveNoise.simplex2D(wx / 11 + 517.3, wz / 11 - 211.9);
     }
   }
-  info = {
-    heights: new Int32Array(CHUNK_SIZE * CHUNK_SIZE),
-    slopes: new Uint8Array(CHUNK_SIZE * CHUNK_SIZE),
-    biomes: new Array(CHUNK_SIZE * CHUNK_SIZE),
-  };
   for (let lz = 0; lz < CHUNK_SIZE; lz++) {
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       const i = lx + lz * CHUNK_SIZE;
@@ -109,11 +147,6 @@ function getColumnInfo(terrain, cx, cz) {
         Math.abs(padded[p - 1] - h),
         Math.abs(padded[p + PADDED] - h),
         Math.abs(padded[p - PADDED] - h)
-      );
-      info.biomes[i] = terrain.biome(
-        cx * CHUNK_SIZE + lx,
-        cz * CHUNK_SIZE + lz,
-        h
       );
     }
   }
@@ -343,14 +376,25 @@ function placeUnderground(plan, rng, mountainous) {
 // ---------------------------------------------------------------------------
 // Surface rules
 // ---------------------------------------------------------------------------
-function surfaceFor(biome, h, slope, wx, wz) {
+// Snow covers everything above this height (plus a little noise).
+const SNOW_LINE = SEA_LEVEL + 84;
+const SNOW_BIOMES = new Set(['snowy_peaks', 'snowy_slopes', 'grove']);
+
+function surfaceFor(biome, h, slope, patch, river) {
   const underwater = h < SEA_LEVEL;
   if (underwater) {
     const bed = biome.underwaterBlock ?? 'sand';
-    // Patchy beds: mostly the biome's bed with some sand, gravel and clay.
-    const roll = hash2D(wx >> 2, wz >> 2, 71);
+    // Patchy beds: the biome's bed with drifts of sand, gravel and clay;
+    // shallow water near shores is mostly sand.
+    const shallow = h >= SEA_LEVEL - 3 && bed !== 'mud';
     const top =
-      roll < 0.12 ? 'clay' : roll < 0.35 ? 'gravel' : roll < 0.6 ? 'sand' : bed;
+      patch < -0.55
+        ? 'clay'
+        : patch < -0.15
+          ? 'gravel'
+          : patch < 0.35 || shallow
+            ? 'sand'
+            : bed;
     return {
       top,
       filler: top === 'clay' ? 'clay' : bed === 'mud' ? 'mud' : 'sand',
@@ -360,19 +404,43 @@ function surfaceFor(biome, h, slope, wx, wz) {
   let top = biome.surfaceBlock ?? 'grass_block';
   let filler = biome.fillerBlock ?? 'dirt';
   const sandy = top === 'sand' || top === 'red_sand';
+  const snowy = top === 'snow_block';
   const steep = slope >= 4 || (biome.rockySlopes && slope >= 2);
+  const aboveSnowLine = h >= SNOW_LINE + patch * 6;
   if (steep && !sandy) {
     // Snow clings to moderate slopes; anything steeper is bare rock.
-    if (!(top === 'snow_block' && slope < 4)) top = 'stone';
+    if (!((snowy || aboveSnowLine) && slope < 4)) top = 'stone';
     filler = 'stone';
-  } else if (biome.patchBlock && hash2D(wx >> 1, wz >> 1, 97) < 0.18) {
+  } else if (aboveSnowLine && !sandy) {
+    top = 'snow_block';
+  } else if (slope === 3 && !sandy && !snowy && h > SEA_LEVEL + 24) {
+    // Scree on mountain flanks.
+    top = patch > 0.1 ? 'gravel' : 'stone';
+    filler = top === 'gravel' ? 'gravel' : 'stone';
+  } else if (
+    river > 0 &&
+    h <= SEA_LEVEL + 1 &&
+    !snowy &&
+    top !== 'mud' &&
+    patch > -0.3
+  ) {
+    // Sandy river banks.
+    top = 'sand';
+    filler = 'sand';
+  } else if (biome.patchBlock && patch > 0.3) {
     top = biome.patchBlock;
+  } else if (biome.id === 'windswept_hills' && patch < -0.45) {
+    top = 'gravel';
+  } else if (biome.id === 'dark_forest' && patch > 0.45) {
+    top = 'podzol';
   }
+  if (SNOW_BIOMES.has(biome.id) && top === 'grass_block') top = 'snow_block';
+  const sandTop = top === 'sand' || top === 'red_sand';
   return {
     top,
     filler,
-    depth: sandy ? 4 : 3,
-    deepFiller: sandy
+    depth: sandTop ? 4 : 3,
+    deepFiller: sandTop
       ? top === 'red_sand'
         ? 'terracotta'
         : 'sandstone'
@@ -392,6 +460,10 @@ export function generateChunkData({
   cavesEnabled = true,
 }) {
   useSeed(seedString);
+  if (exclusionCorruption !== Boolean(corruptionEnabled)) {
+    exclusionCorruption = Boolean(corruptionEnabled);
+    columnCache.clear();
+  }
   const terrain = getTerrainSampler(seedString);
   const plan = new ChunkPlan(cx, cy, cz);
   const columns = getColumnInfo(terrain, cx, cz);
@@ -410,7 +482,18 @@ export function generateChunkData({
       const h = columns.heights[ci];
       const biome = columns.biomes[ci];
       if (h > SEA_LEVEL + 50) mountainous = true;
-      const surface = surfaceFor(biome, h, columns.slopes[ci], wx, wz);
+      const slope = columns.slopes[ci];
+      const surface = surfaceFor(
+        biome,
+        h,
+        slope,
+        columns.patch[ci],
+        columns.river[ci]
+      );
+      // Caves only break through on slopes and in rare spots, never under
+      // water or on shores, so the surface is not riddled with pinholes.
+      const entrance =
+        h > SEA_LEVEL + 2 && (slope >= 3 || columns.patch[ci] > 0.8);
       const deepslateY = DEEPSLATE_Y + Math.floor(hash2D(wx, wz, 13) * 4);
       let surfaceCarved = false;
 
@@ -438,7 +521,8 @@ export function generateChunkData({
           wz,
           h,
           cavesEnabled,
-          numericSeed
+          numericSeed,
+          entrance
         );
         if (cave.carve) {
           caveCells[localIndex(lx, y - startY, lz)] = cave;
@@ -464,13 +548,13 @@ export function generateChunkData({
       if (above < startY || above >= endY || surfaceCarved) continue;
       decorateColumn(
         plan,
-        terrain,
         biome,
         surface.top,
         wx,
         h,
         wz,
-        corruptionEnabled
+        corruptionEnabled,
+        columns.noTrees[ci] === 1
       );
     }
   }
@@ -487,15 +571,60 @@ export function generateChunkData({
   return { blocks: plan.blocks, palette: plan.palette, outside: plan.outside };
 }
 
+const FLOWER_RE =
+  /poppy|dandelion|tulip|allium|bluet|daisy|cornflower|lily_of|orchid|sunflower|lilac|peony|rose|pink_petals/;
+const CROP_RE = /^(wheat|beetroot|potato|carrot|tomato|blueberry|strawberry)$/;
+const plantSets = new Map();
+
+/** Splits a biome's plant list into ground cover and flowers (cached). */
+function plantSetFor(biome) {
+  let set = plantSets.get(biome.id);
+  if (set) return set;
+  const plants = (biome.plants ?? BIOME_GROUND_LIFE[biome.id] ?? []).filter(
+    (id) => id && id !== 'lily_pad' && id !== 'sugar_cane'
+  );
+  const cover = plants.filter((id) => !FLOWER_RE.test(id) && !CROP_RE.test(id));
+  const flowers = plants.filter((id) => FLOWER_RE.test(id));
+  const crops = plants.filter((id) => CROP_RE.test(id));
+  const flowery =
+    biome.id === 'flower_forest' ||
+    biome.id === 'meadow' ||
+    biome.id === 'sunflower_plains' ||
+    biome.id === 'cherry_grove';
+  set = {
+    cover,
+    flowers,
+    crops,
+    // Share of soil columns with grass/ferns, like Minecraft's dense cover.
+    coverDensity: Math.min(0.55, (biome.plantDensity ?? 0.12) * 1.6),
+    flowerBase: flowery ? 0.12 : 0.004,
+  };
+  plantSets.set(biome.id, set);
+  return set;
+}
+
+function placePlant(plan, wx, y, wz, plant) {
+  if (CROP_RE.test(plant)) {
+    plant = `${plant}_stage${1 + Math.floor(hash2D(wx, wz, 64) * 3)}`;
+  }
+  const data = BLOCK_DATA_BY_ID.get(plant);
+  if (!data) return;
+  plan.fill(wx, y, wz, plant);
+  const pairOffset = Number(data.pairOffsetY);
+  if (data.pairId && Number.isFinite(pairOffset) && pairOffset !== 0) {
+    plan.fill(wx, y + pairOffset, wz, data.pairId);
+  }
+}
+
 function decorateColumn(
   plan,
-  terrain,
   biome,
   topId,
   wx,
   h,
   wz,
-  corruptionEnabled
+  corruptionEnabled,
+  noTrees
 ) {
   const y = h + 1;
   const underwater = h < SEA_LEVEL;
@@ -532,15 +661,18 @@ function decorateColumn(
     topId === 'snow_block' ||
     topId === 'moss_block';
 
-  // Trees: one jittered candidate per TREE_CELL² cell keeps them spaced.
+  // Trees: one jittered candidate per TREE_CELL² cell keeps them spaced, and
+  // a low-frequency density field makes clearings and dense groves.
   const cellX = Math.floor(wx / TREE_CELL);
   const cellZ = Math.floor(wz / TREE_CELL);
   const jx = Math.floor(hash2D(cellX, cellZ, 41) * TREE_CELL);
   const jz = Math.floor(hash2D(cellX, cellZ, 42) * TREE_CELL);
   const isCandidate =
     wx === cellX * TREE_CELL + jx && wz === cellZ * TREE_CELL + jz;
-  if (isCandidate && onSoil && biome.trees && h >= SEA_LEVEL) {
-    const chance = (biome.treeDensity ?? 0) * TREE_CELL * TREE_CELL;
+  if (isCandidate && onSoil && biome.trees && h >= SEA_LEVEL && !noTrees) {
+    const n = caveNoise.simplex2D(wx / 44 + 300.5, wz / 44 - 200.5);
+    const grove = smoothstep01((n + 0.5) / 0.45) * (0.55 + Math.max(0, n));
+    const chance = (biome.treeDensity ?? 0) * TREE_CELL * TREE_CELL * grove;
     if (hash2D(wx, wz, 43) < chance) {
       const type = pickTreeType(biome.trees, hash2D(wx, wz, 44));
       const build = TREE_BUILDERS[type];
@@ -560,6 +692,7 @@ function decorateColumn(
       }
     }
   }
+  if (noTrees) return;
 
   // Desert cacti and shoreline sugar cane.
   if ((topId === 'sand' || topId === 'red_sand') && h > SEA_LEVEL) {
@@ -571,12 +704,15 @@ function decorateColumn(
       for (let i = 0; i < len; i++) plan.set(wx, y + i, wz, 'cactus');
       return;
     }
-    if (biome.id === 'desert' && hash2D(wx, wz, 53) < 0.01)
+    if (
+      (biome.id === 'desert' || biome.id === 'badlands') &&
+      hash2D(wx, wz, 53) < 0.01
+    )
       return plan.fill(wx, y, wz, 'dead_bush');
   }
   if (
     h <= SEA_LEVEL + 1 &&
-    h >= SEA_LEVEL - 0 &&
+    h >= SEA_LEVEL &&
     (topId === 'sand' || topId === 'grass_block') &&
     hash2D(wx, wz, 54) < 0.05
   ) {
@@ -586,25 +722,46 @@ function decorateColumn(
   }
 
   if (!onSoil || topId === 'snow_block') return;
-  const plants = biome.plants ?? BIOME_GROUND_LIFE[biome.id];
-  if (!plants || plants.length === 0) return;
-  const density = biome.plantDensity ?? 0.12;
-  // Clumped placement: a low-frequency mask so flowers grow in patches.
-  const patch = hash2D(wx >> 3, wz >> 3, 61) * 0.6 + 0.7;
-  if (hash2D(wx, wz, 62) >= density * patch) return;
-  let plant = plants[Math.floor(hash2D(wx, wz, 63) * plants.length)];
-  if (!plant || plant === 'lily_pad' || plant === 'sugar_cane') return;
-  if (
-    /^(wheat|beetroot|potato|carrot|tomato|blueberry|strawberry)$/.test(plant)
-  ) {
-    plant = `${plant}_stage${1 + Math.floor(hash2D(wx, wz, 64) * 3)}`;
+  const set = plantSetFor(biome);
+  const roll = hash2D(wx, wz, 62);
+
+  // Flowers grow in patches of one or two species, like Minecraft.
+  if (set.flowers.length > 0) {
+    const fn = caveNoise.simplex2D(wx / 17 + 77.7, wz / 17 - 33.3);
+    const inPatch = fn > 0.42;
+    const chance = inPatch ? 0.3 + set.flowerBase : set.flowerBase;
+    if (roll < chance) {
+      const species = Math.floor(
+        hash2D(Math.floor(wx / 24), Math.floor(wz / 24), 66) *
+          set.flowers.length
+      );
+      const pick =
+        hash2D(wx, wz, 63) < 0.75
+          ? species
+          : (species + 1) % set.flowers.length;
+      return placePlant(plan, wx, y, wz, set.flowers[pick]);
+    }
   }
-  const data = BLOCK_DATA_BY_ID.get(plant);
-  plan.fill(wx, y, wz, plant);
-  const pairOffset = Number(data?.pairOffsetY);
-  if (data?.pairId && Number.isFinite(pairOffset) && pairOffset !== 0) {
-    plan.fill(wx, y + pairOffset, wz, data.pairId);
+  if (set.crops.length > 0 && hash2D(wx, wz, 67) < 0.003) {
+    return placePlant(
+      plan,
+      wx,
+      y,
+      wz,
+      set.crops[Math.floor(hash2D(wx, wz, 68) * set.crops.length)]
+    );
   }
+  if (set.cover.length === 0) return;
+  // Ground cover thins out in drier patches.
+  const cover = set.coverDensity * (0.7 + hash2D(wx >> 3, wz >> 3, 61) * 0.6);
+  if (hash2D(wx, wz, 65) >= cover) return;
+  placePlant(
+    plan,
+    wx,
+    y,
+    wz,
+    set.cover[Math.floor(hash2D(wx, wz, 69) * set.cover.length)]
+  );
 }
 
 function decorateCaves(plan, columns, caveCells, startX, startY, startZ, endY) {

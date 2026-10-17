@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 const DEEP_MIN_Y = -220;
-const SURFACE_SEAL_DEPTH = 3;
+const SURFACE_SEAL_DEPTH = 5;
 const CLIFF_SURFACE_SEAL_DEPTH = 1;
 const WATER_LEVEL = 62;
 
@@ -304,7 +304,8 @@ export function getCaveCell(
   wz,
   terrainH,
   cavesEnabled,
-  seed = 0
+  seed = 0,
+  entrance = null
 ) {
   if (!cavesEnabled) {
     return NO_CAVE;
@@ -319,7 +320,10 @@ export function getCaveCell(
     return NO_CAVE;
   }
 
-  const allowEntrance = sampleSurfaceEntranceAllowance(noise, wx, wz, terrainH);
+  // Callers that know the real terrain slope decide where caves may open
+  // to the surface; otherwise fall back to the noise heuristic.
+  const allowEntrance =
+    entrance ?? sampleSurfaceEntranceAllowance(noise, wx, wz, terrainH);
   const sealDepth = allowEntrance
     ? CLIFF_SURFACE_SEAL_DEPTH
     : SURFACE_SEAL_DEPTH;

@@ -1,42 +1,8 @@
 import * as THREE from 'three';
 import { STRUCTURES } from './structures/StructureRegistry.js';
-import { biomeMatches } from '../data/biomes.js';
+import { getStructurePlanner } from './structures/StructurePlanner.js';
 import { rebuildChunkInstancedMeshes } from './mesh/ChunkMeshBuilder.js';
 import { generateChunkData } from '../voxel/gen/generateChunk.js';
-
-const CORRUPTION_STRUCTURE_KEYS = new Set([
-  'virus_nexus',
-  'corrupted_lab',
-  'restoration_shrine',
-]);
-
-// These structures have dedicated placement logic and should not appear in the random pool
-const EXCLUDED_FROM_RANDOM_POOL = new Set([
-  'dungeon_chamber',
-  'village_manor',
-  'village_hut',
-  'village_farm',
-  'village_well',
-  // Theme-park rides look out of place in the wilderness.
-  'mega_rollercoaster',
-  'spinning_ride',
-]);
-
-const CIVIC_STRUCTURE_POOL = [
-  'village_hut',
-  'market_stall',
-  'blacksmith_forge',
-  'village_well',
-  'mine_entrance',
-  'ruined_bridge',
-  'lamp_plaza',
-  'orchard_grove',
-  'fishing_dock',
-  'abandoned_camp',
-  'collapsed_bunker',
-  'broken_statue',
-  'windmill_outpost',
-];
 
 export class Chunk {
   constructor(world, cx, cy, cz) {
@@ -123,78 +89,15 @@ export class Chunk {
     this.applyGeneratedBlock(x, y, z, id, { replace: true });
   }
 
-  isLandSuitable(x, z, minDryRadius = 4) {
-    let minHeight = Number.POSITIVE_INFINITY;
-    let maxHeight = Number.NEGATIVE_INFINITY;
-    let wetSamples = 0;
-
-    for (let dx = -minDryRadius; dx <= minDryRadius; dx += 2) {
-      for (let dz = -minDryRadius; dz <= minDryRadius; dz += 2) {
-        const h = this.world.getColumnHeight(x + dx, z + dz);
-        const wl = this.world.terrain.getSurfaceWaterLevelAt(x + dx, z + dz);
-        minHeight = Math.min(minHeight, h);
-        maxHeight = Math.max(maxHeight, h);
-        if (h <= wl) wetSamples++;
-      }
-    }
-
-    if (wetSamples > 0) return false;
-
-    const maxVariance = minDryRadius >= 8 ? 5 : 4;
-    return maxHeight - minHeight <= maxVariance;
-  }
-
   isStructureSupportCandidate(id) {
     if (!id || id === 'air' || id === 'water' || id === 'lava') return false;
     return this.world.isBlockSolid(id);
   }
 
-  getStructureSupportId(x, z, baseId) {
-    const terrainY = Math.floor(this.world.getColumnHeight(x, z));
-    const terrainId = this.world.getBlockAt(x, terrainY, z);
-    const lowTerrainId = String(terrainId || '').toLowerCase();
-    const softTerrain =
-      lowTerrainId.includes('dirt') ||
-      lowTerrainId.includes('grass') ||
-      lowTerrainId.includes('sand') ||
-      lowTerrainId.includes('gravel') ||
-      lowTerrainId.includes('mud') ||
-      lowTerrainId.includes('clay') ||
-      lowTerrainId.includes('snow') ||
-      lowTerrainId.includes('path') ||
-      lowTerrainId.includes('farmland');
-    if (
-      terrainId &&
-      terrainId !== 'air' &&
-      terrainId !== 'water' &&
-      terrainId !== 'lava' &&
-      !softTerrain
-    ) {
-      return terrainId;
-    }
-
+  /** Foundation block under a structure (deterministic, no block reads). */
+  getStructureSupportId(baseId) {
     const lowId = String(baseId || '').toLowerCase();
     if (lowId.includes('sandstone')) return 'sandstone';
-    if (
-      lowId.includes('stone') ||
-      lowId.includes('brick') ||
-      lowId.includes('obsidian') ||
-      lowId.includes('prismarine') ||
-      lowId.includes('deepslate')
-    ) {
-      return 'cobblestone';
-    }
-    if (
-      lowId.includes('planks') ||
-      lowId.includes('log') ||
-      lowId.includes('wood') ||
-      lowId.includes('fence')
-    ) {
-      return 'cobblestone';
-    }
-
-    const biome = this.world.getBiomeAt(x, z);
-    if (biome?.id === 'desert') return 'sandstone';
     return 'cobblestone';
   }
 
@@ -212,7 +115,7 @@ export class Chunk {
 
     for (const block of lowestByColumn.values()) {
       const terrainY = Math.floor(this.world.getColumnHeight(block.x, block.z));
-      const supportId = this.getStructureSupportId(block.x, block.z, block.id);
+      const supportId = this.getStructureSupportId(block.id);
       for (let y = block.y - 1; y > terrainY; y--) {
         this.addGeneratedStructureBlock(block.x, y, block.z, supportId);
       }
@@ -258,10 +161,9 @@ export class Chunk {
         }
         const ground = Math.floor(this.world.getColumnHeight(bx, bz));
         const surface = this.world.getBiomeAt(bx, bz)?.surfaceBlock;
-        const top =
-          surface === 'sand' || surface === 'red_sand'
-            ? surface
-            : 'grass_block';
+        const top = ['sand', 'red_sand', 'snow_block', 'mud'].includes(surface)
+          ? surface
+          : 'grass_block';
         for (let by = Math.min(ground + 1, floorY - 1); by < floorY; by++) {
           this.addGeneratedStructureBlock(
             bx,
@@ -274,6 +176,22 @@ export class Chunk {
     }
   }
 
+  get structurePlanner() {
+    return getStructurePlanner(this.world.seedString);
+  }
+
+  /**
+   * Places a structure once per session. Its writes are recorded in the
+   * voxel store, so when chunks reload they come back from that record
+   * instead of being placed (and villagers spawned) again.
+   */
+  claimStructure(id) {
+    const placed = this.world.voxels.placedStructures;
+    if (!placed || placed.has(id)) return false;
+    placed.add(id);
+    return true;
+  }
+
   placeUnderwaterStructure(centerX, centerZ) {
     const roll = this.world.hash2D(this.cx * 7 + 401, this.cz * 11 - 293);
     if (roll > 0.035) return; // ~3.5% of underwater chunks get a structure
@@ -281,6 +199,7 @@ export class Chunk {
     const h = this.world.getColumnHeight(centerX, centerZ);
     const wl = this.world.seaLevel;
     if (h >= wl - 2) return; // must be properly submerged
+    if (!this.claimStructure(`underwater:${this.cx}:${this.cz}`)) return;
 
     const pool = ['ocean_ruins', 'sunken_ship'];
     const pick =
@@ -297,95 +216,49 @@ export class Chunk {
   }
 
   placeChunkLandmarksAndStructures(centerX, centerZ) {
-    const anchorY = Math.floor(this.world.getColumnHeight(centerX, centerZ));
-    if (this.world.getChunkCoord(anchorY) !== this.cy) return;
+    const planner = this.structurePlanner;
+    const chunkOf = (y) => this.world.getChunkCoord(y);
 
+    const village = planner.villageAnchoredAt(this.cx, this.cz);
+    if (village && chunkOf(village.plazaY) === this.cy) {
+      if (this.claimStructure(village.id)) this.placeVillage(village);
+      // Villagers despawn when the player travels far away; bring them back
+      // when the village reloads, without duplicating the ones still there.
+      else this.spawnVillagers(village);
+    }
+
+    const wild = planner.randomStructureAt(
+      this.cx,
+      this.cz,
+      Boolean(this.world.corruptionEnabled)
+    );
+    if (wild && chunkOf(wild.y) === this.cy) {
+      if (this.claimStructure(wild.id)) this.placeWildStructure(wild);
+    }
+
+    const anchorY = Math.floor(this.world.getColumnHeight(centerX, centerZ));
+    if (chunkOf(anchorY) !== this.cy) return;
     this.registerRoadLandmark(
       this.cx * this.world.chunkSize,
       this.cz * this.world.chunkSize
     );
-
-    if (
-      this.world.shouldPlaceStructureChunk(this.cx, this.cz) &&
-      this.isLandSuitable(centerX, centerZ)
-    ) {
-      const structureY = this.world.getColumnHeight(centerX, centerZ) + 1;
-      const biome = this.world.getBiomeAt(centerX, centerZ);
-      this.placeRandomStructure(centerX, structureY, centerZ, biome);
-    }
-
-    if (
-      this.world.shouldPlaceVillageChunk(this.cx, this.cz) &&
-      this.isLandSuitable(centerX, centerZ, 8)
-    ) {
-      const villageY = this.world.getColumnHeight(centerX, centerZ) + 1;
-      this.placeSettlementCluster(centerX, villageY, centerZ);
-    }
-
     this.placeUnderwaterStructure(centerX, centerZ);
   }
 
-  placeRandomStructure(x, y, z, biome) {
-    const allKeys = Object.keys(STRUCTURES).filter(
-      (k) => !EXCLUDED_FROM_RANDOM_POOL.has(k)
-    );
-    const virusRoll = this.world.hash2D(x + 811, z - 204);
-    let keys = allKeys;
-    if (!this.world.corruptionEnabled) {
-      const allowVirusRuin = virusRoll > 0.996;
-      keys = allKeys.filter((key) => {
-        if (!CORRUPTION_STRUCTURE_KEYS.has(key)) return true;
-        return allowVirusRuin && key !== 'restoration_shrine';
-      });
-      if (virusRoll < 0.94) {
-        const civicOnly = CIVIC_STRUCTURE_POOL.filter((key) =>
-          keys.includes(key)
-        );
-        if (civicOnly.length > 0) keys = civicOnly;
-      }
-    }
-    if (keys.length === 0) return;
-
-    const hash = this.world.hash2D(x - 99, z + 88);
-    const structKey = keys[Math.floor(hash * keys.length)];
-    const struct = STRUCTURES[structKey];
+  /** A wilderness structure on a site the planner checked (dry, gentle). */
+  placeWildStructure(plan) {
+    const struct = STRUCTURES[plan.key];
     if (!struct) return;
+    const blocks = struct.blueprints(plan.x, plan.y, plan.z);
+    if (!blocks?.length) return;
 
-    if (Array.isArray(struct.biomes) && struct.biomes.length > 0) {
-      if (
-        !struct.biomes.includes('any') &&
-        !struct.biomes.some((id) => biomeMatches(biome, id))
-      )
-        return;
-    } else {
-      // Backward compatibility for older structures.
-      if (structKey === 'desert_pyramid' && biome.id !== 'desert') return;
-      if (structKey === 'igloo' && biome.id !== 'highlands') return;
-    }
-
-    if (
-      structKey === 'mega_rollercoaster' &&
-      this.world.hash2D(x + 311, z - 125) < 0.72
-    )
-      return;
-    if (
-      structKey === 'spinning_ride' &&
-      this.world.hash2D(x - 207, z + 519) < 0.5
-    )
-      return;
-
-    const blocks = struct.blueprints(x, y, z);
-    if (!blocks || blocks.length === 0) return;
-
-    this.clearBlueprintVolume(this.getBlueprintBounds(blocks), 4);
+    // Clear from the floor up (never dig below it) and level the ground.
+    this.clearBlueprintVolume(this.getBlueprintBounds(blocks), 4, plan.y);
     this.addStructureSupports(blocks);
-
     for (const b of blocks) {
       this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
     }
-    if (struct.name) {
-      this.world.registerLandmark(x, z, struct.name);
-    }
+    if (struct.name) this.world.registerLandmark(plan.x, plan.z, struct.name);
   }
 
   /** Replays this chunk's player edits on top of freshly installed terrain. */
@@ -549,193 +422,57 @@ export class Chunk {
     const midZ = startZ + Math.floor(this.world.chunkSize * 0.5);
     if (!this.world.isHighwayAt(midX, midZ)) return;
     if (this.world.hash2D(this.cx + 519, this.cz - 733) < 0.78) return;
+    if (!this.claimStructure(`road:${this.cx}:${this.cz}`)) return;
     this.world.registerLandmark(midX, midZ, 'Abandoned Highway');
   }
 
-  placeSettlementCluster(centerX, _centerY, centerZ) {
-    const biome = this.world.getBiomeAt(centerX, centerZ);
-    const settlementName = this.world.getSettlementNameAt(centerX, centerZ);
-    let seed = Math.floor(this.world.hash2D(centerX, centerZ) * 2147483647);
-    const rand = () => {
-      seed = (seed * 16807) % 2147483647;
-      return seed / 2147483647;
-    };
+  /** Writes a planned village (see StructurePlanner) and its villagers. */
+  placeVillage(plan) {
+    const writes = this.structurePlanner.buildVillage(plan);
+    for (const [x, y, z, id] of writes) {
+      this.addGeneratedStructureBlock(x, y, z, id);
+    }
 
-    const roll = rand();
-    let type = 'village';
-    if (biomeMatches(biome, 'desert')) type = 'desert_town';
-    else if (roll > 0.88) type = 'castle_outpost';
-    else if (roll > 0.65) type = 'town';
-
-    this.world.registerLandmark(centerX, centerZ, settlementName, {
-      baseName: settlementName,
-      category: type,
-      displayName: settlementName,
+    const name = this.world.getSettlementNameAt(plan.x, plan.z);
+    const category = plan.styleId === 'desert' ? 'desert_town' : 'village';
+    this.world.registerLandmark(plan.x, plan.z, name, {
+      baseName: name,
+      category,
+      displayName: name,
     });
 
-    const pools = {
-      desert_town: ['desert_hut', 'desert_hut', 'desert_hut', 'market_stall'],
-      castle_outpost: [
-        'castle',
-        'blacksmith_forge',
-        'village_hut',
-        'village_farm',
-      ],
-      town: [
-        'village_manor',
-        'village_hut',
-        'village_hut',
-        'market_stall',
-        'blacksmith_forge',
-        'village_farm',
-      ],
-      village: [
-        'village_hut',
-        'village_hut',
-        'village_hut',
-        'village_farm',
-        'market_stall',
-        'blacksmith_forge',
-      ],
-    };
-    const pool = pools[type].map((key) => STRUCTURES[key]).filter(Boolean);
-    const centerpiece =
-      type === 'desert_town' ? STRUCTURES.desert_well : STRUCTURES.village_well;
+    this.spawnVillagers(plan);
+  }
 
-    const plazaY = Math.floor(this.world.getColumnHeight(centerX, centerZ)) + 1;
-    const footprints = [];
-    const doors = [];
-
-    const placeBuilding = (struct, cornerX, cornerZ, fixedY = null) => {
-      const w = struct.width ?? 7;
-      const d = struct.depth ?? 7;
-      const box = {
-        x0: cornerX - 2,
-        z0: cornerZ - 2,
-        x1: cornerX + w + 1,
-        z1: cornerZ + d + 1,
-      };
-      if (
-        footprints.some(
-          (f) =>
-            box.x0 <= f.x1 && box.x1 >= f.x0 && box.z0 <= f.z1 && box.z1 >= f.z0
-        )
-      ) {
-        return null;
-      }
-      // Sit on the average ground of the plot, close to the plaza level.
-      let ground = fixedY;
-      if (ground === null) {
-        let sum = 0;
-        for (const [px, pz] of [
-          [0, 0],
-          [w, 0],
-          [0, d],
-          [w, d],
-          [w >> 1, d >> 1],
-        ]) {
-          sum += this.world.getColumnHeight(cornerX + px, cornerZ + pz);
-        }
-        ground = Math.round(sum / 5) + 1;
-        ground = Math.max(plazaY - 3, Math.min(plazaY + 3, ground));
-      }
-      if (ground <= this.world.seaLevel + 1) return null;
-      const blocks = struct.blueprints(cornerX, ground, cornerZ);
-      if (!blocks?.length) return null;
-      this.clearBlueprintVolume(this.getBlueprintBounds(blocks), 3, ground);
-      for (const b of blocks)
-        this.addGeneratedStructureBlock(b.x, b.y, b.z, b.id);
-      footprints.push(box);
-      return { x: cornerX + (w >> 1), y: ground, z: cornerZ - 1 };
-    };
-
-    if (centerpiece) {
-      const w = centerpiece.width ?? 7;
-      const d = centerpiece.depth ?? 7;
-      placeBuilding(
-        centerpiece,
-        centerX - (w >> 1),
-        centerZ - (d >> 1),
-        plazaY
+  spawnVillagers(plan) {
+    const entities = this.world.game?.entities;
+    if (!entities || entities.entities.length >= entities.maxEntities) return;
+    const villagerType =
+      plan.styleId === 'desert' ? 'villager_desert' : 'villager_arlo';
+    const spots = (plan.doors ?? []).slice(0, 4);
+    const present = entities.entities.filter((e) => {
+      const pos = e.mesh?.position;
+      return (
+        !e.dead &&
+        /villager/.test(e.config?.id ?? '') &&
+        pos &&
+        Math.abs(pos.x - plan.x) < 56 &&
+        Math.abs(pos.z - plan.z) < 56
       );
+    }).length;
+    for (let i = present; i < spots.length; i++) {
+      const spot = spots[i];
+      // Inside a house when its chunk is loaded, otherwise on the plaza.
+      const inside = this.world.voxels.hasChunk(
+        this.world.getChunkCoord(spot.x),
+        this.world.getChunkCoord(spot.y),
+        this.world.getChunkCoord(spot.z)
+      );
+      const x = inside ? spot.x : plan.x - 2 + i;
+      const y = inside ? spot.y : plan.plazaY + 1;
+      const z = inside ? spot.z : plan.z + 4;
+      entities.spawn(villagerType, x + 0.5, y + 0.2, z + 0.5);
     }
-
-    const count = 5 + Math.floor(rand() * 4);
-    const startAngle = rand() * Math.PI * 2;
-    for (let i = 0; i < count; i++) {
-      const struct = pool[Math.floor(rand() * pool.length)];
-      if (!struct) continue;
-      const angle =
-        startAngle + (i / count) * Math.PI * 2 + (rand() - 0.5) * 0.4;
-      const radius = 12 + rand() * 7;
-      const w = struct.width ?? 7;
-      const d = struct.depth ?? 7;
-      const cornerX = Math.round(centerX + Math.cos(angle) * radius - w / 2);
-      const cornerZ = Math.round(centerZ + Math.sin(angle) * radius - d / 2);
-      const door = placeBuilding(struct, cornerX, cornerZ);
-      if (door) doors.push(door);
-    }
-
-    for (const door of doors) {
-      this.placePathBetween(door.x, door.z, centerX, centerZ + 4);
-    }
-    // Lamp posts at the plaza corners light the village at night.
-    for (const [lx, lz] of [
-      [-5, -5],
-      [5, 5],
-    ]) {
-      this.placeLampPost(centerX + lx, plazaY, centerZ + lz);
-    }
-
-    if (
-      this.world.game?.entities &&
-      this.world.game.entities.entities.length <
-        this.world.game.entities.maxEntities
-    ) {
-      const villagerType =
-        type === 'desert_town'
-          ? 'villager_desert'
-          : type === 'castle_outpost'
-            ? 'knight'
-            : 'villager_arlo';
-      for (let i = 0; i < Math.min(3, doors.length); i++) {
-        const door = doors[i];
-        this.world.game.entities.spawn(
-          villagerType,
-          door.x + 0.5,
-          door.y + 1.2,
-          door.z - 1.5
-        );
-      }
-    }
-  }
-
-  placePathBetween(x0, z0, x1, z1) {
-    let x = x0;
-    let z = z0;
-    const stepX = x1 >= x0 ? 1 : -1;
-    const stepZ = z1 >= z0 ? 1 : -1;
-    let guard = 0;
-    while ((x !== x1 || z !== z1) && guard++ < 256) {
-      const y = Math.floor(this.world.getColumnHeight(x, z));
-      const existing = this.world.getBlockAt(x, y, z);
-      // Never pave over building floors or water.
-      if (!existing || /grass|dirt|sand|podzol|snow/.test(existing)) {
-        this.addGeneratedStructureBlock(x, y, z, 'path_block');
-        this.addGeneratedStructureBlock(x, y + 1, z, 'air');
-      }
-      if (Math.abs(x1 - x) > Math.abs(z1 - z)) x += stepX;
-      else z += stepZ;
-    }
-  }
-
-  placeLampPost(x, _y, z) {
-    const baseY = Math.floor(this.world.getColumnHeight(x, z)) + 1;
-    this.addGeneratedStructureBlock(x, baseY - 1, z, 'cobblestone');
-    for (let i = 0; i < 3; i++) {
-      this.addGeneratedStructureBlock(x, baseY + i, z, 'oak_log');
-    }
-    this.addGeneratedStructureBlock(x, baseY + 3, z, 'lantern');
   }
 
   setVisible(visible) {

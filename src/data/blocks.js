@@ -264,6 +264,19 @@ function normalizeBlock(folderId, raw, scriptModule, readmeContent) {
   return merged;
 }
 
+// Stone-like blocks that get slab and stair variants (but no doors or
+// trapdoors) even though they are not in the Construction category.
+const STONE_SHAPED_BLOCKS = new Set([
+  'cobblestone',
+  'mossy_cobblestone',
+  'stone_bricks',
+  'mossy_stone_bricks',
+  'stone',
+  'smooth_stone',
+  'sandstone',
+  'red_sandstone',
+]);
+
 function mergeBlocks() {
   const merged = new Map();
 
@@ -341,6 +354,21 @@ function mergeBlocks() {
           transparent: true,
           pairId: doorId,
           pairOffsetY: -1,
+        });
+      } else if (STONE_SHAPED_BLOCKS.has(block.id)) {
+        merged.set(`${block.id}_slab`, {
+          ...block,
+          id: `${block.id}_slab`,
+          name: `${block.name} Slab`,
+          renderType: 'slab',
+          slab: true,
+        });
+        merged.set(`${block.id}_stairs`, {
+          ...block,
+          id: `${block.id}_stairs`,
+          name: `${block.name} Stairs`,
+          renderType: 'stairs',
+          stairs: true,
         });
       }
     }

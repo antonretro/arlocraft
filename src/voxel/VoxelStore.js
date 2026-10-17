@@ -35,6 +35,9 @@ export class VoxelStore {
     this.coords = coords;
     this.chunks = new Map(); // chunkKey -> Uint16Array
     this.generated = new Map(); // chunkKey -> Map<localIndex, num | FILL_ONLY>
+    // Structures already placed this session, so reloading their anchor
+    // chunk replays the recorded writes instead of placing them again.
+    this.placedStructures = new Set();
     this.blockMap = new BlockMapView(this);
     this.listeners = new Set(); // (cx, cy, cz, lx, ly, lz, oldNum, newNum)
   }
@@ -93,6 +96,13 @@ export class VoxelStore {
       writes = new Map();
       this.generated.set(key, writes);
     }
+    const previous = writes.get(idx);
+    // A fill-only write (tree leaves spilling from a neighbouring chunk)
+    // never overrides a structure's write, or canopies would grow through
+    // houses whose neighbours load later.
+    if (fillOnly && previous !== undefined && !(previous & FILL_ONLY)) {
+      return false;
+    }
     writes.set(idx, fillOnly ? num | FILL_ONLY : num);
 
     const arr = this.chunks.get(key);
@@ -110,6 +120,7 @@ export class VoxelStore {
   clear() {
     this.chunks.clear();
     this.generated.clear();
+    this.placedStructures.clear();
   }
 
   getNumeric(x, y, z) {
