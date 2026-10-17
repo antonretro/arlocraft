@@ -1,0 +1,13 @@
+# Binary assets must never get line-ending conversion.
+*.png binary
+*.jpg binary
+*.ogg binary
+*.mp3 binary
+*.wav binary
+*.zip binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
