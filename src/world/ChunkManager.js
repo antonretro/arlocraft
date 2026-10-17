@@ -107,8 +107,12 @@ export class ChunkManager {
       aboveRadius = tierVerticalCap;
     }
 
-    const minCy = centerCy - belowRadius;
-    const maxCy = centerCy + aboveRadius;
+    // Always stream the ground layers across the whole view, not just the
+    // layers around the player's own height (flying used to unload terrain).
+    const { minSurfaceCy, maxSurfaceCy } =
+      this.getSurfaceChunkRange(playerPosition);
+    const minCy = Math.min(centerCy - belowRadius, minSurfaceCy - 1);
+    const maxCy = Math.max(centerCy + aboveRadius, maxSurfaceCy);
     return {
       mode,
       minCy,
@@ -117,6 +121,36 @@ export class ChunkManager {
       belowRadius,
       surfaceChunkCy,
     };
+  }
+
+  getSurfaceChunkRange(playerPosition) {
+    const cs = this.world.chunkSize;
+    const pcx = this.world.getChunkCoord(playerPosition.x);
+    const pcz = this.world.getChunkCoord(playerPosition.z);
+    const radius = Math.max(1, Number(this.world.renderDistance) || 2);
+    const cacheKey = `${pcx},${pcz},${radius}`;
+    if (this._surfaceRangeKey === cacheKey) return this._surfaceRange;
+
+    let minH = Infinity;
+    let maxH = -Infinity;
+    const step = Math.max(1, Math.floor(radius / 2));
+    for (let dx = -radius; dx <= radius; dx += step) {
+      for (let dz = -radius; dz <= radius; dz += step) {
+        const h = this.world.getTerrainHeight(
+          (pcx + dx) * cs + cs / 2,
+          (pcz + dz) * cs + cs / 2
+        );
+        if (h < minH) minH = h;
+        if (h > maxH) maxH = h;
+      }
+    }
+    this._surfaceRangeKey = cacheKey;
+    this._surfaceRange = {
+      minSurfaceCy: this.world.getChunkCoord(minH),
+      // Trees and structures rise above the terrain surface.
+      maxSurfaceCy: this.world.getChunkCoord(maxH + 8),
+    };
+    return this._surfaceRange;
   }
 
   // ─── Chunk accessors ──────────────────────────────────────────────
@@ -610,6 +644,7 @@ export class ChunkManager {
     this.pendingChunkSet.clear();
     this.priorityDirtyChunkKeys.clear();
     this.lastPlayerChunkKey = null;
+    this._surfaceRangeKey = null;
     this.forceVisibilityResetPending = true;
     this.forceFullRemeshPending = true;
   }
