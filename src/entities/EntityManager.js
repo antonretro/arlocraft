@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MOBS } from '../data/mobs.js';
 import { TOOLS } from '../data/tools.js';
-import { MobEntity } from './MobEntity.js';
+import { MobEntity, createMobModel } from './MobEntity.js';
 import { HumanoidModel } from './models/HumanoidModel.js';
 import { Snowball } from './throwables/Snowball.js';
 import { Egg } from './throwables/Egg.js';
@@ -53,6 +53,58 @@ function createHumanoidBillboardCanvas(image) {
   return canvas;
 }
 
+// Ids used by world generation that map onto existing mob definitions.
+const MOB_ALIASES = {
+  villager_desert: { id: 'villager', textureKey: 'villager/villager_desert' },
+  knight: { id: 'iron_golem' },
+};
+
+const NIGHT_HOSTILES = [
+  'zombie',
+  'zombie',
+  'skeleton',
+  'skeleton',
+  'creeper',
+  'spider',
+  'virus_grunt',
+  'enderman',
+  'phantom',
+];
+const BIOME_HOSTILES = {
+  desert: ['sand_worm', 'bit_spitter'],
+  forest: ['virus_grunt'],
+  highlands: ['null_stalker'],
+};
+const DAY_PASSIVES = ['cow', 'sheep', 'pig', 'chicken', 'rabbit', 'horse'];
+
+function resolveMobConfig(typeId) {
+  const alias = MOB_ALIASES[typeId];
+  const baseId = alias?.id ?? typeId;
+  const config = MOBS.find((m) => m.id === baseId);
+  if (!config) return null;
+  return alias ? { ...config, ...alias, id: baseId } : config;
+}
+
+function createGrayscaleCanvas(image) {
+  const canvas = document.createElement('canvas');
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  ctx.drawImage(image, 0, 0);
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const lum = px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11;
+    const v = Math.min(255, lum * 1.6);
+    px[i] = v;
+    px[i + 1] = v;
+    px[i + 2] = v;
+  }
+  ctx.putImageData(data, 0, 0);
+  return canvas;
+}
+
 export class EntityManager {
   constructor(game) {
     this.game = game;
@@ -61,7 +113,9 @@ export class EntityManager {
     this.raycaster.firstHitOnly = true;
     this.toolById = new Map(TOOLS.map((tool) => [tool.id, tool]));
     this.attackCooldown = 0;
-    this.maxEntities = 18;
+    this.maxEntities = 24;
+    this.naturalSpawning = true;
+    this.naturalSpawnTimer = 3;
     this.comboChain = 0;
     this.comboTimer = 0;
     this.tmpHitMin = new THREE.Vector3();
@@ -148,14 +202,17 @@ export class EntityManager {
 
   spawn(typeId, x, y, z) {
     if (this.entities.length >= this.maxEntities) return null;
-    const config = MOBS.find((m) => m.id === typeId);
-    if (!config) return null;
+    const config = resolveMobConfig(typeId);
+    if (!config) {
+      console.warn(`[EntityManager] Unknown mob id: ${typeId}`);
+      return null;
+    }
+    if (![x, y, z].every(Number.isFinite)) return null;
 
     const entity = new MobEntity(this.game, config, x, y, z);
 
-    const textureUrl = this.resolveTextureUrl(config);
-    if (textureUrl && !this.failedTextureUrls.has(textureUrl) && entity.mesh) {
-      this.loadEntityTexture(textureUrl, config.textureMode)
+    if (entity.mesh) {
+      this.loadMobTexture(config)
         .then((texture) => {
           if (!texture || entity.dead) return;
           entity.applyTexture?.(texture);
@@ -168,6 +225,14 @@ export class EntityManager {
         });
     }
 
+    if (entity.mesh && config.overlayTextureKey) {
+      this.loadEntityTexture(getEntityTextureUrl(config.overlayTextureKey))
+        .then((texture) => {
+          if (texture && !entity.dead) entity.applyOverlayTexture(texture);
+        })
+        .catch(() => {});
+    }
+
     this.entities.push(entity);
     if (
       entity.mesh?.geometry?.computeBoundsTree &&
@@ -177,6 +242,43 @@ export class EntityManager {
     }
     this.game.renderer.scene.add(entity.mesh);
     return entity;
+  }
+
+  getMobConfig(typeId) {
+    return resolveMobConfig(typeId);
+  }
+
+  /** Builds a bare model for a mob id (used by the player /morph command). */
+  createModelById(typeId) {
+    const config = resolveMobConfig(typeId);
+    if (!config) return null;
+    return createMobModel(config);
+  }
+
+  // ScriptSystem API name.
+  spawnEntity(typeId, x, y, z) {
+    return this.spawn(typeId, x, y, z);
+  }
+
+  /** Custom texture first, then the resource-pack texture, else null. */
+  loadMobTexture(config) {
+    const mode = config.textureMode;
+    const candidates = [];
+    if (typeof config.texture === 'string' && config.texture) {
+      candidates.push(config.texture);
+    }
+    if (typeof config.textureKey === 'string' && config.textureKey) {
+      candidates.push(getEntityTextureUrl(config.textureKey));
+    }
+    const tryNext = (index) => {
+      if (index >= candidates.length) return Promise.resolve(null);
+      const url = candidates[index];
+      if (this.failedTextureUrls.has(url)) return tryNext(index + 1);
+      return this.loadEntityTexture(url, mode)
+        .then((texture) => texture ?? tryNext(index + 1))
+        .catch(() => tryNext(index + 1));
+    };
+    return tryNext(0);
   }
 
   spawnProjectile(type, owner, position, direction) {
@@ -237,9 +339,7 @@ export class EntityManager {
           resolve(tex);
         };
         img.onerror = (e) => {
-          console.error(
-            `[ArloCraft] FATAL: Image load failed for URL: "${url}"`
-          );
+          console.warn(`[ArloCraft] Entity texture failed to load: "${url}"`);
           this.failedTextureUrls.add(url);
           reject(e);
         };
@@ -249,7 +349,12 @@ export class EntityManager {
 
     return loadBaseImage().then((texture) => {
       let finalTexture = texture;
-      if (textureMode === 'humanoid_billboard') {
+      if (textureMode === 'grayscale') {
+        // Neutral base so a mob's `tint` colour shows through unchanged.
+        finalTexture = createTextureFromCanvas(
+          createGrayscaleCanvas(texture.image)
+        );
+      } else if (textureMode === 'humanoid_billboard') {
         finalTexture = createTextureFromCanvas(
           createHumanoidBillboardCanvas(texture.image)
         );
@@ -286,8 +391,12 @@ export class EntityManager {
   findEntityInCrosshair(camera, maxRange, predicate = null) {
     if (!camera || this.entities.length === 0) return null;
 
-    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-    const ray = this.raycaster.ray;
+    // Projectiles pass a bare { raycaster: { ray } } instead of a camera.
+    let ray = camera.raycaster?.ray;
+    if (!ray) {
+      this.raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      ray = this.raycaster.ray;
+    }
     let nearest = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
 
@@ -322,12 +431,17 @@ export class EntityManager {
     return { entity: nearest, distance: nearestDistance };
   }
 
+  // Hostiles and animals can be hit; NPCs (friendly, no XP) cannot.
+  isAttackable(entity) {
+    const config = entity?.config;
+    if (!config) return false;
+    return !config.friendly || (Number(config.xp) || 0) > 0;
+  }
+
   hasHostileTarget(camera, maxRange) {
     return Boolean(
-      this.findEntityInCrosshair(
-        camera,
-        maxRange,
-        (entity) => !entity.config?.friendly
+      this.findEntityInCrosshair(camera, maxRange, (entity) =>
+        this.isAttackable(entity)
       )
     );
   }
@@ -347,6 +461,11 @@ export class EntityManager {
       return { action: 'milked', entity };
     }
 
+    if (entity.config?.chat?.length && typeof entity.showChat === 'function') {
+      entity.showChat();
+      return { action: 'chat', entity };
+    }
+
     return { entity };
   }
 
@@ -357,7 +476,7 @@ export class EntityManager {
     const targetHit = this.findEntityInCrosshair(
       camera,
       profile.range,
-      (entity) => !entity.config?.friendly
+      (entity) => this.isAttackable(entity)
     );
     if (!targetHit) return false;
     const target = targetHit.entity;
@@ -448,12 +567,17 @@ export class EntityManager {
         entity.dead = true;
       }
 
-      // 2. Chunk Despawn (Cleanup from unloaded chunks)
-      if (!entity.dead && this.game.world) {
-        const cx = this.game.world.getChunkCoord(pos.x);
-        const cz = this.game.world.getChunkCoord(pos.z);
-        const chunkKey = this.game.world.getChunkKey(cx, 0, cz);
-        if (!this.game.world.chunks.has(chunkKey)) {
+      // 2. Chunk Despawn (Cleanup from unloaded chunks). Chunks are 3D, so
+      // look up the layer the mob is standing in.
+      if (!entity.dead && this.game.world?.chunks) {
+        const world = this.game.world;
+        const cx = world.getChunkCoord(pos.x);
+        const cy = world.getChunkCoord(pos.y);
+        const cz = world.getChunkCoord(pos.z);
+        if (
+          !world.chunks.has(world.getChunkKey(cx, cy, cz)) &&
+          !world.chunks.has(world.getChunkKey(cx, cy - 1, cz))
+        ) {
           entity.dead = true;
         }
       }
@@ -468,9 +592,10 @@ export class EntityManager {
       }
 
       // 3. PROXIMITY & FRUSTUM CULLING (Optimization)
-      // Skip logic/animation if too far or not visible
+      // Skip logic/animation if too far, or off-screen and not close by
+      // (nearby mobs keep running so they can still reach the player).
       const cullRangeSq = 72 * 72;
-      const isVisible = frustum.containsPoint(pos);
+      const isVisible = farDistanceSq < 24 * 24 || frustum.containsPoint(pos);
       if (farDistanceSq > cullRangeSq || !isVisible) {
         return; // Skip update for this frame
       }
@@ -478,6 +603,8 @@ export class EntityManager {
       entity.update(delta);
     });
     this.entities = this.entities.filter((entity) => !entity.dead);
+
+    this.updateNaturalSpawning(delta);
 
     // Update Projectiles
     this.projectiles.forEach((p) => {
@@ -489,6 +616,78 @@ export class EntityManager {
       }
     });
     this.projectiles = this.projectiles.filter((p) => !p.dead);
+  }
+
+  /**
+   * Keeps the world populated: hostiles at night, animals by day, fish in
+   * water. Ambient chunk spawns only fire once per column, so without this
+   * nothing new ever appears once the area around the player is loaded.
+   */
+  updateNaturalSpawning(delta) {
+    if (!this.naturalSpawning) return;
+    this.naturalSpawnTimer -= delta;
+    if (this.naturalSpawnTimer > 0) return;
+    this.naturalSpawnTimer = 4 + Math.random() * 4;
+
+    const world = this.game.world;
+    if (!world?.chunks || !world.getTerrainHeight) return;
+    if (this.entities.length >= this.maxEntities - 4) return;
+
+    const isNight = this.game.dayNight?.isNight?.() ?? false;
+    const hostileCount = this.entities.filter((e) => !e.config.friendly).length;
+    const player = this.game.camera.instance.position;
+
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 20 + Math.random() * 22;
+      const x = Math.floor(player.x + Math.cos(angle) * dist) + 0.5;
+      const z = Math.floor(player.z + Math.sin(angle) * dist) + 0.5;
+      const terrainY = world.getTerrainHeight(x, z);
+      if (!Number.isFinite(terrainY)) continue;
+      const surfaceY = world.getGroundYBelow(x, terrainY + 2, z);
+      const cy = world.getChunkCoord(surfaceY);
+      const key = world.getChunkKey(
+        world.getChunkCoord(x),
+        cy,
+        world.getChunkCoord(z)
+      );
+      if (!world.chunks.has(key)) continue;
+
+      const biomeId = world.getBiomeAt?.(x, z)?.id;
+      const waterY = world.getWaterSurfaceYAt(x, z);
+      if (waterY !== null && waterY - surfaceY >= 1) {
+        const fish = MOBS.filter(
+          (m) =>
+            m.aquatic &&
+            m.friendly &&
+            (!m.biomes || !biomeId || m.biomes.includes(biomeId))
+        );
+        const pick = fish[Math.floor(Math.random() * fish.length)];
+        if (pick) this.spawn(pick.id, x, waterY - 1.2, z);
+        return;
+      }
+
+      let typeId = null;
+      if (isNight) {
+        if (hostileCount >= 8) return;
+        const pool = [...NIGHT_HOSTILES, ...(BIOME_HOSTILES[biomeId] ?? [])];
+        typeId = pool[Math.floor(Math.random() * pool.length)];
+      } else {
+        const passiveCount = this.entities.length - hostileCount;
+        if (passiveCount >= 10) return;
+        const biomePassives = MOBS.filter(
+          (m) =>
+            m.friendly &&
+            !m.aquatic &&
+            (Number(m.xp) || 0) > 0 &&
+            m.biomes?.includes(biomeId)
+        ).map((m) => m.id);
+        const pool = [...DAY_PASSIVES, ...biomePassives];
+        typeId = pool[Math.floor(Math.random() * pool.length)];
+      }
+      if (typeId) this.spawn(typeId, x, surfaceY + 0.05, z);
+      return;
+    }
   }
 
   reset() {

@@ -76,18 +76,27 @@ export class ThrowableEntity {
     const normalizedDir = moveDir.clone().normalize();
     this.raycaster.set(this.lastPosition, normalizedDir);
 
-    // 1. Check World Blocks
-    const worldHit = this.game.world.interaction.raycastBlocks(
+    // 1. Check World Blocks (DDA voxel walk along this frame's movement)
+    const worldHit = this.game.world.raycastBlocks?.(
+      { position: this.lastPosition },
+      distance,
+      false,
       this.lastPosition,
-      normalizedDir,
-      distance
+      normalizedDir
     );
     if (worldHit) {
-      this.onImpact(worldHit.point, 'block', worldHit);
+      // Impact just outside the block that was hit.
+      this.onImpact(this.lastPosition.clone(), 'block', worldHit);
       return;
     }
 
-    // 2. Check Entities (using EntityManager's optimized broadphase/hitbox logic)
+    // 2. Mob-fired projectiles can hit the player.
+    if (this.owner?.config && this.hitsPlayer()) {
+      this.onImpact(this.position.clone(), 'player', null);
+      return;
+    }
+
+    // 3. Check Entities (using EntityManager's optimized broadphase/hitbox logic)
     const entityHit = this.game.entities.findEntityInCrosshair(
       {
         instance: { position: this.lastPosition },
@@ -102,9 +111,38 @@ export class ThrowableEntity {
     }
   }
 
+  hitsPlayer() {
+    const eye = this.game.camera?.instance?.position;
+    if (!eye) return false;
+    // Player body: ~0.35 radius column from the feet up to the eye.
+    for (const t of [0.5, 1]) {
+      const x = THREE.MathUtils.lerp(this.lastPosition.x, this.position.x, t);
+      const y = THREE.MathUtils.lerp(this.lastPosition.y, this.position.y, t);
+      const z = THREE.MathUtils.lerp(this.lastPosition.z, this.position.z, t);
+      const dx = x - eye.x;
+      const dz = z - eye.z;
+      if (
+        dx * dx + dz * dz < 0.45 * 0.45 &&
+        y < eye.y + 0.25 &&
+        y > eye.y - 1.7
+      )
+        return true;
+    }
+    return false;
+  }
+
   onImpact(point, targetType, hitDetail) {
     if (this.dead) return;
     this.dead = true;
+
+    if (targetType === 'player') {
+      const damage = this.playerDamage ?? 1;
+      if (damage > 0) this.game.gameState?.takeDamage?.(damage);
+      this.game.physics?.applyKnockback?.(this.velocity, 1.6, 0.2);
+      this.game.audio?.play('player-damaged');
+      this.destroy();
+      return;
+    }
 
     this.playImpactEffects(point, targetType, hitDetail);
     this.destroy();

@@ -7,7 +7,8 @@ export const MOBS = [
     xp: 50,
     biomes: ['forest'],
     textureKey: 'zombie/zombie',
-    textureMode: 'humanoid_billboard',
+    model: 'zombie',
+    tint: 0xc77dff,
   },
   {
     id: 'bit_spitter',
@@ -18,7 +19,8 @@ export const MOBS = [
     ranged: true,
     biomes: ['desert', 'plains'],
     textureKey: 'skeleton/skeleton',
-    textureMode: 'humanoid_billboard',
+    model: 'skeleton',
+    tint: 0xb39ddb,
   },
   {
     id: 'glow_squid',
@@ -29,7 +31,7 @@ export const MOBS = [
     aquatic: true,
     biomes: ['swamp', 'ocean'],
     textureKey: 'squid/glow_squid',
-    textureMode: 'billboard',
+    model: 'squid',
   },
   {
     id: 'cod',
@@ -41,7 +43,7 @@ export const MOBS = [
     friendly: true,
     biomes: ['plains', 'forest', 'meadow', 'swamp', 'ocean'],
     textureKey: 'fish/cod',
-    textureMode: 'billboard',
+    model: 'cod',
   },
   {
     id: 'salmon',
@@ -53,7 +55,7 @@ export const MOBS = [
     friendly: true,
     biomes: ['highlands', 'alpine', 'tundra', 'snow', 'ocean'],
     textureKey: 'fish/salmon',
-    textureMode: 'billboard',
+    model: 'salmon',
   },
   {
     id: 'tropical_fish',
@@ -65,7 +67,8 @@ export const MOBS = [
     friendly: true,
     biomes: ['desert', 'swamp', 'lush_grove', 'ocean'],
     textureKey: 'fish/tropical_a',
-    textureMode: 'billboard',
+    model: 'tropical_fish',
+    tint: 0xffa64d,
   },
   {
     id: 'void_jelly',
@@ -76,7 +79,9 @@ export const MOBS = [
     aquatic: true,
     biomes: ['ocean'],
     textureKey: 'slime/slime',
-    textureMode: 'billboard',
+    model: 'slime',
+    textureMode: 'grayscale',
+    tint: 0x9b6bff,
   },
   {
     id: 'stone_golem',
@@ -86,7 +91,8 @@ export const MOBS = [
     xp: 150,
     biomes: ['highlands'],
     textureKey: 'iron_golem/iron_golem',
-    textureMode: 'billboard',
+    model: 'iron_golem',
+    tint: 0xa0a0a0,
   },
   {
     id: 'sand_worm',
@@ -96,7 +102,7 @@ export const MOBS = [
     xp: 80,
     biomes: ['desert'],
     textureKey: 'zombie/husk',
-    textureMode: 'humanoid_billboard',
+    model: 'zombie',
   },
   {
     id: 'null_stalker',
@@ -106,7 +112,7 @@ export const MOBS = [
     xp: 200,
     biomes: ['highlands'],
     textureKey: 'enderman/enderman',
-    textureMode: 'humanoid_billboard',
+    model: 'enderman',
   },
   {
     id: 'pixel_swarm',
@@ -116,7 +122,9 @@ export const MOBS = [
     xp: 10,
     biomes: ['plains', 'forest'],
     textureKey: 'spider/spider',
-    textureMode: 'billboard',
+    model: 'spider',
+    modelScale: 0.5,
+    tint: 0x80ff80,
   },
   {
     id: 'arlo_bot',
@@ -126,8 +134,8 @@ export const MOBS = [
     xp: 0,
     friendly: true,
     biomes: ['plains'],
-    texture: 'https://minotar.net/skin/steve',
-    textureMode: 'humanoid_billboard',
+    textureKey: 'player/wide/steve',
+    model: 'humanoid',
   },
   {
     id: 'villager_arlo',
@@ -138,8 +146,8 @@ export const MOBS = [
     friendly: true,
     biomes: ['plains', 'forest'],
     chat: ['Hello!', 'Behold the stunning world!', 'Watch out for the virus!'],
-    texture: 'https://minotar.net/skin/MHF_Villager',
-    textureMode: 'humanoid_billboard',
+    textureKey: 'villager/villager',
+    model: 'villager',
   },
   {
     id: 'arlo_ai',
@@ -150,7 +158,9 @@ export const MOBS = [
     friendly: true,
     biomes: ['highlands'],
     chat: ['I see everything.', 'I am the code.', 'Arlo is the path.'],
-    texture: 'arlo_ai.png',
+    textureKey: 'player/wide/steve',
+    model: 'humanoid',
+    tint: 0x7ffcff,
   },
   {
     id: 'arlo_evil',
@@ -160,7 +170,10 @@ export const MOBS = [
     xp: 200,
     biomes: ['forest'],
     boss: true,
-    texture: 'arlo_creepy.png',
+    textureKey: 'player/wide/steve',
+    model: 'zombie',
+    modelScale: 1.8,
+    tint: 0xff5050,
   },
   {
     id: 'prof_apple',
@@ -175,7 +188,8 @@ export const MOBS = [
       'Have you seen my bow tie?',
       'Synthesis is key.',
     ],
-    texture: 'apple_prof_mob.png',
+    textureKey: 'player/wide/efe',
+    model: 'humanoid',
   },
   {
     id: 'super_ball',
@@ -186,7 +200,11 @@ export const MOBS = [
     friendly: true,
     biomes: ['highlands'],
     chat: ['Up and away!', 'I will save this land!', 'Zoom!'],
-    texture: 'blue_super_mob.png',
+    textureKey: 'slime/slime',
+    model: 'slime',
+    textureMode: 'grayscale',
+    modelScale: 0.8,
+    tint: 0x4d79ff,
   },
   {
     id: 'friendly_nugget',
@@ -197,7 +215,11 @@ export const MOBS = [
     friendly: true,
     biomes: ['forest'],
     chat: ['*nugget noises*', 'Friend?', 'Roll roll roll.'],
-    texture: 'nugget_mob.png',
+    textureKey: 'slime/slime',
+    model: 'slime',
+    textureMode: 'grayscale',
+    modelScale: 0.6,
+    tint: 0xd9a066,
   },
   {
     id: 'villager',
@@ -213,8 +235,8 @@ export const MOBS = [
       'Nice day today.',
       'Have you seen the market?',
     ],
-    texture: 'https://minotar.net/skin/MHF_Villager',
-    textureMode: 'humanoid_billboard',
+    textureKey: 'villager/villager',
+    model: 'villager',
   },
   {
     id: 'sheep',
@@ -225,7 +247,9 @@ export const MOBS = [
     friendly: true,
     biomes: ['plains', 'forest'],
     textureKey: 'sheep/sheep',
-    textureMode: 'billboard',
+    model: 'sheep',
+    overlayTextureKey: 'sheep/sheep_fur',
+    drops: [{ id: 'wool_white', min: 1, max: 2 }],
   },
   {
     id: 'pig',
@@ -236,7 +260,8 @@ export const MOBS = [
     friendly: true,
     biomes: ['plains', 'forest', 'swamp'],
     textureKey: 'pig/pig',
-    textureMode: 'billboard',
+    model: 'pig',
+    drops: [{ id: 'steak', min: 1, max: 2 }],
   },
   {
     id: 'cow',
@@ -247,7 +272,8 @@ export const MOBS = [
     friendly: true,
     biomes: ['plains', 'forest', 'highlands'],
     textureKey: 'cow/cow',
-    textureMode: 'billboard',
+    model: 'cow',
+    drops: [{ id: 'steak', min: 1, max: 3 }],
   },
   {
     id: 'chicken',
@@ -257,7 +283,7 @@ export const MOBS = [
     xp: 5,
     friendly: true,
     textureKey: 'chicken',
-    textureMode: 'billboard',
+    model: 'chicken',
   },
   {
     id: 'wolf',
@@ -266,7 +292,8 @@ export const MOBS = [
     speed: 3.5,
     xp: 20,
     textureKey: 'wolf/wolf',
-    textureMode: 'billboard',
+    model: 'wolf',
+    neutral: true,
   },
   {
     id: 'cat',
@@ -276,7 +303,7 @@ export const MOBS = [
     xp: 15,
     friendly: true,
     textureKey: 'cat/all_black',
-    textureMode: 'billboard',
+    model: 'cat',
   },
   {
     id: 'rabbit',
@@ -286,7 +313,7 @@ export const MOBS = [
     xp: 10,
     friendly: true,
     textureKey: 'rabbit/brown',
-    textureMode: 'billboard',
+    model: 'rabbit',
   },
   {
     id: 'horse',
@@ -296,7 +323,7 @@ export const MOBS = [
     xp: 50,
     friendly: true,
     textureKey: 'horse/horse_brown',
-    textureMode: 'billboard',
+    model: 'horse',
   },
   {
     id: 'bee',
@@ -306,7 +333,9 @@ export const MOBS = [
     xp: 15,
     friendly: true,
     textureKey: 'bee/bee',
-    textureMode: 'billboard',
+    model: 'bee',
+    flying: true,
+    flyHeight: 1.6,
   },
   {
     id: 'zombie',
@@ -315,7 +344,7 @@ export const MOBS = [
     speed: 4.2,
     xp: 50,
     textureKey: 'zombie/zombie',
-    textureMode: 'humanoid_billboard',
+    model: 'zombie',
   },
   {
     id: 'skeleton',
@@ -325,7 +354,7 @@ export const MOBS = [
     xp: 60,
     ranged: true,
     textureKey: 'skeleton/skeleton',
-    textureMode: 'humanoid_billboard',
+    model: 'skeleton',
   },
   {
     id: 'creeper',
@@ -334,7 +363,8 @@ export const MOBS = [
     speed: 3.8,
     xp: 80,
     textureKey: 'creeper/creeper',
-    textureMode: 'billboard',
+    model: 'creeper',
+    explodes: true,
   },
   {
     id: 'spider',
@@ -343,7 +373,7 @@ export const MOBS = [
     speed: 5.5,
     xp: 50,
     textureKey: 'spider/spider',
-    textureMode: 'billboard',
+    model: 'spider',
   },
   {
     id: 'enderman',
@@ -352,7 +382,8 @@ export const MOBS = [
     speed: 6.0,
     xp: 100,
     textureKey: 'enderman/enderman',
-    textureMode: 'humanoid_billboard',
+    model: 'enderman',
+    neutral: true,
   },
   {
     id: 'iron_golem',
@@ -362,7 +393,7 @@ export const MOBS = [
     xp: 0,
     friendly: true,
     textureKey: 'iron_golem/iron_golem',
-    textureMode: 'billboard',
+    model: 'iron_golem',
   },
   {
     id: 'phantom',
@@ -371,7 +402,9 @@ export const MOBS = [
     speed: 7.0,
     xp: 40,
     textureKey: 'phantom',
-    textureMode: 'billboard',
+    model: 'phantom',
+    flying: true,
+    flyHeight: 6,
   },
   {
     id: 'ravager',
@@ -380,7 +413,7 @@ export const MOBS = [
     speed: 3.0,
     xp: 150,
     textureKey: 'illager/ravager',
-    textureMode: 'billboard',
+    model: 'ravager',
   },
   {
     id: 'piglin',
@@ -389,7 +422,7 @@ export const MOBS = [
     speed: 4.5,
     xp: 50,
     textureKey: 'piglin/piglin',
-    textureMode: 'humanoid_billboard',
+    model: 'piglin',
   },
   {
     id: 'hoglin',
@@ -398,7 +431,7 @@ export const MOBS = [
     speed: 5.0,
     xp: 60,
     textureKey: 'hoglin/hoglin',
-    textureMode: 'billboard',
+    model: 'hoglin',
   },
   {
     id: 'strider',
@@ -408,6 +441,6 @@ export const MOBS = [
     xp: 20,
     friendly: true,
     textureKey: 'strider/strider',
-    textureMode: 'billboard',
+    model: 'strider',
   },
 ];
