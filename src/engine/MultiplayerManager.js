@@ -1,7 +1,55 @@
+import { Peer } from 'peerjs';
+
 /**
  * MultiplayerManager
  * Handles P2P connectivity via PeerJS (WebRTC)
  */
+
+// Messages that only the host may send; anything else from a peer is
+// untrusted and validated before it touches the world.
+const HOST_ONLY_TYPES = new Set([
+  'world_sync_chunk',
+  'world_sync_complete',
+  'world_data_sync',
+  'session_state',
+]);
+const RELAYED_TYPES = new Set(['block_update', 'chat']);
+const BLOCK_ID_PATTERN = /^[a-z0-9_:]{1,64}$/;
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{1,16}$/;
+const MAX_COORD = 30_000_000;
+const MIN_Y = -256;
+const MAX_Y = 1024;
+const MAX_META_BYTES = 4096;
+const MAX_CHAT_LENGTH = 256;
+
+function isCoord(value, min = -MAX_COORD, max = MAX_COORD) {
+  return Number.isInteger(value) && value >= min && value <= max;
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sanitizeMeta(meta) {
+  if (meta === null || meta === undefined) return null;
+  if (typeof meta === 'boolean' || Number.isFinite(meta)) return meta;
+  if (typeof meta === 'string') return meta.slice(0, MAX_META_BYTES);
+  if (!isPlainObject(meta)) return null;
+  try {
+    return JSON.stringify(meta).length <= MAX_META_BYTES
+      ? cloneForSync(meta)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function sanitizeUsername(name) {
+  return typeof name === 'string' && USERNAME_PATTERN.test(name)
+    ? name
+    : 'Steve';
+}
+
 function cloneForSync(value) {
   if (value === undefined) return undefined;
   if (typeof structuredClone === 'function') {
@@ -21,6 +69,7 @@ export class MultiplayerManager {
     this.connections = new Map(); // PeerID -> DataConnection
     this.remotePlayers = new Map(); // PeerID -> PlayerEntity
     this.isHost = false;
+    this.hostPeerId = null;
     this.roomId = null;
     this.pendingSessionState = null;
     this.hasReceivedSessionState = false;
@@ -36,23 +85,15 @@ export class MultiplayerManager {
   }
 
   init() {
-    if (typeof Peer === 'undefined') {
-      console.error(
-        '[Multiplayer] PeerJS library not found! Ensure CDN script is loaded.'
-      );
-      return;
-    }
-
     console.log('[Multiplayer] Initializing Secure Peer Pipeline...');
 
     // Generate a cryptographically random, anonymous ID for privacy
-    const randomId =
-      'ARLO-' +
-      Math.random().toString(36).substring(2, 6).toUpperCase() +
-      '-' +
-      Math.random().toString(36).substring(2, 6).toUpperCase() +
-      '-' +
-      Math.random().toString(36).substring(2, 6).toUpperCase();
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const bytes = crypto.getRandomValues(new Uint8Array(12));
+    const chars = Array.from(bytes, (b) => alphabet[b % alphabet.length]);
+    const randomId = `ARLO-${chars.slice(0, 4).join('')}-${chars
+      .slice(4, 8)
+      .join('')}-${chars.slice(8).join('')}`;
 
     this.peer = new Peer(randomId, {
       debug: 1,
@@ -96,6 +137,7 @@ export class MultiplayerManager {
         connectionPriority: 'high',
       });
       this.setupConnection(conn, { asHost: false });
+      this.hostPeerId = targetId;
 
       const timeout = setTimeout(() => {
         conn.close();
@@ -217,9 +259,10 @@ export class MultiplayerManager {
   }
 
   sendWorldSync(peerId) {
-    const blockMap = this.game.world.state.blockMap;
-    const blockCount = blockMap.size;
-    if (blockCount === 0) {
+    // Both sides generate identical terrain from the seed, so only the
+    // player edits (including removals, stored as null) need to travel.
+    const edits = this.game.world.state.changedBlocks;
+    if (edits.size === 0) {
       this.send(peerId, { type: 'world_sync_complete', data: {} });
       return;
     }
@@ -236,7 +279,7 @@ export class MultiplayerManager {
       return idx;
     };
 
-    const entries = Array.from(blockMap.entries());
+    const entries = Array.from(edits.entries());
     const CHUNK_SIZE = 1200;
     let index = 0;
 
@@ -254,7 +297,7 @@ export class MultiplayerManager {
         data[ptr++] = x;
         data[ptr++] = y;
         data[ptr++] = z;
-        data[ptr++] = getPaletteIndex(id);
+        data[ptr++] = getPaletteIndex(id ?? 'air');
       }
 
       this.send(peerId, {
@@ -326,18 +369,18 @@ export class MultiplayerManager {
       );
     }
 
-    for (let i = 0; i < blocks.length; i += 4) {
+    if (!Array.isArray(palette)) return;
+    for (let i = 0; i + 3 < blocks.length; i += 4) {
       const x = blocks[i];
       const y = blocks[i + 1];
       const z = blocks[i + 2];
       const id = palette[blocks[i + 3]];
+      if (!isCoord(y, MIN_Y, MAX_Y)) continue;
+      if (typeof id !== 'string' || !BLOCK_ID_PATTERN.test(id)) continue;
 
-      if (id) {
-        // Direct state injection is faster than addBlock for bulk sync
-        const key = this.game.world.coords.getKey(x, y, z);
-        this.game.world.state.blockMap.set(key, id);
-        this.game.world.state.changedBlocks.set(key, id);
-      }
+      // Edits are applied as overrides when each chunk generates.
+      const key = this.game.world.coords.getKey(x, y, z);
+      this.game.world.state.changedBlocks.set(key, id === 'air' ? null : id);
     }
 
     if (isLast) {
@@ -487,25 +530,45 @@ export class MultiplayerManager {
   }
 
   handleMessage(peerId, payload) {
+    if (!isPlainObject(payload) || typeof payload.type !== 'string') return;
     const { type, data } = payload;
+
+    if (HOST_ONLY_TYPES.has(type)) {
+      if (this.isHost || peerId !== this.hostPeerId) {
+        console.warn(`[Multiplayer] Ignored ${type} from non-host ${peerId}`);
+        return;
+      }
+      if (!isPlainObject(data) && !Array.isArray(data)) return;
+    }
 
     switch (type) {
       case 'handshake':
-        console.log('[Multiplayer] Handshake from', peerId, data);
+        if (!isPlainObject(data)) return;
         this.createRemotePlayer(peerId, data);
         break;
 
       case 'position':
+        if (!isPlainObject(data)) return;
         this.updateRemotePlayer(peerId, data);
         break;
 
-      case 'block_update':
-        this.syncBlock(data);
+      case 'block_update': {
+        const update = this.validateBlockUpdate(data);
+        if (!update) return;
+        this.syncBlock(update);
+        this.relayFromPeer(peerId, { type, data: update });
         break;
+      }
 
-      case 'chat':
-        this.game.chat?.addMessage(data.sender || peerId, data.text);
+      case 'chat': {
+        if (!isPlainObject(data) || typeof data.text !== 'string') return;
+        const sender =
+          this.remotePlayers.get(peerId)?.skin ?? sanitizeUsername(data.sender);
+        const text = data.text.slice(0, MAX_CHAT_LENGTH);
+        this.game.chat?.addMessage(sender, text);
+        this.relayFromPeer(peerId, { type, data: { sender, text } });
         break;
+      }
 
       case 'world_sync_chunk':
         this.handleWorldSyncChunk(data);
@@ -519,8 +582,12 @@ export class MultiplayerManager {
 
       case 'world_data_sync':
         if (Array.isArray(data)) {
-          data.forEach(([key, meta]) => {
-            this.game.world.state.blockData.set(key, meta);
+          data.forEach((entry) => {
+            if (!Array.isArray(entry) || typeof entry[0] !== 'string') return;
+            this.game.world.state.blockData.set(
+              entry[0].slice(0, 64),
+              sanitizeMeta(entry[1])
+            );
           });
           // Force remesh to show new text/data
           this.game.world.chunkManager.chunks.forEach((chunk) => {
@@ -536,6 +603,29 @@ export class MultiplayerManager {
         this.hasReceivedSessionState = true;
         this.finalizeJoinSyncIfReady();
         break;
+    }
+  }
+
+  validateBlockUpdate(data) {
+    if (!isPlainObject(data)) return null;
+    const { x, y, z, operation } = data;
+    if (!isCoord(x) || !isCoord(z) || !isCoord(y, MIN_Y, MAX_Y)) return null;
+    if (operation !== 'add' && operation !== 'remove') return null;
+    let id = null;
+    if (operation === 'add') {
+      if (typeof data.id !== 'string' || !BLOCK_ID_PATTERN.test(data.id))
+        return null;
+      if (!this.game.world.getBlockData(data.id)) return null;
+      id = data.id;
+    }
+    return { x, y, z, id, operation, meta: sanitizeMeta(data.meta) };
+  }
+
+  // The host forwards validated edits and chat so every client sees them.
+  relayFromPeer(fromPeerId, payload) {
+    if (!this.isHost || !RELAYED_TYPES.has(payload.type)) return;
+    for (const [id, conn] of this.connections) {
+      if (id !== fromPeerId && conn.open) conn.send(payload);
     }
   }
 
@@ -577,20 +667,21 @@ export class MultiplayerManager {
   // --- Remote Player Management ---
 
   createRemotePlayer(peerId, data) {
-    console.log('[Multiplayer] Creating sprite for', peerId);
+    if (this.remotePlayers.has(peerId)) return;
+    const skinUsername = sanitizeUsername(data.skinUsername);
     this.remotePlayers.set(peerId, {
       id: peerId,
-      skin: data.skinUsername,
+      skin: skinUsername,
       lastUpdate: Date.now(),
     });
 
     if (this.game.entities) {
-      this.game.entities.spawnRemotePlayer?.(peerId, data.skinUsername);
+      this.game.entities.spawnRemotePlayer?.(peerId, skinUsername);
     }
 
     this.game.chat?.addMessage(
       'SYSTEM',
-      `${data.skinUsername} has entered the simulation.`,
+      `${skinUsername} has entered the simulation.`,
       'system'
     );
   }
@@ -598,6 +689,8 @@ export class MultiplayerManager {
   updateRemotePlayer(peerId, data) {
     const p = this.remotePlayers.get(peerId);
     if (!p) return;
+    const nums = [data.x, data.y, data.z, data.yaw, data.pitch];
+    if (!nums.every(Number.isFinite)) return;
 
     p.pos = { x: data.x, y: data.y, z: data.z };
     p.rot = { yaw: data.yaw, pitch: data.pitch };
@@ -651,6 +744,7 @@ export class MultiplayerManager {
       this.peer = null;
     }
     this.roomId = null;
+    this.hostPeerId = null;
     this.pendingSessionState = null;
     this.hasReceivedSessionState = false;
     this.hasReceivedWorldSync = false;

@@ -280,7 +280,7 @@ export class World {
     this.chunkManager.flushPriorityChunkRebuilds?.(budget);
   }
   ensureChunksAround(cx, cy, cz, r) {
-    this.chunkManager.ensureChunksAround(cx, cy, cz, r);
+    this.chunkManager.ensureChunksAround(cx, cz, cy - r, cy + r);
   }
 
   // Terrain proxies

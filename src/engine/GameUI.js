@@ -1,3 +1,4 @@
+import { escapeHtml } from '../utils/escapeHtml.js';
 import {
   Vector2,
   WebGLRenderer,
@@ -13,6 +14,10 @@ import {
   TextureLoader,
   NearestFilter,
 } from 'three';
+
+// Skin colours come from saved/imported data; only allow plain colour values.
+const cssColor = (value) =>
+  typeof value === 'string' && /^#[0-9a-f]{3,8}$/i.test(value) ? value : null;
 
 export class GameUI {
   constructor(game) {
@@ -291,7 +296,7 @@ export class GameUI {
         card.innerHTML = `
                     <div class="ni-world-card-icon">${icon}</div>
                     <div class="ni-world-name">${slotId.toUpperCase()}</div>
-                    <div class="ni-world-meta">${summary.mode ?? 'SURVIVAL'} &middot; Seed: ${summary.seed ?? 'unknown'}</div>
+                    <div class="ni-world-meta">${escapeHtml(summary.mode ?? 'SURVIVAL')} &middot; Seed: ${escapeHtml(summary.seed ?? 'unknown')}</div>
                     <div class="ni-world-meta">${when}</div>
                 `;
       } else {
@@ -924,16 +929,16 @@ export class GameUI {
     div.className = `ni-skin-item ${isActive ? 'active' : ''}`;
     if (skin.faceUrl || skin.url) {
       const src = skin.faceUrl || skin.url;
-      div.innerHTML = `<img src="${src}" style="width:48px;height:48px;image-rendering:pixelated;border-radius:4px;" alt="${skin.name}">`;
+      div.innerHTML = `<img src="${escapeHtml(src)}" style="width:48px;height:48px;image-rendering:pixelated;border-radius:4px;" alt="${escapeHtml(skin.name)}">`;
     } else {
       const c = skin.config || {};
       div.innerHTML = `
                 <div style="display:flex;flex-direction:column;align-items:center;gap:1px;transform:scale(0.7)">
-                    <div style="width:20px;height:20px;background:${c.skin || '#ffccaa'};border-radius:2px"></div>
-                    <div style="width:22px;height:20px;background:${c.shirt || '#008888'};border-radius:1px"></div>
+                    <div style="width:20px;height:20px;background:${cssColor(c.skin) || '#ffccaa'};border-radius:2px"></div>
+                    <div style="width:22px;height:20px;background:${cssColor(c.shirt) || '#008888'};border-radius:1px"></div>
                     <div style="display:flex;gap:2px">
-                        <div style="width:9px;height:18px;background:${c.pants || '#4444aa'};border-radius:1px"></div>
-                        <div style="width:9px;height:18px;background:${c.pants || '#4444aa'};border-radius:1px"></div>
+                        <div style="width:9px;height:18px;background:${cssColor(c.pants) || '#4444aa'};border-radius:1px"></div>
+                        <div style="width:9px;height:18px;background:${cssColor(c.pants) || '#4444aa'};border-radius:1px"></div>
                     </div>
                 </div>`;
     }
