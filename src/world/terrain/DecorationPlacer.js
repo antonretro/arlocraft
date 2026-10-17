@@ -176,16 +176,16 @@ export function shouldPlaceTree(noise, x, z, height, biome, seed) {
   const spacing = 5;
   const gx = Math.floor(x / spacing);
   const gz = Math.floor(z / spacing);
-  
+
   // Deterministic jitter for this cell
   const jx = Math.floor(hash2D(gx, gz, seed + 102) * spacing);
   const jz = Math.floor(hash2D(gx, gz, seed + 204) * spacing);
-  
+
   if (x !== gx * spacing + jx || z !== gz * spacing + jz) return false;
 
   const clumpMask = getClumpedDensityMask(noise, x, z, 'trees', seed);
   if (clumpMask < 0.5) return false;
-  
+
   const n = hash2D(x, z, seed + 555);
   return n < density * 3.5; // Adjusted for grid sparsity
 }
@@ -258,7 +258,14 @@ export function addGroundLife(
   surfaceId
 ) {
   if (!surfaceId) return; // Must know what we're spawning on
-  const validSoil = ['grass_block', 'mycelium', 'podzol', 'moss_block', 'mossy_cobblestone', 'dirt'];
+  const validSoil = [
+    'grass_block',
+    'mycelium',
+    'podzol',
+    'moss_block',
+    'mossy_cobblestone',
+    'dirt',
+  ];
   if (!validSoil.includes(surfaceId)) return;
   const lifeList = BIOME_GROUND_LIFE[biome.id] || [];
   if (lifeList.length === 0) return;

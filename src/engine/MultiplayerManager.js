@@ -148,7 +148,11 @@ export class MultiplayerManager {
         this.sendWorldDataSync(conn.peer);
       }
 
-      this.game.notifications?.show('Multiplayer', 'Peer Connected!', 'success');
+      this.game.notifications?.show(
+        'Multiplayer',
+        'Peer Connected!',
+        'success'
+      );
     };
 
     if (conn.open) finalizeOpen();
@@ -162,7 +166,11 @@ export class MultiplayerManager {
       console.log('[Multiplayer] Peer Disconnected:', conn.peer);
       this.connections.delete(conn.peer);
       this.removeRemotePlayer(conn.peer);
-      this.game.notifications?.show('Multiplayer', 'Peer Disconnected', 'warning');
+      this.game.notifications?.show(
+        'Multiplayer',
+        'Peer Disconnected',
+        'warning'
+      );
     });
   }
 
@@ -229,42 +237,42 @@ export class MultiplayerManager {
     };
 
     const entries = Array.from(blockMap.entries());
-    const CHUNK_SIZE = 1200; 
+    const CHUNK_SIZE = 1200;
     let index = 0;
 
     // Use a non-blocking generator-style loop
     const sendNextBatch = () => {
-        if (!this.connections.has(peerId)) return; // Peer left
+      if (!this.connections.has(peerId)) return; // Peer left
 
-        const limit = Math.min(index + CHUNK_SIZE, entries.length);
-        const chunkEntries = entries.slice(index, limit);
-        const data = new Int32Array(chunkEntries.length * 4);
-        let ptr = 0;
-        
-        for (const [key, id] of chunkEntries) {
-            const [x, y, z] = this.game.world.coords.keyToCoords(key);
-            data[ptr++] = x;
-            data[ptr++] = y;
-            data[ptr++] = z;
-            data[ptr++] = getPaletteIndex(id);
-        }
+      const limit = Math.min(index + CHUNK_SIZE, entries.length);
+      const chunkEntries = entries.slice(index, limit);
+      const data = new Int32Array(chunkEntries.length * 4);
+      let ptr = 0;
 
-        this.send(peerId, {
-            type: 'world_sync_chunk',
-            data: {
-                payload: data.buffer,
-                palette: palette,
-                progress: limit,
-                total: entries.length,
-                isLast: limit >= entries.length
-            },
-        });
+      for (const [key, id] of chunkEntries) {
+        const [x, y, z] = this.game.world.coords.keyToCoords(key);
+        data[ptr++] = x;
+        data[ptr++] = y;
+        data[ptr++] = z;
+        data[ptr++] = getPaletteIndex(id);
+      }
 
-        index = limit;
-        if (index < entries.length) {
-            // Schedule next batch to keep main thread free
-            setTimeout(sendNextBatch, 16); 
-        }
+      this.send(peerId, {
+        type: 'world_sync_chunk',
+        data: {
+          payload: data.buffer,
+          palette: palette,
+          progress: limit,
+          total: entries.length,
+          isLast: limit >= entries.length,
+        },
+      });
+
+      index = limit;
+      if (index < entries.length) {
+        // Schedule next batch to keep main thread free
+        setTimeout(sendNextBatch, 16);
+      }
     };
 
     sendNextBatch();
@@ -278,7 +286,7 @@ export class MultiplayerManager {
     const data = Array.from(blockData.entries());
     this.send(peerId, {
       type: 'world_data_sync',
-      data: data
+      data: data,
     });
   }
 
@@ -306,12 +314,16 @@ export class MultiplayerManager {
     this.prepareJoinSync();
 
     const blocks = new Int32Array(payload);
-    
+
     // Batch notifications to reduce UI churn
     const percent = total > 0 ? Math.round((progress / total) * 100) : 100;
     if (isLast || percent >= this._lastSyncPercent + 10) {
-        this._lastSyncPercent = percent;
-        this.game.notifications?.show('Multiplayer', `Syncing World: ${percent}%`, 'info');
+      this._lastSyncPercent = percent;
+      this.game.notifications?.show(
+        'Multiplayer',
+        `Syncing World: ${percent}%`,
+        'info'
+      );
     }
 
     for (let i = 0; i < blocks.length; i += 4) {
@@ -347,7 +359,10 @@ export class MultiplayerManager {
     }
 
     if (Array.isArray(player.inventory)) {
-      this.game.gameState.inventory = cloneForSync(player.inventory).slice(0, 36);
+      this.game.gameState.inventory = cloneForSync(player.inventory).slice(
+        0,
+        36
+      );
       while (this.game.gameState.inventory.length < 36) {
         this.game.gameState.inventory.push(null);
       }
@@ -448,7 +463,9 @@ export class MultiplayerManager {
 
     window.dispatchEvent(new CustomEvent('inventory-changed'));
     window.dispatchEvent(
-      new CustomEvent('offhand-changed', { detail: this.game.gameState.offhand })
+      new CustomEvent('offhand-changed', {
+        detail: this.game.gameState.offhand,
+      })
     );
     window.dispatchEvent(
       new CustomEvent('hp-changed', { detail: this.game.gameState.hp })
@@ -493,7 +510,7 @@ export class MultiplayerManager {
       case 'world_sync_chunk':
         this.handleWorldSyncChunk(data);
         break;
-      
+
       case 'world_sync_complete':
         this.prepareJoinSync();
         this.hasReceivedWorldSync = true;
@@ -502,14 +519,14 @@ export class MultiplayerManager {
 
       case 'world_data_sync':
         if (Array.isArray(data)) {
-            data.forEach(([key, meta]) => {
-                this.game.world.state.blockData.set(key, meta);
-            });
-            // Force remesh to show new text/data
-            this.game.world.chunkManager.chunks.forEach(chunk => {
-                chunk.dirty = true;
-                this.game.world.chunkManager.priorityDirtyChunkKeys.add(chunk.key);
-            });
+          data.forEach(([key, meta]) => {
+            this.game.world.state.blockData.set(key, meta);
+          });
+          // Force remesh to show new text/data
+          this.game.world.chunkManager.chunks.forEach((chunk) => {
+            chunk.dirty = true;
+            this.game.world.chunkManager.priorityDirtyChunkKeys.add(chunk.key);
+          });
         }
         break;
 
@@ -571,7 +588,11 @@ export class MultiplayerManager {
       this.game.entities.spawnRemotePlayer?.(peerId, data.skinUsername);
     }
 
-    this.game.chat?.addMessage('SYSTEM', `${data.skinUsername} has entered the simulation.`, 'system');
+    this.game.chat?.addMessage(
+      'SYSTEM',
+      `${data.skinUsername} has entered the simulation.`,
+      'system'
+    );
   }
 
   updateRemotePlayer(peerId, data) {
@@ -594,7 +615,11 @@ export class MultiplayerManager {
     if (this.game.entities) {
       this.game.entities.removeRemotePlayer?.(peerId);
     }
-    this.game.chat?.addMessage('SYSTEM', `${name} has left the simulation.`, 'system');
+    this.game.chat?.addMessage(
+      'SYSTEM',
+      `${name} has left the simulation.`,
+      'system'
+    );
   }
 
   syncBlock(data) {

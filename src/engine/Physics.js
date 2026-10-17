@@ -144,7 +144,11 @@ export class Physics {
 
     const fallback = this.world.getSafeSpawnPoint(safeX, safeZ, maxRadius);
     primeChunks(fallback.x, fallback.y, fallback.z);
-    const fallbackFloorY = this.getGroundYAt(fallback.x, fallback.z, fallback.y);
+    const fallbackFloorY = this.getGroundYAt(
+      fallback.x,
+      fallback.z,
+      fallback.y
+    );
     const fallbackBaseY = preferGround
       ? fallbackFloorY
       : Math.max(fallback.y, fallbackFloorY);
@@ -214,10 +218,20 @@ export class Physics {
   isGrounded() {
     // RESTORED: Unified floor detection. Checks multiple offset points for better slab/stair stability.
     const r = this.playerRadius * 0.4;
-    const offsets = [[0,0], [r,0], [-r,0], [0,r], [0,-r]];
+    const offsets = [
+      [0, 0],
+      [r, 0],
+      [-r, 0],
+      [0, r],
+      [0, -r],
+    ];
     let maxGroundY = -Infinity;
     for (const [ox, oz] of offsets) {
-      const gy = this.world.getGroundYBelow(this.position.x + ox, this.position.y, this.position.z + oz);
+      const gy = this.world.getGroundYBelow(
+        this.position.x + ox,
+        this.position.y,
+        this.position.z + oz
+      );
       if (gy > maxGroundY) maxGroundY = gy;
     }
     const groundY = maxGroundY + this.feetOffset;
@@ -305,7 +319,8 @@ export class Physics {
             const pushEps = 0.005;
             if (overlapY <= overlapX && overlapY <= overlapZ) {
               const centerY = (minY + maxY) * 0.5;
-              if (centerY >= by && this.velocity.y >= 0) this.position.y += overlapY + pushEps;
+              if (centerY >= by && this.velocity.y >= 0)
+                this.position.y += overlapY + pushEps;
               else if (centerY < by) this.position.y -= overlapY + pushEps;
               if (Math.abs(this.velocity.y) < 2) this.velocity.y = 0;
             } else if (overlapX <= overlapZ) {

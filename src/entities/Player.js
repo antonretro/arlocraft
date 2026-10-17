@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 
 function disposeMaterialResources(material) {
-    const materials = Array.isArray(material) ? material : [material];
-    for (const entry of materials) {
-        if (!entry) continue;
-        entry.map?.dispose?.();
-        entry.alphaMap?.dispose?.();
-        entry.emissiveMap?.dispose?.();
-        entry.dispose?.();
-    }
+  const materials = Array.isArray(material) ? material : [material];
+  for (const entry of materials) {
+    if (!entry) continue;
+    entry.map?.dispose?.();
+    entry.alphaMap?.dispose?.();
+    entry.emissiveMap?.dispose?.();
+    entry.dispose?.();
+  }
 }
 
 /**
@@ -16,204 +16,245 @@ function disposeMaterialResources(material) {
  * Owns the 3D representation, animation state, and skin application for the local player.
  */
 export class Player {
-    constructor(game) {
-        this.game = game;
-        this.mesh = new THREE.Group();
-        this.parts = {};
-        this.bobCycle = 0;
+  constructor(game) {
+    this.game = game;
+    this.mesh = new THREE.Group();
+    this.parts = {};
+    this.bobCycle = 0;
 
-        this.setupVisuals();
-        this.game.renderer.scene.add(this.mesh);
+    this.setupVisuals();
+    this.game.renderer.scene.add(this.mesh);
 
-        window.addEventListener('player-morph-changed', (e) => {
-            this.setupMorph(e.detail);
-        });
+    window.addEventListener('player-morph-changed', (e) => {
+      this.setupMorph(e.detail);
+    });
+  }
+
+  setupMorph(morphId) {
+    if (this.morphModel) {
+      this.mesh.remove(this.morphModel.group);
+      this.morphModel = null;
     }
 
-    setupMorph(morphId) {
-        if (this.morphModel) {
-            this.mesh.remove(this.morphModel.group);
-            this.morphModel = null;
-        }
+    const isMorphed = Boolean(morphId);
 
-        const isMorphed = Boolean(morphId);
-        
-        // Hide/Show base parts
-        const basePartNames = ['torso', 'head', 'headGroup', 'armL', 'armR', 'legL', 'legR', 'face'];
-        for (const name of basePartNames) {
-            if (this.parts[name]) {
-                this.parts[name].visible = !isMorphed;
-            }
-        }
-
-        if (isMorphed) {
-            const model = this.game.entities.createModelById(morphId);
-            if (model) {
-                this.morphModel = model;
-                this.mesh.add(model.group);
-                
-                // Try to load texture
-                const mobConfig = this.game.entities.game.world.state.blockData.get('mobs')?.find(m => m.id === morphId) || { id: morphId, textureKey: morphId };
-                const textureUrl = this.game.entities.resolveTextureUrl(mobConfig) || this.game.entities.resolveTextureUrl({ id: morphId, textureKey: morphId });
-                
-                if (textureUrl) {
-                    this.game.entities.loadEntityTexture(textureUrl, 'billboard').then(tex => {
-                        if (tex && this.morphModel) this.morphModel.setTexture(tex);
-                    });
-                }
-            }
-        }
+    // Hide/Show base parts
+    const basePartNames = [
+      'torso',
+      'head',
+      'headGroup',
+      'armL',
+      'armR',
+      'legL',
+      'legR',
+      'face',
+    ];
+    for (const name of basePartNames) {
+      if (this.parts[name]) {
+        this.parts[name].visible = !isMorphed;
+      }
     }
 
-    setupVisuals() {
-        const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x7289a2 });
-        const darkMaterial = new THREE.MeshLambertMaterial({ color: 0x425566 });
+    if (isMorphed) {
+      const model = this.game.entities.createModelById(morphId);
+      if (model) {
+        this.morphModel = model;
+        this.mesh.add(model.group);
 
-        const torso = new THREE.Mesh(
-            new THREE.BoxGeometry(0.78, 0.9, 0.38),
-            bodyMaterial
-        );
-        torso.position.set(0, 0.95, 0);
-        this.mesh.add(torso);
-
-        const legL = new THREE.Mesh(
-            new THREE.BoxGeometry(0.28, 0.75, 0.28),
-            darkMaterial
-        );
-        legL.position.set(-0.18, 0.36, 0);
-        this.mesh.add(legL);
-
-        const legR = new THREE.Mesh(
-            new THREE.BoxGeometry(0.28, 0.75, 0.28),
-            darkMaterial
-        );
-        legR.position.set(0.18, 0.36, 0);
-        this.mesh.add(legR);
-
-        const armL = new THREE.Mesh(
-            new THREE.BoxGeometry(0.22, 0.72, 0.22),
-            darkMaterial
-        );
-        armL.position.set(-0.52, 1.0, 0);
-        this.mesh.add(armL);
-
-        const armR = new THREE.Mesh(
-            new THREE.BoxGeometry(0.22, 0.72, 0.22),
-            darkMaterial
-        );
-        armR.position.set(0.52, 1.0, 0);
-        this.mesh.add(armR);
-
-        // --- Blob Shadow ---
-        const shadowGeo = new THREE.CircleGeometry(0.45, 16);
-        const shadowMat = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.3,
-            depthWrite: false,
-        });
-        const shadow = new THREE.Mesh(shadowGeo, shadowMat);
-        shadow.rotation.x = -Math.PI / 2;
-        shadow.position.y = 0.005;
-        this.mesh.add(shadow);
-
-        const headGroup = new THREE.Group();
-        headGroup.position.set(0, 1.72, 0);
-
-        const head = new THREE.Mesh(
-            new THREE.BoxGeometry(0.62, 0.62, 0.62),
-            bodyMaterial
-        );
-        headGroup.add(head);
-
-        const facePath = 'arlo_real.png';
-        const faceTexture = new THREE.TextureLoader().load(facePath);
-        faceTexture.magFilter = THREE.NearestFilter;
-        faceTexture.minFilter = THREE.NearestFilter;
-        const facePlane = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.56, 0.56),
-            new THREE.MeshBasicMaterial({ map: faceTexture, transparent: true })
-        );
-        facePlane.position.set(0, 0, 0.322);
-        headGroup.add(facePlane);
-
-        this.mesh.add(headGroup);
-
-        this.parts = {
-            torso,
-            head,
-            headGroup,
-            armL,
-            armR,
-            legL,
-            legR,
-            face: facePlane,
-            shadow
+        // Try to load texture
+        const mobConfig = this.game.entities.game.world.state.blockData
+          .get('mobs')
+          ?.find((m) => m.id === morphId) || {
+          id: morphId,
+          textureKey: morphId,
         };
+        const textureUrl =
+          this.game.entities.resolveTextureUrl(mobConfig) ||
+          this.game.entities.resolveTextureUrl({
+            id: morphId,
+            textureKey: morphId,
+          });
 
-        this.mesh.visible = false; // Hidden in 1st person by default
+        if (textureUrl) {
+          this.game.entities
+            .loadEntityTexture(textureUrl, 'billboard')
+            .then((tex) => {
+              if (tex && this.morphModel) this.morphModel.setTexture(tex);
+            });
+        }
+      }
+    }
+  }
+
+  setupVisuals() {
+    const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x7289a2 });
+    const darkMaterial = new THREE.MeshLambertMaterial({ color: 0x425566 });
+
+    const torso = new THREE.Mesh(
+      new THREE.BoxGeometry(0.78, 0.9, 0.38),
+      bodyMaterial
+    );
+    torso.position.set(0, 0.95, 0);
+    this.mesh.add(torso);
+
+    const legL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.75, 0.28),
+      darkMaterial
+    );
+    legL.position.set(-0.18, 0.36, 0);
+    this.mesh.add(legL);
+
+    const legR = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.75, 0.28),
+      darkMaterial
+    );
+    legR.position.set(0.18, 0.36, 0);
+    this.mesh.add(legR);
+
+    const armL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.72, 0.22),
+      darkMaterial
+    );
+    armL.position.set(-0.52, 1.0, 0);
+    this.mesh.add(armL);
+
+    const armR = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.72, 0.22),
+      darkMaterial
+    );
+    armR.position.set(0.52, 1.0, 0);
+    this.mesh.add(armR);
+
+    // --- Blob Shadow ---
+    const shadowGeo = new THREE.CircleGeometry(0.45, 16);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.3,
+      depthWrite: false,
+    });
+    const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.005;
+    this.mesh.add(shadow);
+
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.72, 0);
+
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.62, 0.62, 0.62),
+      bodyMaterial
+    );
+    headGroup.add(head);
+
+    const facePath = 'arlo_real.png';
+    const faceTexture = new THREE.TextureLoader().load(facePath);
+    faceTexture.magFilter = THREE.NearestFilter;
+    faceTexture.minFilter = THREE.NearestFilter;
+    const facePlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.56, 0.56),
+      new THREE.MeshBasicMaterial({ map: faceTexture, transparent: true })
+    );
+    facePlane.position.set(0, 0, 0.322);
+    headGroup.add(facePlane);
+
+    this.mesh.add(headGroup);
+
+    this.parts = {
+      torso,
+      head,
+      headGroup,
+      armL,
+      armR,
+      legL,
+      legR,
+      face: facePlane,
+      shadow,
+    };
+
+    this.mesh.visible = false; // Hidden in 1st person by default
+  }
+
+  update(delta, velocity, isGrounded, isSprinting, inWater, viewPitch) {
+    const speed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
+
+    // Update Bob Cycle
+    if (isGrounded && speed > 0.1) {
+      const multiplier = isSprinting ? 12.0 : 8.5;
+      this.bobCycle += delta * multiplier;
+    } else if (inWater) {
+      this.bobCycle += delta * 3.5;
+    } else {
+      this.bobCycle = THREE.MathUtils.lerp(this.bobCycle, 0, delta * 3.5);
     }
 
-    update(delta, velocity, isGrounded, isSprinting, inWater, viewPitch) {
-        const speed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
-        
-        // Update Bob Cycle
-        if (isGrounded && speed > 0.1) {
-            const multiplier = isSprinting ? 12.0 : 8.5;
-            this.bobCycle += delta * multiplier;
-        } else if (inWater) {
-            this.bobCycle += delta * 3.5;
-        } else {
-            this.bobCycle = THREE.MathUtils.lerp(this.bobCycle, 0, delta * 3.5);
-        }
-
-        // Animate Limbs
-        if (speed > 0.05 || inWater) {
-            const a = Math.sin(this.bobCycle) * 0.45;
-            this.parts.legR.rotation.x = a;
-            this.parts.legL.rotation.x = -a;
-            this.parts.armR.rotation.x = -a * 1.1;
-            this.parts.armL.rotation.x = a * 1.1;
-        } else {
-            this.parts.legR.rotation.x = THREE.MathUtils.lerp(this.parts.legR.rotation.x, 0, delta * 5);
-            this.parts.legL.rotation.x = THREE.MathUtils.lerp(this.parts.legL.rotation.x, 0, delta * 5);
-            this.parts.armR.rotation.x = THREE.MathUtils.lerp(this.parts.armR.rotation.x, 0, delta * 5);
-            this.parts.armL.rotation.x = THREE.MathUtils.lerp(this.parts.armL.rotation.x, 0, delta * 5);
-        }
-
-        // Sync head tilt to view pitch
-        if (this.parts.headGroup) {
-            this.parts.headGroup.rotation.x = -viewPitch;
-        }
-
-        // Animate Morph
-        if (this.morphModel) {
-            this.morphModel.update(delta, velocity);
-            // Hide torso if morphed (redundant safety)
-            this.parts.torso.visible = false;
-        }
+    // Animate Limbs
+    if (speed > 0.05 || inWater) {
+      const a = Math.sin(this.bobCycle) * 0.45;
+      this.parts.legR.rotation.x = a;
+      this.parts.legL.rotation.x = -a;
+      this.parts.armR.rotation.x = -a * 1.1;
+      this.parts.armL.rotation.x = a * 1.1;
+    } else {
+      this.parts.legR.rotation.x = THREE.MathUtils.lerp(
+        this.parts.legR.rotation.x,
+        0,
+        delta * 5
+      );
+      this.parts.legL.rotation.x = THREE.MathUtils.lerp(
+        this.parts.legL.rotation.x,
+        0,
+        delta * 5
+      );
+      this.parts.armR.rotation.x = THREE.MathUtils.lerp(
+        this.parts.armR.rotation.x,
+        0,
+        delta * 5
+      );
+      this.parts.armL.rotation.x = THREE.MathUtils.lerp(
+        this.parts.armL.rotation.x,
+        0,
+        delta * 5
+      );
     }
 
-    applySkin(materials) {
-        if (!this.parts) return;
-        
-        const partNames = ['head', 'torso', 'armL', 'armR', 'legL', 'legR'];
-        for (const name of partNames) {
-            if (materials[name]) {
-                const previous = this.parts[name].material;
-                this.parts[name].material = materials[name];
-                const matArray = Array.isArray(materials[name]) ? materials[name] : [materials[name]];
-                matArray.forEach(m => { m.needsUpdate = true; });
-                if (previous && previous !== materials[name]) {
-                    disposeMaterialResources(previous);
-                }
-            }
-        }
-        
-        if (this.parts.face) this.parts.face.visible = false;
+    // Sync head tilt to view pitch
+    if (this.parts.headGroup) {
+      this.parts.headGroup.rotation.x = -viewPitch;
     }
 
-    setVisible(visible) {
-        this.mesh.visible = visible;
+    // Animate Morph
+    if (this.morphModel) {
+      this.morphModel.update(delta, velocity);
+      // Hide torso if morphed (redundant safety)
+      this.parts.torso.visible = false;
     }
+  }
+
+  applySkin(materials) {
+    if (!this.parts) return;
+
+    const partNames = ['head', 'torso', 'armL', 'armR', 'legL', 'legR'];
+    for (const name of partNames) {
+      if (materials[name]) {
+        const previous = this.parts[name].material;
+        this.parts[name].material = materials[name];
+        const matArray = Array.isArray(materials[name])
+          ? materials[name]
+          : [materials[name]];
+        matArray.forEach((m) => {
+          m.needsUpdate = true;
+        });
+        if (previous && previous !== materials[name]) {
+          disposeMaterialResources(previous);
+        }
+      }
+    }
+
+    if (this.parts.face) this.parts.face.visible = false;
+  }
+
+  setVisible(visible) {
+    this.mesh.visible = visible;
+  }
 }

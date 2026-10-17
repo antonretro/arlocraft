@@ -36,7 +36,7 @@ export class WorldState {
     this.idMap = new Map();
     this.reverseIdMap = new Map();
     this._nextInternalId = 1;
-    
+
     // Properties indexed by internal ID for ultra-fast meshing (4096 capacity)
     // Bit 0: Opaque, Bit 1: Transparent, Bit 2: Tintable
     this.propertyCache = new Uint8Array(4096);
@@ -47,7 +47,7 @@ export class WorldState {
       this.blockDataById.set(b.id, b);
       this._registerInternalId(b.id);
     }
-    
+
     this._registerInternalId('air');
   }
 
@@ -68,31 +68,39 @@ export class WorldState {
       return;
     }
 
-    const config = this.blockDataById.get(blockId) || 
-                   this.blockDataById.get(normalizeBlockVariantId(blockId));
-    
+    const config =
+      this.blockDataById.get(blockId) ||
+      this.blockDataById.get(normalizeBlockVariantId(blockId));
+
     let props = 0x00;
     const lowId = blockId.toLowerCase();
-    
+
     const hasFixedLeafColor =
       lowId === 'cherry_leaves' ||
       lowId === 'leaves_cherry' ||
       lowId === 'flowering_azalea_leaves';
     const isTintable =
-      ((lowId.includes('leaves') && !hasFixedLeafColor) ||
-        lowId.includes('grass') ||
-        lowId === 'fern' ||
-        lowId === 'water' ||
-        config?.tintable);
-    
-    const isTransparent = lowId.includes('leaves') || lowId.includes('glass') || 
-                          lowId === 'water' || lowId === 'ice' || 
-                          config?.transparent || config?.deco;
-    
+      (lowId.includes('leaves') && !hasFixedLeafColor) ||
+      lowId.includes('grass') ||
+      lowId === 'fern' ||
+      lowId === 'water' ||
+      config?.tintable;
+
+    const isTransparent =
+      lowId.includes('leaves') ||
+      lowId.includes('glass') ||
+      lowId === 'water' ||
+      lowId === 'ice' ||
+      config?.transparent ||
+      config?.deco;
+
     // Bit 0x08: Non-Full Block (Paths, Slabs, Stairs, etc.)
-    const isShort = lowId.includes('path') || lowId.includes('slab') || 
-                    lowId.includes('stair') || lowId.includes('farmland');
-    
+    const isShort =
+      lowId.includes('path') ||
+      lowId.includes('slab') ||
+      lowId.includes('stair') ||
+      lowId.includes('farmland');
+
     const isOpaque = !isTransparent;
 
     if (isOpaque) props |= 0x01;

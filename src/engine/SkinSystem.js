@@ -4,7 +4,7 @@ export class SkinSystem {
     this.customSkinData = null;
     const base = import.meta.env.BASE_URL || '/';
     const assetPath = base.endsWith('/') ? base + 'assets/' : base + '/assets/';
-    
+
     this.classicSkins = [
       {
         id: 'classic_steve',

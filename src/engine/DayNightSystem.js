@@ -26,11 +26,23 @@ export class DayNightSystem {
       : 'plains';
     const roll = Math.random();
 
-    if (biomeId === 'desert' || biomeId === 'badlands' || biomeId === 'canyon') {
+    if (
+      biomeId === 'desert' ||
+      biomeId === 'badlands' ||
+      biomeId === 'canyon'
+    ) {
       this.weatherType = roll > 0.985 ? 'storm' : 'clear';
-    } else if (biomeId === 'swamp' || biomeId === 'forest' || biomeId === 'lush_grove') {
+    } else if (
+      biomeId === 'swamp' ||
+      biomeId === 'forest' ||
+      biomeId === 'lush_grove'
+    ) {
       this.weatherType = roll > 0.82 ? 'storm' : roll > 0.42 ? 'rain' : 'clear';
-    } else if (biomeId === 'tundra' || biomeId === 'snow' || biomeId === 'alpine') {
+    } else if (
+      biomeId === 'tundra' ||
+      biomeId === 'snow' ||
+      biomeId === 'alpine'
+    ) {
       this.weatherType = roll > 0.88 ? 'storm' : roll > 0.46 ? 'rain' : 'clear';
     } else {
       this.weatherType = roll > 0.9 ? 'storm' : roll > 0.58 ? 'rain' : 'clear';
@@ -46,11 +58,7 @@ export class DayNightSystem {
     }
 
     const targetIntensity =
-      this.weatherType === 'storm'
-        ? 1
-        : this.weatherType === 'rain'
-          ? 0.68
-          : 0;
+      this.weatherType === 'storm' ? 1 : this.weatherType === 'rain' ? 0.68 : 0;
     this.weatherIntensity = THREE.MathUtils.lerp(
       this.weatherIntensity,
       targetIntensity,
@@ -89,23 +97,31 @@ export class DayNightSystem {
     const base = import.meta.env.BASE_URL || '/';
     const assetPath = base.endsWith('/') ? base : base + '/';
 
-    loadTex(`${assetPath}resource_pack/assets/minecraft/textures/environment/sun.png`, 0xfffde8, (mat) => {
-      this.sunPlane = new THREE.Mesh(planeGeo, mat);
-      this.sunPlane.renderOrder = -1;
-      scene.add(this.sunPlane);
-    });
-
-    loadTex(`${assetPath}resource_pack/assets/minecraft/textures/environment/moon_phases.png`, 0xddeeff, (mat) => {
-      mat.opacity = 0;
-      if (mat.map) {
-        mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
-        mat.map.repeat.set(0.25, 0.5); // Minecraft moon_phases are 4x2 or 4 phases horizontally
-        mat.map.offset.set(0, 0.5);   // Full moon is usually first top-left
+    loadTex(
+      `${assetPath}resource_pack/assets/minecraft/textures/environment/sun.png`,
+      0xfffde8,
+      (mat) => {
+        this.sunPlane = new THREE.Mesh(planeGeo, mat);
+        this.sunPlane.renderOrder = -1;
+        scene.add(this.sunPlane);
       }
-      this.moonPlane = new THREE.Mesh(planeGeo.clone(), mat);
-      this.moonPlane.renderOrder = -1;
-      scene.add(this.moonPlane);
-    });
+    );
+
+    loadTex(
+      `${assetPath}resource_pack/assets/minecraft/textures/environment/moon_phases.png`,
+      0xddeeff,
+      (mat) => {
+        mat.opacity = 0;
+        if (mat.map) {
+          mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+          mat.map.repeat.set(0.25, 0.5); // Minecraft moon_phases are 4x2 or 4 phases horizontally
+          mat.map.offset.set(0, 0.5); // Full moon is usually first top-left
+        }
+        this.moonPlane = new THREE.Mesh(planeGeo.clone(), mat);
+        this.moonPlane.renderOrder = -1;
+        scene.add(this.moonPlane);
+      }
+    );
   }
 
   update(delta, getPlayerPosition) {

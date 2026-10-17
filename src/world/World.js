@@ -187,16 +187,27 @@ export class World {
   getGroundYBelow(x, y, z) {
     // Scratch arrays/points to avoid per-frame allocation
     if (!this._groundSearchPoints) {
-        this._groundSearchPoints = [ [0,0], [0,0], [0,0], [0,0], [0,0] ];
+      this._groundSearchPoints = [
+        [0, 0],
+        [0, 0],
+        [0, 0],
+        [0, 0],
+        [0, 0],
+      ];
     }
-    
+
     const radius = 0.1;
     const pts = this._groundSearchPoints;
-    pts[0][0] = x;          pts[0][1] = z;
-    pts[1][0] = x - radius; pts[1][1] = z - radius;
-    pts[2][0] = x + radius; pts[2][1] = z - radius;
-    pts[3][0] = x - radius; pts[3][1] = z + radius;
-    pts[4][0] = x + radius; pts[4][1] = z + radius;
+    pts[0][0] = x;
+    pts[0][1] = z;
+    pts[1][0] = x - radius;
+    pts[1][1] = z - radius;
+    pts[2][0] = x + radius;
+    pts[2][1] = z - radius;
+    pts[3][0] = x - radius;
+    pts[3][1] = z + radius;
+    pts[4][0] = x + radius;
+    pts[4][1] = z + radius;
 
     let maxGroundY = Number.NEGATIVE_INFINITY;
     const startY = Math.floor(y + 0.1);
@@ -246,7 +257,11 @@ export class World {
     return Math.max(this.minTerrainY, startY - searchDepthLimit);
   }
 
-  getGroundYAt(x, z, currentY = this.game?.physics?.position?.y ?? this.seaLevel) {
+  getGroundYAt(
+    x,
+    z,
+    currentY = this.game?.physics?.position?.y ?? this.seaLevel
+  ) {
     return this.getGroundYBelow(x, currentY, z);
   }
 
@@ -368,10 +383,6 @@ export class World {
     return this.interaction.getLandmarksNear(x, z, radius);
   }
 
-  setSeed(seed) {
-    this.terrain.setSeed(seed);
-  }
-
   serialize() {
     return this.persistence.serialize();
   }
@@ -409,15 +420,18 @@ export class World {
   }
   computeMineDuration(id, item, mode) {
     let base = this.blocks.computeMineDuration(id, item, mode);
-    
+
     // Apply Efficiency Enchantment
-    const effMultiplier = this.game.engine?.enchantmentSystem?.getMiningSpeedMultiplier(item) || 1;
+    const effMultiplier =
+      this.game.engine?.enchantmentSystem?.getMiningSpeedMultiplier(item) || 1;
     base /= effMultiplier;
 
     // Apply Haste/Fatigue Potion Effects
     if (this.game.gameState.activeEffects) {
-        const hasteEffect = this.game.gameState.activeEffects.find(e => e.id === 'haste');
-        if (hasteEffect) base *= Math.pow(0.8, hasteEffect.level);
+      const hasteEffect = this.game.gameState.activeEffects.find(
+        (e) => e.id === 'haste'
+      );
+      if (hasteEffect) base *= Math.pow(0.8, hasteEffect.level);
     }
 
     return Math.max(0.05, base);
@@ -539,15 +553,17 @@ export class World {
 
     this.spawnBreakParticles(x, y, z, id);
     this.spawnPickupEffect(x, y, z, dropId, this.game?.getPlayerPosition?.());
-    
+
     // Apply Durability Damage to Active Tool
     const selectedSlot = this.game.gameState.selectedSlot;
     const item = this.game.gameState.inventory[selectedSlot];
     if (item && item.kind === 'tool') {
-        const shouldDamage = this.game.engine?.enchantmentSystem?.shouldConsumeDurability(item) ?? true;
-        if (shouldDamage) {
-            this.game.gameState.applyDurabilityDamage(selectedSlot, 1);
-        }
+      const shouldDamage =
+        this.game.engine?.enchantmentSystem?.shouldConsumeDurability(item) ??
+        true;
+      if (shouldDamage) {
+        this.game.gameState.applyDurabilityDamage(selectedSlot, 1);
+      }
     }
 
     window.dispatchEvent(
@@ -571,10 +587,10 @@ export class World {
       const now = performance.now();
       const cooldown = 200; // 200ms
       if (this._lastCreativeMine && now - this._lastCreativeMine < cooldown) {
-          return false;
+        return false;
       }
       this._lastCreativeMine = now;
-      
+
       const broken = this.breakBlockAt(hit.cell.x, hit.cell.y, hit.cell.z);
       this.resetMiningProgress();
       return broken;
@@ -671,12 +687,15 @@ export class World {
     const resolveSlabVariant = () => {
       const normalY = Number(hit.normal?.y) || 0;
       const placeTop =
-        normalY < 0 ||
-        (normalY === 0 && camera.position.y > py + 0.5);
+        normalY < 0 || (normalY === 0 && camera.position.y > py + 0.5);
       return placeTop ? `${blockId}:top` : blockId;
     };
 
-    if (isSlab && existingId && normalizeBlockVariantId(existingId) === blockId) {
+    if (
+      isSlab &&
+      existingId &&
+      normalizeBlockVariantId(existingId) === blockId
+    ) {
       const placedVariant = resolveSlabVariant();
       if (existingId !== placedVariant) {
         const fullBlockId = blockId.replace(/_slab$/, '');
@@ -1036,48 +1055,55 @@ export class World {
     }
 
     if (blockId === 'crafting_table') {
-      window.dispatchEvent(new CustomEvent('inventory-toggle', { 
-        detail: true,
-        mode: 'WORKSHOP' 
-      }));
+      window.dispatchEvent(
+        new CustomEvent('inventory-toggle', {
+          detail: true,
+          mode: 'WORKSHOP',
+        })
+      );
       return true;
     }
 
     // Door/Trapdoor Toggling
     const blockData = this.getBlockData(blockId);
-    if (blockData?.renderType === 'door' || blockData?.renderType === 'trapdoor') {
-        const isOpen = blockId.includes(':open');
-        const baseId = blockId.replace(':open', '');
-        const nextId = isOpen ? baseId : baseId + ':open';
-        
-        const cx = this.getChunkCoord(cell.x);
-        const cy = this.getChunkCoord(cell.y);
-        const cz = this.getChunkCoord(cell.z);
-        const ownerKey = this.getChunkKey(cx, cy, cz);
+    if (
+      blockData?.renderType === 'door' ||
+      blockData?.renderType === 'trapdoor'
+    ) {
+      const isOpen = blockId.includes(':open');
+      const baseId = blockId.replace(':open', '');
+      const nextId = isOpen ? baseId : baseId + ':open';
 
-        this.addBlock(cell.x, cell.y, cell.z, nextId, ownerKey, true);
-        
-        if (blockData.pairId) {
-            const pairY = cell.y + Number(blockData.pairOffsetY);
-            const pairKey = this.getKey(cell.x, pairY, cell.z);
-            const currentPairId = this.state.blockMap.get(pairKey);
-            if (currentPairId) {
-                const pBaseId = currentPairId.replace(':open', '');
-                const pNextId = isOpen ? pBaseId : pBaseId + ':open';
-                this.addBlock(cell.x, pairY, cell.z, pNextId, ownerKey, true);
-            }
+      const cx = this.getChunkCoord(cell.x);
+      const cy = this.getChunkCoord(cell.y);
+      const cz = this.getChunkCoord(cell.z);
+      const ownerKey = this.getChunkKey(cx, cy, cz);
+
+      this.addBlock(cell.x, cell.y, cell.z, nextId, ownerKey, true);
+
+      if (blockData.pairId) {
+        const pairY = cell.y + Number(blockData.pairOffsetY);
+        const pairKey = this.getKey(cell.x, pairY, cell.z);
+        const currentPairId = this.state.blockMap.get(pairKey);
+        if (currentPairId) {
+          const pBaseId = currentPairId.replace(':open', '');
+          const pNextId = isOpen ? pBaseId : pBaseId + ':open';
+          this.addBlock(cell.x, pairY, cell.z, pNextId, ownerKey, true);
         }
-        
-        this.game.audio?.play('action-success');
-        this.chunkManager.flushPriorityChunkRebuilds(20);
-        return true;
+      }
+
+      this.game.audio?.play('action-success');
+      this.chunkManager.flushPriorityChunkRebuilds(20);
+      return true;
     }
 
     if (blockId === 'barrel') {
-      window.dispatchEvent(new CustomEvent('inventory-toggle', { 
-        detail: true,
-        mode: 'BARREL' 
-      }));
+      window.dispatchEvent(
+        new CustomEvent('inventory-toggle', {
+          detail: true,
+          mode: 'BARREL',
+        })
+      );
       return true;
     }
 
@@ -1217,21 +1243,24 @@ export class World {
 
   getAreaInfluence(position) {
     if (!this._areaInfluenceResult) {
-        this._areaInfluenceResult = { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
+      this._areaInfluenceResult = { x: 0, y: 0, z: 0, virus: 0, arlo: 0 };
     }
     const res = this._areaInfluenceResult;
-    
+
     if (!this.corruptionEnabled || !position) {
-        res.virus = 0; res.arlo = 0;
-        return res;
+      res.virus = 0;
+      res.arlo = 0;
+      return res;
     }
 
     const px = Math.round(position.x),
       py = Math.round(position.y),
       pz = Math.round(position.z);
-    
-    res.x = px; res.y = py; res.z = pz;
-    
+
+    res.x = px;
+    res.y = py;
+    res.z = pz;
+
     const radius = 3;
     let virusHits = 0,
       arloHits = 0,
@@ -1266,7 +1295,7 @@ export class World {
     this.state.terrainHeightCache.clear();
     this.state.biomeCache.clear();
     this.chunks.clear();
-    
+
     if (this.visuals?.dispose) this.visuals.dispose();
     if (this.fluids?.dispose) this.fluids.dispose();
     if (this.redstone?.dispose) this.redstone.dispose();

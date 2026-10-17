@@ -57,7 +57,7 @@ export class MobEntity {
     this.tmpMoveDir = new THREE.Vector3();
     this.tmpKnockbackDir = new THREE.Vector3();
     this.targetPos = new THREE.Vector3(x, y, z);
-    
+
     // -- WORLD CLASS AI STATES --
     this.state = 'IDLE'; // IDLE, WANDER, CHASE, FLEE
     this.lastState = 'IDLE';
@@ -243,13 +243,13 @@ export class MobEntity {
       if (away.lengthSq() > 0.0001) {
         away.normalize();
         this.mesh.position.addScaledVector(away, knockback);
-        
+
         // World Class Expansion: Panic/Flee Behavior
         if (this.config.friendly) {
-            this.state = 'FLEE';
-            this.fleeTimer = 5.0; // 5 seconds of panic
-            this.timer = 5.0;
-            this.targetPos.copy(this.mesh.position).add(away.multiplyScalar(10)); // Run far away
+          this.state = 'FLEE';
+          this.fleeTimer = 5.0; // 5 seconds of panic
+          this.timer = 5.0;
+          this.targetPos.copy(this.mesh.position).add(away.multiplyScalar(10)); // Run far away
         }
       }
     }
@@ -314,7 +314,7 @@ export class MobEntity {
 
     // AI STATE TRANSITIONS
     if (this.fleeTimer > 0) {
-        this.state = 'FLEE';
+      this.state = 'FLEE';
     } else if (isHostile && distToPlayer < 9) {
       this.state = 'CHASE';
     } else if (this.timer <= 0) {
@@ -327,29 +327,44 @@ export class MobEntity {
 
     // STATE EXECUTION
     switch (this.state) {
-        case 'FLEE':
-            this.executeMovement(delta, this.targetPos, this.maxMoveSpeed * 1.5, true);
-            break;
-        case 'CHASE':
-            if (isHostile) {
-                this.executeMovement(delta, playerPos, this.maxMoveSpeed * 0.7, true);
-                // Basic attack contact
-                if (distToPlayer < 1.35 && this.contactCooldown <= 0) {
-                    this.game.gameState.takeDamage(1);
-                    const knock = this.tmpKnockbackDir.subVectors(playerPos, this.mesh.position);
-                    this.game.physics.applyKnockback(knock, 2.3, 0.32);
-                    this.contactCooldown = 1.25;
-                    this.game.audio?.play('player-damaged', { position: this.mesh.position });
-                }
-            }
-            break;
-        case 'WANDER':
-             this.executeMovement(delta, this.targetPos, this.maxMoveSpeed * 0.25, true);
-             break;
-        case 'IDLE':
-        default:
-            this.moveVelocity.multiplyScalar(Math.max(0, 1 - delta * 8));
-            break;
+      case 'FLEE':
+        this.executeMovement(
+          delta,
+          this.targetPos,
+          this.maxMoveSpeed * 1.5,
+          true
+        );
+        break;
+      case 'CHASE':
+        if (isHostile) {
+          this.executeMovement(delta, playerPos, this.maxMoveSpeed * 0.7, true);
+          // Basic attack contact
+          if (distToPlayer < 1.35 && this.contactCooldown <= 0) {
+            this.game.gameState.takeDamage(1);
+            const knock = this.tmpKnockbackDir.subVectors(
+              playerPos,
+              this.mesh.position
+            );
+            this.game.physics.applyKnockback(knock, 2.3, 0.32);
+            this.contactCooldown = 1.25;
+            this.game.audio?.play('player-damaged', {
+              position: this.mesh.position,
+            });
+          }
+        }
+        break;
+      case 'WANDER':
+        this.executeMovement(
+          delta,
+          this.targetPos,
+          this.maxMoveSpeed * 0.25,
+          true
+        );
+        break;
+      case 'IDLE':
+      default:
+        this.moveVelocity.multiplyScalar(Math.max(0, 1 - delta * 8));
+        break;
     }
 
     this.updateSurfaceY(delta, canUseWater);
@@ -360,19 +375,22 @@ export class MobEntity {
     dir.y = 0;
     if (dir.lengthSq() > 0.0001) dir.normalize();
 
-    this.moveVelocity.lerp(
-      dir.multiplyScalar(speed),
-      Math.min(1, delta * 7)
-    );
+    this.moveVelocity.lerp(dir.multiplyScalar(speed), Math.min(1, delta * 7));
 
     // Obstacle Detection & Jumping
     if (allowJumping && this.jumpTimer <= 0) {
-        const checkPos = this.mesh.position.clone().add(dir.multiplyScalar(0.7));
-        if (this.game.world.isSolidAt(checkPos.x, this.mesh.position.y - this.height/2 + 0.5, checkPos.z)) {
-            // Block in front! Jump.
-            this.velocity.y = 5.5; // Upward impulse
-            this.jumpTimer = 0.8;  // Cooldown
-        }
+      const checkPos = this.mesh.position.clone().add(dir.multiplyScalar(0.7));
+      if (
+        this.game.world.isSolidAt(
+          checkPos.x,
+          this.mesh.position.y - this.height / 2 + 0.5,
+          checkPos.z
+        )
+      ) {
+        // Block in front! Jump.
+        this.velocity.y = 5.5; // Upward impulse
+        this.jumpTimer = 0.8; // Cooldown
+      }
     }
 
     this.moveWithCollision(
@@ -446,7 +464,8 @@ export class MobEntity {
       return;
     }
 
-    const inWater = hasWater && this.mesh.position.y <= waterY + halfHeight * 0.3;
+    const inWater =
+      hasWater && this.mesh.position.y <= waterY + halfHeight * 0.3;
     const floatTargetY =
       inWater && canUseWater
         ? Math.max(groundY, waterY + halfHeight * 0.2)

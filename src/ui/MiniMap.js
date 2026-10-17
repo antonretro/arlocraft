@@ -47,7 +47,8 @@ export class MiniMap {
     this.container = container || this.container;
     this.canvas = canvas || this.canvas;
     this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
-    if (this.container) this.container.style.display = this.visible ? 'block' : 'none';
+    if (this.container)
+      this.container.style.display = this.visible ? 'block' : 'none';
   }
 
   toggle() {
@@ -72,30 +73,28 @@ export class MiniMap {
     const quality = this.game?.qualityTier ?? 'balanced';
     const isTouchDevice =
       'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    const updateInterval =
-      isTouchDevice
-        ? quality === 'low'
-          ? 0.48
-          : quality === 'balanced'
-            ? 0.36
-            : 0.28
-        : quality === 'low'
-          ? 0.33
-          : quality === 'balanced'
-            ? 0.24
-            : 0.18;
-    const cells =
-      isTouchDevice
-        ? quality === 'low'
-          ? 18
-          : quality === 'balanced'
-            ? 22
-            : 26
-        : quality === 'low'
-          ? 24
-          : quality === 'balanced'
-            ? 30
-            : this.cells;
+    const updateInterval = isTouchDevice
+      ? quality === 'low'
+        ? 0.48
+        : quality === 'balanced'
+          ? 0.36
+          : 0.28
+      : quality === 'low'
+        ? 0.33
+        : quality === 'balanced'
+          ? 0.24
+          : 0.18;
+    const cells = isTouchDevice
+      ? quality === 'low'
+        ? 18
+        : quality === 'balanced'
+          ? 22
+          : 26
+      : quality === 'low'
+        ? 24
+        : quality === 'balanced'
+          ? 30
+          : this.cells;
 
     this.accumulator += delta;
     if (this.accumulator < updateInterval) return;

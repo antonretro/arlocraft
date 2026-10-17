@@ -112,7 +112,7 @@ export class WorldTerrainService {
       g = 0,
       b = 0;
     const tier = this.world.config.qualityTier;
-    const radius = tier === 'high' ? 6 : tier === 'balanced' ? 4 : 2; 
+    const radius = tier === 'high' ? 6 : tier === 'balanced' ? 4 : 2;
     const count = (radius * 2 + 1) * (radius * 2 + 1);
 
     for (let dx = -radius; dx <= radius; dx++) {
@@ -195,7 +195,8 @@ export class WorldTerrainService {
     const biome = this.getBiomeAt(x, z);
     const waterLevel = this.getSurfaceWaterLevelAt(x, z, biome);
     const terrainHeight = this.getColumnHeight(x, z);
-    if (!this.shouldPlaceSurfaceWaterAt(x, z, terrainHeight, biome)) return null;
+    if (!this.shouldPlaceSurfaceWaterAt(x, z, terrainHeight, biome))
+      return null;
     return waterLevel + 0.5;
   }
 
@@ -235,7 +236,8 @@ export class WorldTerrainService {
     // 4. Final Fallback for unloaded chunks: assume water if between terrain and surface
     const terrainHeight = this.getColumnHeight(x, z);
     const biome = this.getBiomeAt(x, z);
-    if (!this.shouldPlaceSurfaceWaterAt(x, z, terrainHeight, biome)) return false;
+    if (!this.shouldPlaceSurfaceWaterAt(x, z, terrainHeight, biome))
+      return false;
     return y > terrainHeight;
   }
 
@@ -253,7 +255,10 @@ export class WorldTerrainService {
             Math.floor(height) + 12,
             this.world.seaLevel + 2
           );
-          const scanFloorY = Math.max(this.world.minTerrainY, Math.floor(height) - 8);
+          const scanFloorY = Math.max(
+            this.world.minTerrainY,
+            Math.floor(height) - 8
+          );
           let topSolidY = null;
 
           // Prefer actual loaded block data so trees/platforms count when present.
@@ -342,8 +347,16 @@ export class WorldTerrainService {
     if (density <= threshold) return false;
 
     const localPriority = this.hash2D(cellX * 211 + 31, cellZ * 157 - 47);
-    for (let neighborCellX = cellX - 1; neighborCellX <= cellX + 1; neighborCellX++) {
-      for (let neighborCellZ = cellZ - 1; neighborCellZ <= cellZ + 1; neighborCellZ++) {
+    for (
+      let neighborCellX = cellX - 1;
+      neighborCellX <= cellX + 1;
+      neighborCellX++
+    ) {
+      for (
+        let neighborCellZ = cellZ - 1;
+        neighborCellZ <= cellZ + 1;
+        neighborCellZ++
+      ) {
         if (neighborCellX === cellX && neighborCellZ === cellZ) continue;
 
         const neighborCandidate = getTreeCandidateForCell(
@@ -497,21 +510,26 @@ export class WorldTerrainService {
 
   shouldPlaceVillageChunk(cx, cz) {
     if (Math.abs(cx) <= 1 && Math.abs(cz) <= 1) return false;
-    
+
     // Check for road affinity
-    const wx = cx * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
-    const wz = cz * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
+    const wx =
+      cx * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
+    const wz =
+      cz * this.world.chunkSize + Math.floor(this.world.chunkSize * 0.5);
     const onHighway = isHighwayAt(this.noise, wx, wz);
     const onPath = isPathAt(this.noise, wx, wz);
-    
+
     // Boost chance if on a road (0.992 -> 0.85 approx 20x boost)
-    const threshold = (onHighway || onPath) ? 0.82 : 0.992;
-    
+    const threshold = onHighway || onPath ? 0.82 : 0.992;
+
     if (this.hash2D(cx * 31 + 71, cz * 31 - 19) < threshold) return false;
-    
+
     const biome = this.getBiomeAt(wx, wz);
     return (
-      biome.id === 'plains' || biome.id === 'forest' || biome.id === 'meadow' || biome.id === 'desert'
+      biome.id === 'plains' ||
+      biome.id === 'forest' ||
+      biome.id === 'meadow' ||
+      biome.id === 'desert'
     );
   }
 

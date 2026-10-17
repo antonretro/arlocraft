@@ -29,7 +29,7 @@ export class SimulationManager {
         runWorld = this.idleWorldTick % 10 === 0;
         worldDelta = Math.min(1 / 20, delta * 3);
       }
-      
+
       if (runWorld || g.world.pendingChunkLoads.length > 0) {
         g.world.update(playerPos, worldDelta);
       }
@@ -39,42 +39,47 @@ export class SimulationManager {
     // 2. Core Gameplay Systems Ticking
     g.entities.update(delta);
     g.particles.update(delta);
-    
+
     // Survival & Area Influence (Throttled to 5Hz)
     g.survival.update(delta);
     this.zoneTick = (this.zoneTick || 0) + delta;
     if (this.zoneTick >= 0.2) {
-        const areaInfluence = g.world.getAreaInfluence(playerPos);
-        if (g.updateZoneMeter) g.updateZoneMeter(areaInfluence);
-        this.zoneTick = 0;
+      const areaInfluence = g.world.getAreaInfluence(playerPos);
+      if (g.updateZoneMeter) g.updateZoneMeter(areaInfluence);
+      this.zoneTick = 0;
     }
 
     // Horizons & Biomes (Throttled to 10Hz)
     this.biomeTick = (this.biomeTick || 0) + delta;
     if (this.biomeTick >= 0.1) {
-        if (g.horizons) {
-            const dominantBiome = g.world.terrain.getBiomeAt(playerPos.x, playerPos.z)?.id || 'plains';
-            g.horizons.update(g.camera.instance.position, g.renderer.daylight, dominantBiome);
-        }
-        this.biomeTick = 0;
+      if (g.horizons) {
+        const dominantBiome =
+          g.world.terrain.getBiomeAt(playerPos.x, playerPos.z)?.id || 'plains';
+        g.horizons.update(
+          g.camera.instance.position,
+          g.renderer.daylight,
+          dominantBiome
+        );
+      }
+      this.biomeTick = 0;
     }
 
     // World & Day/Night
     g.world.update(playerPos, delta);
     g.dayNight.update(delta, () => playerPos);
-    
+
     // 3. UI & Utility Sync
     if (g.minimap) g.minimap.update(delta, playerPos, g.viewYaw);
-    
+
     // Throttle coordinate updates to 10Hz (0.1s)
     this.coordinateTick = (this.coordinateTick || 0) + delta;
     if (this.coordinateTick >= 0.1) {
-        g.hud.updateCoordinates(playerPos, g.viewYaw, g.world);
-        this.coordinateTick = 0;
+      g.hud.updateCoordinates(playerPos, g.viewYaw, g.world);
+      this.coordinateTick = 0;
     }
-    
+
     if (g.updateDebugOverlay) g.updateDebugOverlay(delta);
-    
+
     // 4. State & Utility Updates
     this.updateUnderwaterState();
     this.updateDynamicQuality(delta);
@@ -101,7 +106,8 @@ export class SimulationManager {
     g.performanceSampler.time += Math.max(0, delta);
     if (g.performanceSampler.time < 1.2) return;
 
-    const fps = g.performanceSampler.frames / Math.max(0.001, g.performanceSampler.time);
+    const fps =
+      g.performanceSampler.frames / Math.max(0.001, g.performanceSampler.time);
     g.performanceSampler.frames = 0;
     g.performanceSampler.time = 0;
 
@@ -133,7 +139,7 @@ export class SimulationManager {
     if (profile) {
       g.renderer.setResolutionScale(profile.resolution);
       g.settings.resolutionScale = profile.resolution;
-      
+
       const resInput = document.getElementById('setting-resolution');
       const resLabel = document.getElementById('setting-resolution-value');
       if (resInput) resInput.value = profile.resolution;

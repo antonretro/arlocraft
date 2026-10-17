@@ -1,3 +1,4 @@
+import StatsPanel from 'stats.js';
 import * as THREE from 'three';
 import { EngineBootstrap } from './EngineBootstrap.js';
 import { SimulationManager } from './SimulationManager.js';
@@ -7,7 +8,11 @@ export class Game {
     this.viewYaw = 0;
     this.viewPitch = 0;
     this.pitchLimit = Math.PI / 2 - 0.0001;
-    this.cameraModes = ['FIRST_PERSON', 'THIRD_PERSON_BACK', 'THIRD_PERSON_FRONT'];
+    this.cameraModes = [
+      'FIRST_PERSON',
+      'THIRD_PERSON_BACK',
+      'THIRD_PERSON_FRONT',
+    ];
     this.cameraModeIndex = 0;
 
     this.debugVisible = false;
@@ -34,16 +39,20 @@ export class Game {
       },
       getCurrentScreen: () => this._currentScreen,
       setStatus: (m) => console.log(`[UI] ${m}`),
-      showHUD: (v) => window.dispatchEvent(new CustomEvent('ui-set-hud', { detail: v })),
+      showHUD: (v) =>
+        window.dispatchEvent(new CustomEvent('ui-set-hud', { detail: v })),
       renderWorldList: () => {},
       showTitle: (v) => this.ui.setMenuScreen(v ? 'title' : 'ingame'),
-      showSettings: (v) => this.ui.setMenuScreen(v ? 'settings' : (this.hasStarted ? 'pause' : 'title')),
+      showSettings: (v) =>
+        this.ui.setMenuScreen(
+          v ? 'settings' : this.hasStarted ? 'pause' : 'title'
+        ),
     };
 
     // Bootstrap initialized in init()
     this.simulation = new SimulationManager(this);
 
-    this.init().catch(e => console.error('[ArloCraft] Init Failure:', e));
+    this.init().catch((e) => console.error('[ArloCraft] Init Failure:', e));
   }
 
   saveSettings() {
@@ -211,7 +220,9 @@ export class Game {
   }
 
   showSettings(visible) {
-    this.ui.setMenuScreen(visible ? 'settings' : (this.hasStarted ? 'pause' : 'title'));
+    this.ui.setMenuScreen(
+      visible ? 'settings' : this.hasStarted ? 'pause' : 'title'
+    );
   }
 
   isSettingsOpen() {
@@ -249,17 +260,17 @@ export class Game {
     this.cancelMining();
     this.showPause(true);
     this.ui.showHUD(false);
-    
+
     if (this.world?.visuals) {
       this.world.visuals.updateHover?.(0, 0, 0, false);
       this.world.visuals.updatePlacement?.(0, 0, 0, false);
     }
-    
+
     this.helpPanel?.setState?.('paused');
     this.touchControls?.show?.(false);
-    
+
     if (document.pointerLockElement) {
-        document.exitPointerLock();
+      document.exitPointerLock();
     }
   }
 
@@ -326,7 +337,7 @@ export class Game {
     }
 
     if (this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen) {
-       this.pauseGame();
+      this.pauseGame();
     }
   }
 
@@ -354,13 +365,13 @@ export class Game {
     this.showSettings(false);
     this.showTitle(true);
     this.ui.showHUD(false);
-    
+
     if (this.world?.visuals) {
       this.world.visuals.updateHover(0, 0, 0, false);
       this.world.visuals.updatePlacement(0, 0, 0, false);
     }
     this.cancelMining();
-    
+
     this.helpPanel.setState('title');
     this.audio.play('ui-back');
   }
@@ -390,7 +401,8 @@ export class Game {
     this.applyMobilePresetIfNeeded();
 
     // Startup Configuration (now safe to access this.settings)
-    this.selectedStartMode = this.settings.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
+    this.selectedStartMode =
+      this.settings.preferredMode === 'CREATIVE' ? 'CREATIVE' : 'SURVIVAL';
     this.selectedWorldSlot = this.settings.selectedWorldSlot ?? 'slot-1';
 
     this.setMenuMode(this.selectedStartMode, false);
@@ -403,37 +415,51 @@ export class Game {
 
     this.world.setRenderDistance(this.getEffectiveRenderDistanceForTier());
     this.applyQualityTier(this.settings.qualityTierPref ?? 'balanced');
-    
+
     this.renderer.toggleShadows(this.settings.shadowsEnabled);
     this.renderer.setFogDensityScale(this.settings.fogDensityScale);
     this.renderer.setResolutionScale(this.settings.resolutionScale);
-    
+
     this.hud.init();
     this.updatePlayerSkin(this.settings.skinUsername ?? '', { persist: false });
-    
+
     if (this.features.touchControls && this.isTouchDevice()) {
-      this.touchControls = new (await import('../ui/TouchControls.js')).TouchControls(this);
+      this.touchControls = new (
+        await import('../ui/TouchControls.js')
+      ).TouchControls(this);
     }
 
     this.onResize();
     this.animate();
-    
+
     this.handlers.onVisibilityChange = () => {
-      if (document.hidden && this.hasStarted && !this.isPaused && !this.multiplayer?.isConnected()) {
+      if (
+        document.hidden &&
+        this.hasStarted &&
+        !this.isPaused &&
+        !this.multiplayer?.isConnected()
+      ) {
         this.pauseGame();
       }
     };
     this.handlers.onBlur = () => {
-      if (this.hasStarted && !this.isPaused && !this.multiplayer?.isConnected()) {
+      if (
+        this.hasStarted &&
+        !this.isPaused &&
+        !this.multiplayer?.isConnected()
+      ) {
         this.pauseGame();
       }
     };
     this.handlers.onResize = () => this.onResize();
 
-    document.addEventListener('visibilitychange', this.handlers.onVisibilityChange);
+    document.addEventListener(
+      'visibilitychange',
+      this.handlers.onVisibilityChange
+    );
     window.addEventListener('blur', this.handlers.onBlur);
     window.addEventListener('resize', this.handlers.onResize);
-    
+
     this.ui.setMenuScreen('title');
     this.helpPanel.setState('title');
   }
@@ -449,11 +475,12 @@ export class Game {
 
     this.clock.update(timestamp);
     const delta = Math.min(this.clock.getDelta(), 0.1);
-    
+
     this.profiler.update(this.renderer.instance);
     this.world.blockRegistry.updateShaderMaterials(this.clock.getElapsed());
 
-    const canSimulate = this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen;
+    const canSimulate =
+      this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen;
     this.input.update();
 
     if (canSimulate) {
@@ -466,7 +493,9 @@ export class Game {
 
     const playerPos = this.getPlayerPosition();
     const playerVel = this.physics.velocity;
-    const speed = Math.sqrt(playerVel.x * playerVel.x + playerVel.z * playerVel.z);
+    const speed = Math.sqrt(
+      playerVel.x * playerVel.x + playerVel.z * playerVel.z
+    );
     const inWater = this.world.isPositionInWater(
       playerPos.x,
       playerPos.y + this.physics.eyeHeight * 0.45,
@@ -496,16 +525,31 @@ export class Game {
       });
       this._lastMultiplayerPositionSyncAt = timestamp;
     }
-    
+
     this.updateCameraRotation();
 
     const cameraMode = this.cameraModes[this.cameraModeIndex];
     if (cameraMode === 'FIRST_PERSON') {
       this.player.setVisible(false);
-      this.camera.update(delta, playerPos, this.camera.instance.rotation, this.player.bobCycle, speed, this.physics.isSprinting, this.settings?.fov ?? 75, this.physics.eyeHeight);
+      this.camera.update(
+        delta,
+        playerPos,
+        this.camera.instance.rotation,
+        this.player.bobCycle,
+        speed,
+        this.physics.isSprinting,
+        this.settings?.fov ?? 75,
+        this.physics.eyeHeight
+      );
     } else {
       this.player.setVisible(true);
-      this.camera.updateThirdPerson(delta, playerPos, this.viewYaw, this.viewPitch, cameraMode === 'THIRD_PERSON_FRONT' ? -4 : 4);
+      this.camera.updateThirdPerson(
+        delta,
+        playerPos,
+        this.viewYaw,
+        this.viewPitch,
+        cameraMode === 'THIRD_PERSON_FRONT' ? -4 : 4
+      );
     }
 
     this.hand.update(delta, this.player.bobCycle, speed > 0.1);
@@ -535,14 +579,19 @@ export class Game {
   getPlayerPosition() {
     if (!this.physics?.playerBody) return this.lastKnownPosition;
     const pos = this.physics.playerBody.translation();
-    if (this.hasStarted && pos.x === 0 && pos.y === 0 && pos.z === 0) return this.lastKnownPosition;
+    if (this.hasStarted && pos.x === 0 && pos.y === 0 && pos.z === 0)
+      return this.lastKnownPosition;
     this.lastKnownPosition.set(pos.x, pos.y, pos.z);
     return this.lastKnownPosition;
   }
 
   adjustLook(deltaYaw, deltaPitch) {
     this.viewYaw += deltaYaw;
-    this.viewPitch = THREE.MathUtils.clamp(this.viewPitch + deltaPitch, -this.pitchLimit, this.pitchLimit);
+    this.viewPitch = THREE.MathUtils.clamp(
+      this.viewPitch + deltaPitch,
+      -this.pitchLimit,
+      this.pitchLimit
+    );
   }
 
   cycleCameraMode() {
@@ -554,7 +603,11 @@ export class Game {
   updateCrosshairVisibility() {
     const crosshair = document.getElementById('crosshair');
     if (!crosshair) return;
-    const shouldBeVisible = this.hasStarted && !this.isPaused && !this.gameState.isInventoryOpen && this.cameraModeIndex !== 2;
+    const shouldBeVisible =
+      this.hasStarted &&
+      !this.isPaused &&
+      !this.gameState.isInventoryOpen &&
+      this.cameraModeIndex !== 2;
     crosshair.classList.toggle('active', shouldBeVisible);
   }
 
@@ -566,7 +619,8 @@ export class Game {
 
   applyQualityTier(tier) {
     this.qualityTier = tier;
-    this.camera.instance.far = tier === 'low' ? 72 : (tier === 'balanced' ? 108 : 140);
+    this.camera.instance.far =
+      tier === 'low' ? 72 : tier === 'balanced' ? 108 : 140;
     this.world.setRenderDistance(this.getEffectiveRenderDistanceForTier(tier));
     this.renderer.setQualityTier?.(tier);
     if (this.world?.config) {
@@ -576,21 +630,26 @@ export class Game {
   }
 
   getEffectiveRenderDistanceForTier(tier = this.qualityTier) {
-    const requested = Math.max(2, Math.min(6, Number(this.settings?.renderDistance) || 3));
-    const cap = tier === 'low' ? 2 : (tier === 'high' ? 6 : 4);
+    const requested = Math.max(
+      2,
+      Math.min(6, Number(this.settings?.renderDistance) || 3)
+    );
+    const cap = tier === 'low' ? 2 : tier === 'high' ? 6 : 4;
     return Math.max(2, Math.min(cap, requested));
   }
 
-  cancelMining() { 
-    if (this.world?.resetMiningProgress) this.world.resetMiningProgress(); 
+  cancelMining() {
+    if (this.world?.resetMiningProgress) this.world.resetMiningProgress();
   }
-  
-  resetEntities() { 
-    this.entities?.reset(); 
+
+  resetEntities() {
+    this.entities?.reset();
   }
 
   updateZoneMeter(influence) {
-    window.dispatchEvent(new CustomEvent('ui-zone-update', { detail: influence }));
+    window.dispatchEvent(
+      new CustomEvent('ui-zone-update', { detail: influence })
+    );
   }
 
   updateDebugOverlay(delta) {
@@ -600,14 +659,19 @@ export class Game {
   }
 
   toggleGameMode() {
-    const nextMode = this.gameState.mode === 'SURVIVAL' ? 'CREATIVE' : 'SURVIVAL';
+    const nextMode =
+      this.gameState.mode === 'SURVIVAL' ? 'CREATIVE' : 'SURVIVAL';
     this.setMenuMode(nextMode);
   }
 
   toggleMinimap() {
     this.settings.minimapEnabled = !this.settings.minimapEnabled;
     this.saveSettings();
-    window.dispatchEvent(new CustomEvent('ui-set-minimap', { detail: this.settings.minimapEnabled }));
+    window.dispatchEvent(
+      new CustomEvent('ui-set-minimap', {
+        detail: this.settings.minimapEnabled,
+      })
+    );
     this.audio.play('ui-click');
   }
 
@@ -632,11 +696,14 @@ export class Game {
       const { materials } = await this.skinLoader.loadSkin(normalized);
       this._applyLoadedSkin(materials);
       const base = import.meta.env.BASE_URL || '/';
-      const assetPath = base.endsWith('/') ? base + 'assets/' : base + '/assets/';
+      const assetPath = base.endsWith('/')
+        ? base + 'assets/'
+        : base + '/assets/';
       window.dispatchEvent(
         new CustomEvent('skin-updated', {
           detail: {
-            skinId: normalized === 'Steve' ? 'classic_steve' : `custom_${normalized}`,
+            skinId:
+              normalized === 'Steve' ? 'classic_steve' : `custom_${normalized}`,
             avatarUrl:
               normalized === 'Steve'
                 ? assetPath + 'steve.png'
@@ -651,7 +718,9 @@ export class Game {
         this.settings.skinUsername = normalized;
         this.saveSettings();
       }
-    } catch (e) { console.error('[ArloCraft] Skin Error:', e); }
+    } catch (e) {
+      console.error('[ArloCraft] Skin Error:', e);
+    }
   }
 
   _applyLoadedSkin(materials) {
@@ -659,19 +728,18 @@ export class Game {
     if (this.hand) this.hand.updateArmSkin(materials.armR);
   }
 
-  shakeCamera(intensity, duration = 0.5, frequency = 12) { 
-    this.camera?.shake?.(intensity, duration, frequency); 
-  }
-
-  cancelMining() {
-    this.world.resetMiningProgress();
+  shakeCamera(intensity, duration = 0.5, frequency = 12) {
+    this.camera?.shake?.(intensity, duration, frequency);
   }
 
   dispose() {
     this._destroyed = true;
     if (this._animationId) cancelAnimationFrame(this._animationId);
 
-    document.removeEventListener('visibilitychange', this.handlers.onVisibilityChange);
+    document.removeEventListener(
+      'visibilitychange',
+      this.handlers.onVisibilityChange
+    );
     window.removeEventListener('blur', this.handlers.onBlur);
     window.removeEventListener('resize', this.handlers.onResize);
 

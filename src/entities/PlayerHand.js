@@ -189,7 +189,12 @@ export class PlayerHand {
   }
 
   populateVoxelMesh(group, texture, url) {
-    if (!group || group.userData?.disposed || this.disposed || !texture?.image) {
+    if (
+      !group ||
+      group.userData?.disposed ||
+      this.disposed ||
+      !texture?.image
+    ) {
       return;
     }
 
@@ -384,7 +389,11 @@ export class PlayerHand {
         this.populateVoxelMesh(group, texture, url);
       })
       .catch((error) => {
-        console.warn('[ArloCraft] Failed to load held-item texture:', url, error);
+        console.warn(
+          '[ArloCraft] Failed to load held-item texture:',
+          url,
+          error
+        );
       });
 
     // Apply pending tint if set
@@ -487,7 +496,9 @@ export class PlayerHand {
           // Fallback to block texture if no item texture found
           const mat = registry.getMaterial(normalizedId);
           // Handle multi-texture materials (pick a side face usually)
-          const texture = Array.isArray(mat) ? mat[4].map || mat[0].map : mat.map;
+          const texture = Array.isArray(mat)
+            ? mat[4].map || mat[0].map
+            : mat.map;
           if (!texture && Array.isArray(mat)) {
             // Find any texture in the array
             previewUrl = this.resolveTextureUrl(mat.find((m) => m.map)?.map);
@@ -502,16 +513,24 @@ export class PlayerHand {
 
           const tid = textureKey.toLowerCase();
           const nid = normalizedId.toLowerCase();
-          const needsTint = tid.includes('grass') || tid.includes('fern') || tid.includes('leaves') ||
-                            nid.includes('grass') || nid.includes('fern') || nid.includes('leaves') ||
-                            nid === 'sugar_cane' || nid === 'vine';
+          const needsTint =
+            tid.includes('grass') ||
+            tid.includes('fern') ||
+            tid.includes('leaves') ||
+            nid.includes('grass') ||
+            nid.includes('fern') ||
+            nid.includes('leaves') ||
+            nid === 'sugar_cane' ||
+            nid === 'vine';
 
           if (needsTint) {
             mesh.userData.pendingTint = GRASS_PREVIEW_TINT;
             mesh.traverse((child) => {
               if (child.material) {
                 if (Array.isArray(child.material)) {
-                  child.material.forEach((m) => m.color?.set(GRASS_PREVIEW_TINT));
+                  child.material.forEach((m) =>
+                    m.color?.set(GRASS_PREVIEW_TINT)
+                  );
                 } else {
                   child.material.color?.set(GRASS_PREVIEW_TINT);
                 }

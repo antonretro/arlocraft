@@ -7,7 +7,16 @@ export class WorldMutationService {
 
   // --- Core Mutation API ---
 
-  addBlock(x, y, z, id, ownerKey = null, replace = false, options = {}, data = null) {
+  addBlock(
+    x,
+    y,
+    z,
+    id,
+    ownerKey = null,
+    replace = false,
+    options = {},
+    data = null
+  ) {
     const gx = Math.round(x);
     const gy = Math.round(y);
     const gz = Math.round(z);
@@ -79,10 +88,7 @@ export class WorldMutationService {
       );
     }
 
-    if (
-      (id === 'water' || id === 'lava') &&
-      !options?.skipFluidScheduling
-    ) {
+    if ((id === 'water' || id === 'lava') && !options?.skipFluidScheduling) {
       const initialDepth =
         options.fluidDepth !== undefined ? options.fluidDepth : 0;
       this.world.fluids?.scheduleSpread(gx, gy, gz, id, initialDepth);
@@ -97,7 +103,14 @@ export class WorldMutationService {
 
     // --- Multiplayer Broadcast ---
     if (this.world.game?.multiplayer && !options.silent) {
-      this.world.game.multiplayer.broadcastBlockUpdate(gx, gy, gz, id, 'add', data);
+      this.world.game.multiplayer.broadcastBlockUpdate(
+        gx,
+        gy,
+        gz,
+        id,
+        'add',
+        data
+      );
     }
 
     return id;
@@ -134,7 +147,11 @@ export class WorldMutationService {
     this.world.chunkManager.updateNeighborsDirty(x, y, z);
 
     // Spawn breaking particles (Skip for liquids and air/void)
-    const isLiquid = id === 'water' || id.includes('water_') || id === 'lava' || id.includes('lava_');
+    const isLiquid =
+      id === 'water' ||
+      id.includes('water_') ||
+      id === 'lava' ||
+      id.includes('lava_');
     if (!options.skipParticles && !isLiquid && id !== 'air') {
       const blockConfig = this.world.game?.blockRegistry?.blocks?.get(id);
       let particleColor = blockConfig?.color

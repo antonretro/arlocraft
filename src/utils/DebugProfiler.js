@@ -57,7 +57,7 @@ export class DebugProfiler {
 
     if (this.accumulator >= 1000) {
       this.fps = (this.frames * 1000) / this.accumulator; // Store as raw number
-      this.frameTime = (this.accumulator / this.frames); // Store as raw number
+      this.frameTime = this.accumulator / this.frames; // Store as raw number
       this.frames = 0;
       this.accumulator = 0;
 
@@ -116,7 +116,7 @@ export class DebugProfiler {
         cx: Math.floor(pos.x / 16),
         cz: Math.floor(pos.z / 16),
       };
-      
+
       const biome = this.game.world?.terrain?.getBiomeAt(pos.x, pos.z);
       this.metrics.biome = biome?.name || 'Ocean';
     }

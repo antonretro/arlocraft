@@ -47,16 +47,28 @@ export class ChunkManager {
   }
 
   pickAmbientWaterMob(wx, wz, biomeId, waterDepth = 0) {
-    if (waterDepth >= 5 && this.world.hash2D(wx * 0.37 + 7, wz * 0.41 - 3) > 0.74) {
+    if (
+      waterDepth >= 5 &&
+      this.world.hash2D(wx * 0.37 + 7, wz * 0.41 - 3) > 0.74
+    ) {
       return this.world.hash2D(wx * 0.19 + 5, wz * 0.23 - 11) > 0.55
         ? 'glow_squid'
         : 'void_jelly';
     }
 
-    if (biomeId === 'desert' || biomeId === 'lush_grove' || biomeId === 'swamp') {
+    if (
+      biomeId === 'desert' ||
+      biomeId === 'lush_grove' ||
+      biomeId === 'swamp'
+    ) {
       return 'tropical_fish';
     }
-    if (biomeId === 'alpine' || biomeId === 'tundra' || biomeId === 'snow' || biomeId === 'highlands') {
+    if (
+      biomeId === 'alpine' ||
+      biomeId === 'tundra' ||
+      biomeId === 'snow' ||
+      biomeId === 'highlands'
+    ) {
       return 'salmon';
     }
     return 'cod';
@@ -69,7 +81,11 @@ export class ChunkManager {
     );
     const tier = this.getQualityTier();
     const tierVerticalCap =
-      tier === 'low' ? 1 : tier === 'high' ? configuredVertical + 1 : configuredVertical;
+      tier === 'low'
+        ? 1
+        : tier === 'high'
+          ? configuredVertical + 1
+          : configuredVertical;
     const surfaceY = this.world.getTerrainHeight(
       playerPosition.x,
       playerPosition.z
@@ -240,7 +256,9 @@ export class ChunkManager {
       const waterSurfaceY = this.world.getWaterSurfaceYAt(wx, wz);
       const biomeId = this.world.getBiomeAt(wx, wz).id;
       const waterDepth =
-        waterSurfaceY === null ? 0 : Math.max(0, Math.floor(waterSurfaceY - terrainY));
+        waterSurfaceY === null
+          ? 0
+          : Math.max(0, Math.floor(waterSurfaceY - terrainY));
       const inWater = waterSurfaceY !== null && waterDepth >= 1;
       const wy = inWater ? waterSurfaceY - 0.9 : terrainY + 1.2;
 
@@ -281,8 +299,7 @@ export class ChunkManager {
       const dx = Math.abs(chunk.cx - centerCx);
       const dz = Math.abs(chunk.cz - centerCz);
       const withinVertical = chunk.cy >= minCy - 1 && chunk.cy <= maxCy + 1;
-      if (dx <= unloadRadius && withinVertical && dz <= unloadRadius)
-        continue;
+      if (dx <= unloadRadius && withinVertical && dz <= unloadRadius) continue;
       chunk.destroy();
       this.chunks.delete(key);
     }
@@ -505,11 +522,7 @@ export class ChunkManager {
     if (remainingRebuildBudget === 0) return;
 
     const startTime = performance.now();
-    const frameBudgetMs = stabilityMode
-      ? 1.0
-      : tier === 'high'
-        ? 2.2
-        : 1.4;
+    const frameBudgetMs = stabilityMode ? 1.0 : tier === 'high' ? 2.2 : 1.4;
     let rebuilt = 0;
 
     for (let i = 0; i < chunks.length; i++) {
@@ -550,7 +563,9 @@ export class ChunkManager {
             break;
           }
         }
-        const hasGeometryColors = Boolean(mesh.geometry?.getAttribute?.('color'));
+        const hasGeometryColors = Boolean(
+          mesh.geometry?.getAttribute?.('color')
+        );
         const isInstanced = Boolean(mesh.isInstancedMesh);
         const hasInstanceColor = Boolean(mesh.instanceColor);
         if (hasVertexColors) {

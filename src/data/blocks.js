@@ -182,7 +182,8 @@ function buildParameters(raw, scriptModule) {
 function buildTags(raw, scriptModule) {
   const tags = [];
   if (Array.isArray(raw?.tags)) tags.push(...raw.tags);
-  if (Array.isArray(scriptModule?.blockTags)) tags.push(...scriptModule.blockTags);
+  if (Array.isArray(scriptModule?.blockTags))
+    tags.push(...scriptModule.blockTags);
   return Array.from(new Set(tags.filter(Boolean)));
 }
 
@@ -204,15 +205,26 @@ function normalizeBlock(folderId, raw, scriptModule, readmeContent) {
   if (!raw || typeof raw !== 'object') return null;
 
   const meta = scriptModule?.blockMeta;
-  const merged = meta && typeof meta === 'object' ? { ...raw, ...meta } : { ...raw };
+  const merged =
+    meta && typeof meta === 'object' ? { ...raw, ...meta } : { ...raw };
 
   merged.id =
-    typeof merged.id === 'string' && merged.id.trim() ? merged.id.trim() : folderId;
-  
+    typeof merged.id === 'string' && merged.id.trim()
+      ? merged.id.trim()
+      : folderId;
+
   // Handle naming mismatch for Minecraft-style blocks (e.g. concrete_black -> black_concrete)
   let tid = merged.textureId || merged.id;
   if (typeof tid === 'string') {
-    const swapTypes = ['concrete', 'terracotta', 'wool', 'glazed_terracotta', 'concrete_powder', 'stained_glass', 'candle'];
+    const swapTypes = [
+      'concrete',
+      'terracotta',
+      'wool',
+      'glazed_terracotta',
+      'concrete_powder',
+      'stained_glass',
+      'candle',
+    ];
     for (const type of swapTypes) {
       if (tid.startsWith(type + '_')) {
         const color = tid.replace(type + '_', '');
@@ -271,8 +283,13 @@ function mergeBlocks() {
       // For Construction blocks (like Concrete, Wool, Planks), auto-generate slabs and stairs
       const isConstruction = block.category === 'Construction';
       const isFullBlock = block.renderType === 'cube' || !block.renderType;
-      
-      if (isConstruction && isFullBlock && !block.id.includes('_slab') && !block.id.includes('_stairs')) {
+
+      if (
+        isConstruction &&
+        isFullBlock &&
+        !block.id.includes('_slab') &&
+        !block.id.includes('_stairs')
+      ) {
         // Slab Variant
         const slabId = `${block.id}_slab`;
         merged.set(slabId, {
@@ -280,7 +297,7 @@ function mergeBlocks() {
           id: slabId,
           name: `${block.name} Slab`,
           renderType: 'slab',
-          slab: true
+          slab: true,
         });
 
         // Stair Variant
@@ -290,7 +307,7 @@ function mergeBlocks() {
           id: stairId,
           name: `${block.name} Stairs`,
           renderType: 'stairs',
-          stairs: true
+          stairs: true,
         });
 
         // Trapdoor Variant
@@ -300,7 +317,7 @@ function mergeBlocks() {
           id: trapdoorId,
           name: `${block.name} Trapdoor`,
           renderType: 'trapdoor',
-          transparent: true
+          transparent: true,
         });
 
         // Door Variant
@@ -312,9 +329,9 @@ function mergeBlocks() {
           renderType: 'door',
           transparent: true,
           pairId: `${doorId}_top`,
-          pairOffsetY: 1
+          pairOffsetY: 1,
         });
-        
+
         merged.set(`${doorId}_top`, {
           ...block,
           id: `${doorId}_top`,
@@ -322,25 +339,25 @@ function mergeBlocks() {
           renderType: 'door',
           transparent: true,
           pairId: doorId,
-          pairOffsetY: -1
+          pairOffsetY: -1,
         });
       }
     }
   }
 
   // Auto-generate spawn eggs for every mob
-  MOBS.forEach(mob => {
+  MOBS.forEach((mob) => {
     const eggId = `spawn_egg_${mob.id}`;
     if (!merged.has(eggId)) {
-        merged.set(eggId, {
-            id: eggId,
-            name: `${mob.name} Spawn Egg`,
-            category: 'Tools',
-            renderType: 'flat',
-            textureId: 'spawn_egg',
-            spawnMobId: mob.id,
-            description: `Right-click to spawn a ${mob.name}.`
-        });
+      merged.set(eggId, {
+        id: eggId,
+        name: `${mob.name} Spawn Egg`,
+        category: 'Tools',
+        renderType: 'flat',
+        textureId: 'spawn_egg',
+        spawnMobId: mob.id,
+        description: `Right-click to spawn a ${mob.name}.`,
+      });
     }
   });
 

@@ -54,12 +54,12 @@ export class EngineBootstrap {
     game.skinLoader = new SkinLoader();
     game.minimap = new MiniMap(game);
     game.resourceManager = ResourcePackManager.getInstance();
-    
+
     game.gameState = new GameState();
     game.stats = new Stats();
     game.gameState.stats = game.stats;
     game.gameState.initStartingInventory();
-    
+
     game.features = { ...FEATURES };
     game.currentVersionId = 'v1.1-STABLE';
 
@@ -78,10 +78,10 @@ export class EngineBootstrap {
 
     game.physics = new Physics(game.camera, game.world);
     game.physics.autoJumpEnabled = game.settings.autoJump;
-    
+
     game.hand = new PlayerHand();
     game.camera.viewmodelGroup.add(game.hand.group);
-    
+
     game.actionSystem = new ActionSystem(game);
     game.input = new Input(game);
 
@@ -90,14 +90,14 @@ export class EngineBootstrap {
     game.chat = new ChatSystem(game);
     game.blockScripts = new BlockScriptManager(game);
     await game.blockScripts.init();
-    
+
     game.multiplayer = new MultiplayerManager(game);
     game.particles = new ParticleSystem(game);
     game.scripts = new ScriptSystem(game);
     game.survival = new SurvivalSystem(game.gameState, game.hud);
     game.dayNight = new DayNightSystem(game.renderer, game.world, {});
     game.horizons = new HorizonService(game.renderer.scene, game.renderer);
-    
+
     game.audio = new AudioSystem();
     game.audio.applyFromSettings(game.settings);
     game.audio.installAutoUnlock(document);
@@ -157,10 +157,16 @@ export class EngineBootstrap {
     window.addEventListener('block-placed', (event) => {
       game.audio.play('block-placed', { id: event.detail?.id });
     });
-    
-    window.addEventListener('player-damaged', () => game.audio.play('player-damaged'));
-    window.addEventListener('action-success', () => game.audio.play('action-success'));
-    window.addEventListener('action-fail', () => game.audio.play('action-fail'));
+
+    window.addEventListener('player-damaged', () =>
+      game.audio.play('player-damaged')
+    );
+    window.addEventListener('action-success', () =>
+      game.audio.play('action-success')
+    );
+    window.addEventListener('action-fail', () =>
+      game.audio.play('action-fail')
+    );
     window.addEventListener('level-up', () => game.audio.play('level-up'));
 
     window.addEventListener('keydown', (e) => {
@@ -189,20 +195,24 @@ export class EngineBootstrap {
       } else {
         const url = game.skinSystem.getSkinUrl(skinId) || data;
         if (url) {
-          game.skinLoader.loadSkinFromUrl(url).then(({ materials }) => {
-            game._applyLoadedSkin(materials, url);
-            game.settings.skinUsername = '';
-            game.saveSettings();
-            window.dispatchEvent(
-              new CustomEvent('skin-updated', {
-                detail: {
-                  skinId,
-                  avatarUrl: game.skinSystem.getSkinMeta(skinId).faceUrl || url,
-                  name: game.skinSystem.getSkinMeta(skinId).name,
-                },
-              })
-            );
-          }).catch(console.error);
+          game.skinLoader
+            .loadSkinFromUrl(url)
+            .then(({ materials }) => {
+              game._applyLoadedSkin(materials, url);
+              game.settings.skinUsername = '';
+              game.saveSettings();
+              window.dispatchEvent(
+                new CustomEvent('skin-updated', {
+                  detail: {
+                    skinId,
+                    avatarUrl:
+                      game.skinSystem.getSkinMeta(skinId).faceUrl || url,
+                    name: game.skinSystem.getSkinMeta(skinId).name,
+                  },
+                })
+              );
+            })
+            .catch(console.error);
         }
       }
     });

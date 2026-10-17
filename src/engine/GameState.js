@@ -46,31 +46,31 @@ export class GameState {
   }
 
   initStartingInventory() {
-    this.inventory[0] = { 
-      id: 'sword_wood', 
-      count: 1, 
-      kind: 'tool', 
+    this.inventory[0] = {
+      id: 'sword_wood',
+      count: 1,
+      kind: 'tool',
       durability: this.getToolDurability('sword_wood'),
       maxDurability: this.getToolDurability('sword_wood'),
-      enchantments: []
+      enchantments: [],
     };
-    this.inventory[1] = { 
-      id: 'pick_wood', 
-      count: 1, 
+    this.inventory[1] = {
+      id: 'pick_wood',
+      count: 1,
       kind: 'tool',
       durability: this.getToolDurability('pick_wood'),
       maxDurability: this.getToolDurability('pick_wood'),
-      enchantments: []
+      enchantments: [],
     };
-    this.inventory[2] = { 
-      id: 'axe_wood', 
-      count: 1, 
+    this.inventory[2] = {
+      id: 'axe_wood',
+      count: 1,
       kind: 'tool',
       durability: this.getToolDurability('axe_wood'),
       maxDurability: this.getToolDurability('axe_wood'),
-      enchantments: []
+      enchantments: [],
     };
-    this.inventory[3] = { id: 'oak_log', count: 16, kind: 'block' }; 
+    this.inventory[3] = { id: 'oak_log', count: 16, kind: 'block' };
     this.inventory[4] = { id: 'grass_block', count: 16, kind: 'block' };
 
     // Initial discoveries

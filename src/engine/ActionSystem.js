@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 /**
  * ActionSystem
- * Controls high-level gameplay interactions: clicking, mining, placement, combat, 
+ * Controls high-level gameplay interactions: clicking, mining, placement, combat,
  * and background tasks like smelting.
  */
 export class ActionSystem {
@@ -10,7 +10,7 @@ export class ActionSystem {
     this.game = game;
     this.gameState = game.gameState;
     this.activePrompt = null;
-    
+
     // Internal tracking for selection
     this._lastTargetId = null;
     this._camHead = new THREE.Vector3();
@@ -33,22 +33,26 @@ export class ActionSystem {
     }
 
     // 2. Continuous actions (like mining)
-    if (this.game.hasStarted && !this.game.isPaused && !this.gameState.isInventoryOpen) {
-        if (this.game.input.mouseButtons.left) {
-          this.handlePrimaryAction(delta);
-        } else {
-          this.game.cancelMining();
-        }
-        
-        if (this.game.input.mouseButtons.rightJustPressed) {
-          this.handleSecondaryAction();
-        }
+    if (
+      this.game.hasStarted &&
+      !this.game.isPaused &&
+      !this.gameState.isInventoryOpen
+    ) {
+      if (this.game.input.mouseButtons.left) {
+        this.handlePrimaryAction(delta);
+      } else {
+        this.game.cancelMining();
+      }
 
-        if (this.game.input.isJustPressed('KeyQ')) {
-          this.dropSelectedItem();
-        }
+      if (this.game.input.mouseButtons.rightJustPressed) {
+        this.handleSecondaryAction();
+      }
 
-        this.updateSelection();
+      if (this.game.input.isJustPressed('KeyQ')) {
+        this.dropSelectedItem();
+      }
+
+      this.updateSelection();
     }
   }
 
@@ -70,7 +74,10 @@ export class ActionSystem {
       attackProfile.range
     );
     if (hasEnemyTarget) {
-      this.game.entities.attackFromCamera(this.game.camera.instance, selectedItem);
+      this.game.entities.attackFromCamera(
+        this.game.camera.instance,
+        selectedItem
+      );
       this.game.world.resetMiningProgress();
       return;
     }
@@ -114,14 +121,23 @@ export class ActionSystem {
     }
 
     // Entity Interaction (e.g. Milking)
-    const entityInt = this.game.entities.interactEntityFromCamera(this.game.camera.instance);
+    const entityInt = this.game.entities.interactEntityFromCamera(
+      this.game.camera.instance
+    );
     if (entityInt && entityInt.action) return;
 
-    if (this.game.world.handleBucketAction(this.game.camera.instance, 'use', this.gameState.selectedSlot)) return;
+    if (
+      this.game.world.handleBucketAction(
+        this.game.camera.instance,
+        'use',
+        this.gameState.selectedSlot
+      )
+    )
+      return;
     if (this.game.world.interactBlock(this.game.camera.instance)) return;
 
     const selectedSlot = this.gameState.selectedSlot;
-    
+
     // Spawn Egg Logic
     const blockData = this.game.world.getBlockData(selected.id);
     if (blockData?.spawnMobId) {
@@ -131,17 +147,21 @@ export class ActionSystem {
         const spawnY = hit.cell.y + hit.normal.y;
         const spawnZ = hit.cell.z + hit.normal.z;
         this.game.entities.spawn(blockData.spawnMobId, spawnX, spawnY, spawnZ);
-        
+
         if (this.gameState.mode !== 'CREATIVE') {
           selected.count--;
-          if (selected.count <= 0) this.gameState.inventory[selectedSlot] = null;
+          if (selected.count <= 0)
+            this.gameState.inventory[selectedSlot] = null;
           window.dispatchEvent(new CustomEvent('inventory-changed'));
         }
         return;
       }
     }
 
-    const placed = this.game.world.placeBlock(this.game.camera.instance, selectedSlot);
+    const placed = this.game.world.placeBlock(
+      this.game.camera.instance,
+      selectedSlot
+    );
     if (!placed) return;
     if (this.gameState.mode === 'CREATIVE') return;
 
@@ -165,9 +185,15 @@ export class ActionSystem {
     }
 
     const pos = this.game.camera.instance.position;
-    this.game.world.explosions.spawnPickupEffect(pos.x, pos.y, pos.z, item.id, pos);
+    this.game.world.explosions.spawnPickupEffect(
+      pos.x,
+      pos.y,
+      pos.z,
+      item.id,
+      pos
+    );
     this.game.audio?.play('throw');
-    
+
     window.dispatchEvent(new CustomEvent('inventory-changed'));
     this.game.hud?.flashPrompt?.(`Dropped: ${item.id}`, '#ffaa44');
   }
@@ -202,7 +228,7 @@ export class ActionSystem {
     const id = this.game.world.getBlockPickId(hit.id);
     const blockName = this.game.world.getBlockData(id)?.name ?? id;
     const inv = this.gameState.inventory;
-    
+
     // First check hotbar slots 0-8
     for (let i = 0; i < 9; i++) {
       if (inv[i]?.id === id) {
@@ -211,7 +237,7 @@ export class ActionSystem {
         return;
       }
     }
-    
+
     // Creative: add block to selected slot
     if (this.gameState.mode === 'CREATIVE') {
       const slot = this.gameState.selectedSlot;
@@ -226,12 +252,13 @@ export class ActionSystem {
     const cam = this.game.camera.instance;
     const curPos = cam.position;
     cam.getWorldDirection(this._tempV1);
-    
+
     const posChanged = curPos.distanceToSquared(this._lastCamPos) > 0.0001;
-    const dirChanged = this._tempV1.distanceToSquared(this._lastCamDir) > 0.0001;
-    
+    const dirChanged =
+      this._tempV1.distanceToSquared(this._lastCamDir) > 0.0001;
+
     if (!posChanged && !dirChanged && this._lastTargetId !== null) return;
-    
+
     this._lastCamPos.copy(curPos);
     this._lastCamDir.copy(this._tempV1);
 
@@ -244,16 +271,23 @@ export class ActionSystem {
     );
 
     if (hit) {
-      this.game.world.visuals.updateHover(hit.cell.x, hit.cell.y, hit.cell.z, true);
-      
+      this.game.world.visuals.updateHover(
+        hit.cell.x,
+        hit.cell.y,
+        hit.cell.z,
+        true
+      );
+
       const targetId = hit.id;
       if (this._lastTargetId !== targetId) {
         this._lastTargetId = targetId;
         const block = this.game.world.blockRegistry.blocks.get(targetId);
         const name = block?.name || targetId;
-        window.dispatchEvent(new CustomEvent('target-block-changed', { 
-            detail: { id: String(targetId), name: String(name) } 
-        }));
+        window.dispatchEvent(
+          new CustomEvent('target-block-changed', {
+            detail: { id: String(targetId), name: String(name) },
+          })
+        );
       }
 
       // Placement Ghost
@@ -269,7 +303,9 @@ export class ActionSystem {
     } else {
       if (this._lastTargetId !== null) {
         this._lastTargetId = null;
-        window.dispatchEvent(new CustomEvent('target-block-changed', { detail: null }));
+        window.dispatchEvent(
+          new CustomEvent('target-block-changed', { detail: null })
+        );
       }
       this.game.world.visuals.updateHover(0, 0, 0, false);
       this.game.world.visuals.updatePlacement(0, 0, 0, false);
@@ -282,7 +318,11 @@ export class ActionSystem {
     const coalIdx = inv.findIndex((item) => item?.id === 'coal');
     if (coalIdx === -1) return;
 
-    const recipes = { iron_ore: 'iron_ingot', gold_ore: 'gold_ingot', mythril_ore: 'mythril_ingot' };
+    const recipes = {
+      iron_ore: 'iron_ingot',
+      gold_ore: 'gold_ingot',
+      mythril_ore: 'mythril_ingot',
+    };
 
     for (let i = 0; i < inv.length; i++) {
       const item = inv[i];
@@ -302,20 +342,40 @@ export class ActionSystem {
 
   // --- Prompt Legacy ---
   triggerPrompt(type, duration = 1000) {
-    const prompt = { type, start: Date.now(), duration, perfectWindow: [duration * 0.7, duration * 0.9] };
+    const prompt = {
+      type,
+      start: Date.now(),
+      duration,
+      perfectWindow: [duration * 0.7, duration * 0.9],
+    };
     this.activePrompt = prompt;
-    window.dispatchEvent(new CustomEvent('action-prompt', { detail: this.activePrompt }));
-    setTimeout(() => { if (this.activePrompt === prompt) this.activePrompt = null; }, duration);
+    window.dispatchEvent(
+      new CustomEvent('action-prompt', { detail: this.activePrompt })
+    );
+    setTimeout(() => {
+      if (this.activePrompt === prompt) this.activePrompt = null;
+    }, duration);
   }
 
   checkInput() {
     if (!this.activePrompt) return false;
     const elapsed = Date.now() - this.activePrompt.start;
     const [low, high] = this.activePrompt.perfectWindow;
-    if (elapsed >= low && elapsed <= high) { this.success(); return true; } 
-    else { this.fail(); return false; }
+    if (elapsed >= low && elapsed <= high) {
+      this.success();
+      return true;
+    } else {
+      this.fail();
+      return false;
+    }
   }
 
-  success() { window.dispatchEvent(new CustomEvent('action-success')); this.activePrompt = null; }
-  fail() { window.dispatchEvent(new CustomEvent('action-fail')); this.activePrompt = null; }
+  success() {
+    window.dispatchEvent(new CustomEvent('action-success'));
+    this.activePrompt = null;
+  }
+  fail() {
+    window.dispatchEvent(new CustomEvent('action-fail'));
+    this.activePrompt = null;
+  }
 }

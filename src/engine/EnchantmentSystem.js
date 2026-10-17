@@ -9,36 +9,36 @@ export const ENCHANTMENTS = {
     name: 'Efficiency',
     maxLevel: 5,
     description: 'Increases mining speed.',
-    calculateMultiplier: (level) => 1 + level * 0.3
+    calculateMultiplier: (level) => 1 + level * 0.3,
   },
   sharpness: {
     id: 'sharpness',
     name: 'Sharpness',
     maxLevel: 5,
     description: 'Increases melee damage.',
-    calculateMultiplier: (level) => 1 + level * 0.25
+    calculateMultiplier: (level) => 1 + level * 0.25,
   },
   unbreaking: {
     id: 'unbreaking',
     name: 'Unbreaking',
     maxLevel: 3,
     description: 'Reduces durability consumption.',
-    calculateChance: (level) => 1 / (level + 1)
+    calculateChance: (level) => 1 / (level + 1),
   },
   knockback: {
     id: 'knockback',
     name: 'Knockback',
     maxLevel: 2,
     description: 'Increases entity knockback force.',
-    calculateMultiplier: (level) => 1 + level * 0.5
+    calculateMultiplier: (level) => 1 + level * 0.5,
   },
   fortune: {
     id: 'fortune',
     name: 'Fortune',
     maxLevel: 3,
     description: 'Increases drop rare-rates or quantities.',
-    calculateMultiplier: (level) => 1 + level * 0.5
-  }
+    calculateMultiplier: (level) => 1 + level * 0.5,
+  },
 };
 
 export class EnchantmentSystem {
@@ -51,7 +51,7 @@ export class EnchantmentSystem {
    */
   static getMiningSpeedMultiplier(item) {
     if (!item || !item.enchantments) return 1;
-    const eff = item.enchantments.find(e => e.id === 'efficiency');
+    const eff = item.enchantments.find((e) => e.id === 'efficiency');
     if (!eff) return 1;
     return ENCHANTMENTS.efficiency.calculateMultiplier(eff.level);
   }
@@ -61,7 +61,7 @@ export class EnchantmentSystem {
    */
   static getDamageMultiplier(item) {
     if (!item || !item.enchantments) return 1;
-    const sharp = item.enchantments.find(e => e.id === 'sharpness');
+    const sharp = item.enchantments.find((e) => e.id === 'sharpness');
     if (!sharp) return 1;
     return ENCHANTMENTS.sharpness.calculateMultiplier(sharp.level);
   }
@@ -71,7 +71,7 @@ export class EnchantmentSystem {
    */
   static shouldConsumeDurability(item) {
     if (!item || !item.enchantments) return true;
-    const unb = item.enchantments.find(e => e.id === 'unbreaking');
+    const unb = item.enchantments.find((e) => e.id === 'unbreaking');
     if (!unb) return true;
     const chance = ENCHANTMENTS.unbreaking.calculateChance(unb.level);
     return Math.random() < chance;

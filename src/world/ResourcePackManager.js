@@ -3,65 +3,75 @@
  * Optimized for 'World Class' performance and low memory footprint.
  */
 export class ResourcePackManager {
-    static instance = null;
+  static instance = null;
 
-    static getInstance() {
-        if (!ResourcePackManager.instance) {
-            ResourcePackManager.instance = new ResourcePackManager();
-        }
-        return ResourcePackManager.instance;
+  static getInstance() {
+    if (!ResourcePackManager.instance) {
+      ResourcePackManager.instance = new ResourcePackManager();
     }
+    return ResourcePackManager.instance;
+  }
 
-    constructor() {
-        this.manifest = new Set();
-        // Use relative paths or BASE_URL for GitHub Pages compatibility
-        const base = import.meta.env.BASE_URL || '/';
-        this.baseAssetPath = base.endsWith('/') ? base : base + '/';
-        this.baseUrl = `${this.baseAssetPath}resource_pack/assets/minecraft/textures/block/`;
-        this.isLoaded = false;
-        this.loadPromise = this.init();
-    }
+  constructor() {
+    this.manifest = new Set();
+    // Use relative paths or BASE_URL for GitHub Pages compatibility
+    const base = import.meta.env.BASE_URL || '/';
+    this.baseAssetPath = base.endsWith('/') ? base : base + '/';
+    this.baseUrl = `${this.baseAssetPath}resource_pack/assets/minecraft/textures/block/`;
+    this.isLoaded = false;
+    this.loadPromise = this.init();
+  }
 
-    async init() {
-        try {
-            const response = await fetch(`${this.baseAssetPath}resource_pack/manifest.txt`);
-            const text = await response.text();
-            // Split by line and filter out empty strings
-            const files = text.split(/\r?\n/).map(f => f.trim()).filter(f => f.length > 0);
-            this.manifest = new Set(files);
-            this.isLoaded = true;
-            console.log(`[ArloCraft] ResourcePackManager: Indexed ${this.manifest.size} textures.`);
-        } catch (err) {
-            console.error('[ArloCraft] ResourcePackManager: Failed to load manifest:', err);
-        }
+  async init() {
+    try {
+      const response = await fetch(
+        `${this.baseAssetPath}resource_pack/manifest.txt`
+      );
+      const text = await response.text();
+      // Split by line and filter out empty strings
+      const files = text
+        .split(/\r?\n/)
+        .map((f) => f.trim())
+        .filter((f) => f.length > 0);
+      this.manifest = new Set(files);
+      this.isLoaded = true;
+      console.log(
+        `[ArloCraft] ResourcePackManager: Indexed ${this.manifest.size} textures.`
+      );
+    } catch (err) {
+      console.error(
+        '[ArloCraft] ResourcePackManager: Failed to load manifest:',
+        err
+      );
     }
+  }
 
-    /**
-     * Checks if a texture exists in the current pack.
-     * @param {string} fileName 
-     * @returns {boolean}
-     */
-    hasTexture(fileName) {
-        // Ensure extension
-        const name = fileName.endsWith('.png') ? fileName : fileName + '.png';
-        return this.manifest.has(name);
-    }
+  /**
+   * Checks if a texture exists in the current pack.
+   * @param {string} fileName
+   * @returns {boolean}
+   */
+  hasTexture(fileName) {
+    // Ensure extension
+    const name = fileName.endsWith('.png') ? fileName : fileName + '.png';
+    return this.manifest.has(name);
+  }
 
-    /**
-     * Gets the full URL for a texture.
-     * @param {string} fileName 
-     * @returns {string|null}
-     */
-    getTextureUrl(fileName) {
-        if (!this.hasTexture(fileName)) return null;
-        const name = fileName.endsWith('.png') ? fileName : fileName + '.png';
-        return `${this.baseUrl}${name}`;
-    }
+  /**
+   * Gets the full URL for a texture.
+   * @param {string} fileName
+   * @returns {string|null}
+   */
+  getTextureUrl(fileName) {
+    if (!this.hasTexture(fileName)) return null;
+    const name = fileName.endsWith('.png') ? fileName : fileName + '.png';
+    return `${this.baseUrl}${name}`;
+  }
 
-    /**
-     * Utility to wait for manifest loading if needed.
-     */
-    async ready() {
-        return this.loadPromise;
-    }
+  /**
+   * Utility to wait for manifest loading if needed.
+   */
+  async ready() {
+    return this.loadPromise;
+  }
 }

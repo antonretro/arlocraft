@@ -201,9 +201,9 @@ export class BlockRegistry {
         if (baseName.endsWith(suffix) && !compoundIds.has(baseName)) {
           // Special case: grass_block needs its full name to match correctly
           if (baseName.startsWith('grass_block_')) {
-             blockId = 'grass_block';
+            blockId = 'grass_block';
           } else {
-             blockId = baseName.substring(0, baseName.length - suffix.length);
+            blockId = baseName.substring(0, baseName.length - suffix.length);
           }
           faceKey = suffix.substring(1) + '.png'; // e.g. "top.png"
           break;
@@ -234,7 +234,7 @@ export class BlockRegistry {
   async loadStunningExpansion() {
     const base = import.meta.env.BASE_URL || '/';
     const assetPath = base.endsWith('/') ? base : base + '/';
-    
+
     const paths = {
       anton: assetPath + 'arlo_real.png',
     };
@@ -301,7 +301,8 @@ export class BlockRegistry {
 
     const prevOnBeforeCompile = material.onBeforeCompile;
     material.onBeforeCompile = (shader) => {
-      if (typeof prevOnBeforeCompile === 'function') prevOnBeforeCompile(shader);
+      if (typeof prevOnBeforeCompile === 'function')
+        prevOnBeforeCompile(shader);
       shader.uniforms.uTime = { value: 0 };
       shader.uniforms.uWindParams = {
         value: new THREE.Vector3(speed, scale, frequency),
@@ -366,7 +367,8 @@ export class BlockRegistry {
     material.userData.faceAoEnhanced = true;
     const prevOnBeforeCompile = material.onBeforeCompile;
     material.onBeforeCompile = (shader) => {
-      if (typeof prevOnBeforeCompile === 'function') prevOnBeforeCompile(shader);
+      if (typeof prevOnBeforeCompile === 'function')
+        prevOnBeforeCompile(shader);
       shader.uniforms.uFaceAoStrength = { value: strength };
       shader.uniforms.uFaceAoEdgeWidth = { value: edgeWidth };
 
@@ -430,8 +432,7 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
   }
 
   loadTexture(src) {
-    const cropAnimatedStrip =
-      arguments[1]?.cropAnimatedStrip === true;
+    const cropAnimatedStrip = arguments[1]?.cropAnimatedStrip === true;
     const cacheKey = cropAnimatedStrip ? `${src}#static-frame` : src;
     if (this.textureCache.has(cacheKey)) return this.textureCache.get(cacheKey);
 
@@ -460,7 +461,17 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
       canvas.height = frameSize;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      ctx.drawImage(image, sx, sy, frameSize, frameSize, 0, 0, frameSize, frameSize);
+      ctx.drawImage(
+        image,
+        sx,
+        sy,
+        frameSize,
+        frameSize,
+        0,
+        0,
+        frameSize,
+        frameSize
+      );
 
       loaded.image = canvas;
       loaded.needsUpdate = true;
@@ -468,11 +479,12 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     texture.magFilter = THREE.NearestFilter;
     texture.minFilter = THREE.NearestFilter;
     texture.colorSpace = THREE.SRGBColorSpace;
-    
+
     // Support Anisotropic Filtering for crisp distance rendering
-    const maxAnisotropy = this.game?.renderer?.instance?.capabilities?.getMaxAnisotropy?.() || 1;
+    const maxAnisotropy =
+      this.game?.renderer?.instance?.capabilities?.getMaxAnisotropy?.() || 1;
     texture.anisotropy = Math.min(16, maxAnisotropy);
-    
+
     // Support tiled textures for Greedy Meshed quads
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -613,6 +625,9 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
     }
     if (material.userData?.shader?.uniforms?.uTime) {
       material.userData.shader.uniforms.uTime.value = time;
+    }
+    if (material.userData?.shader?.uniforms?.uTimeAnimation) {
+      material.userData.shader.uniforms.uTimeAnimation.value = time;
     }
     // Lantern flicker: modulate emissive intensity with noise-like sin combo
     if (material.userData?.flicker && material.userData.flickerBaseColor) {
@@ -919,7 +934,8 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         opacity: 1,
         alphaTest: isCutout ? 0.5 : 0,
         depthWrite: true,
-        side: (isDeco || id.includes('leaves')) ? THREE.DoubleSide : THREE.FrontSide,
+        side:
+          isDeco || id.includes('leaves') ? THREE.DoubleSide : THREE.FrontSide,
       };
 
       const mats = [
@@ -1056,7 +1072,8 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
   injectAnimationShader(material, frameCount, frameSpeed = 4.0) {
     if (!material) return;
     if (Array.isArray(material)) {
-      for (const m of material) this.injectAnimationShader(m, frameCount, frameSpeed);
+      for (const m of material)
+        this.injectAnimationShader(m, frameCount, frameSpeed);
       return;
     }
     if (material.userData.animationInjected) return;
@@ -1065,7 +1082,8 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
 
     const prevOnBeforeCompile = material.onBeforeCompile;
     material.onBeforeCompile = (shader) => {
-      if (typeof prevOnBeforeCompile === 'function') prevOnBeforeCompile(shader);
+      if (typeof prevOnBeforeCompile === 'function')
+        prevOnBeforeCompile(shader);
       shader.uniforms.uTimeAnimation = { value: 0 };
       shader.uniforms.uFrameCount = { value: frameCount };
       shader.uniforms.uFrameSpeed = { value: frameSpeed };
@@ -1093,41 +1111,42 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
   isStep(id) {
     if (!id) return false;
     const reg = id.toLowerCase();
-    return reg.includes('slab') || reg.includes('stairs') || reg.includes('path');
-  }
-
-  updateShaderMaterials(time) {
-    for (const mat of this.materialCache.values()) {
-      const mats = Array.isArray(mat) ? mat : [mat];
-      for (const m of mats) {
-        if (m.userData.isWaterShader && m.uniforms) {
-          m.uniforms.uTime.value = time;
-        }
-        if (m.userData.animationInjected && m.userData.shader) {
-          m.userData.shader.uniforms.uTimeAnimation.value = time;
-        }
-        if (m.userData.flicker && m.userData.flickerBaseColor) {
-           const flicker = 0.88 + Math.sin(time * 12.0) * 0.12;
-           m.emissive.copy(m.userData.flickerBaseColor).multiplyScalar(flicker);
-        }
-      }
-    }
+    return (
+      reg.includes('slab') || reg.includes('stairs') || reg.includes('path')
+    );
   }
 
   async preloadEssentialBlocks() {
     const essentialIds = [
-      'grass_block', 'dirt', 'stone', 'cobblestone', 'bedrock',
-      'oak_log', 'oak_planks', 'oak_leaves',
-      'sand', 'gravel', 'water', 'lava',
-      'iron_ore', 'coal_ore', 'gold_ore', 'diamond_ore',
-      'crafting_table', 'furnace', 'chest', 'glass'
+      'grass_block',
+      'dirt',
+      'stone',
+      'cobblestone',
+      'bedrock',
+      'oak_log',
+      'oak_planks',
+      'oak_leaves',
+      'sand',
+      'gravel',
+      'water',
+      'lava',
+      'iron_ore',
+      'coal_ore',
+      'gold_ore',
+      'diamond_ore',
+      'crafting_table',
+      'furnace',
+      'chest',
+      'glass',
     ];
-    
+
     this._totalPreload = essentialIds.length;
     this._loadedPreload = 0;
-    
-    console.log(`[ArloCraft] Warming up engine: Preloading ${essentialIds.length} essential blocks...`);
-    
+
+    console.log(
+      `[ArloCraft] Warming up engine: Preloading ${essentialIds.length} essential blocks...`
+    );
+
     for (const id of essentialIds) {
       try {
         await this.getMaterial(id);
@@ -1135,19 +1154,23 @@ diffuseColor.rgb *= (1.0 - (faceAoCorner * uFaceAoStrength));`
         console.warn(`[ArloCraft] Preload failed for ${id}:`, e);
       }
       this._loadedPreload++;
-      const progress = Math.round((this._loadedPreload / this._totalPreload) * 100);
-      window.dispatchEvent(new CustomEvent('engine-loading-progress', { 
-        detail: { 
-          progress, 
-          currentAsset: id,
-          total: this._totalPreload,
-          loaded: this._loadedPreload
-        } 
-      }));
+      const progress = Math.round(
+        (this._loadedPreload / this._totalPreload) * 100
+      );
+      window.dispatchEvent(
+        new CustomEvent('engine-loading-progress', {
+          detail: {
+            progress,
+            currentAsset: id,
+            total: this._totalPreload,
+            loaded: this._loadedPreload,
+          },
+        })
+      );
       // Small delay to make the loading screen visible
-      await new Promise(r => setTimeout(r, 40));
+      await new Promise((r) => setTimeout(r, 40));
     }
-    
+
     console.log('[ArloCraft] Engine Warm-up complete.');
   }
 }

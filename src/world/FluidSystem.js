@@ -90,7 +90,7 @@ export class FluidSystem {
     // Process a batch of fluid updates
     const batchSize = Math.min(this.dirtyBlocks.length, 128); // Increased batch size since it's now more efficient
     const nextBatch = this.dirtyBlocks.splice(0, batchSize);
-    
+
     const affectedChunks = new Set();
 
     for (const block of nextBatch) {
@@ -101,12 +101,12 @@ export class FluidSystem {
         continue;
       }
       this.queuedBlocks.delete(queueKey);
-      
+
       const cx = this.world.coords.getChunkCoord(x);
       const cy = this.world.coords.getChunkCoord(y);
       const cz = this.world.coords.getChunkCoord(z);
       const ownerKey = this.world.coords.getChunkKey(cx, cy, cz);
-      
+
       const currentId = this.world.state.blockMap.get(
         this.world.coords.getKey(x, y, z)
       );
@@ -120,7 +120,7 @@ export class FluidSystem {
         });
         this.markAffectedChunkKeys(affectedChunks, x, y, z);
       }
-      
+
       this.processSpread(block);
     }
 

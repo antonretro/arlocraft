@@ -167,12 +167,8 @@ export function getColumnHeight(router, noise, x, z, seed) {
 }
 
 export function isPathAt(noise, x, z) {
-  const trunk = Math.abs(
-    noise.simplex2D(x * 0.02 + 1307, z * 0.02 - 811)
-  );
-  const branch = Math.abs(
-    noise.simplex2D(x * 0.04 - 547, z * 0.04 + 199)
-  );
+  const trunk = Math.abs(noise.simplex2D(x * 0.02 + 1307, z * 0.02 - 811));
+  const branch = Math.abs(noise.simplex2D(x * 0.04 - 547, z * 0.04 + 199));
   // Width increased: thresholds 0.03/0.02 -> 0.06/0.04
   return trunk < 0.06 || branch < 0.04;
 }

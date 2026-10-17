@@ -96,19 +96,21 @@ function shouldPlaceArlo(wx, wz, height, corruptionEnabled) {
   return hash2D(wx + 613, wz - 271, currentSeed) > 0.985;
 }
 
-
 // -- WORLD CLASS: RUIN STRUCTURE GENERATOR --
 function addRuinStructure(planMap, changedMap, x, y, z, seed) {
-    const size = 3 + Math.floor(hash2D(x, z, seed) * 3);
-    for (let lx = -size; lx <= size; lx++) {
-        for (let lz = -size; lz <= size; lz++) {
-            const h = 1 + Math.floor(hash2D(x + lx, z + lz, seed + 123) * 4);
-            for (let ly = 0; ly < h; ly++) {
-                const block = hash2D(x+lx, z+lz, ly+seed) > 0.6 ? 'mossy_cobblestone' : 'cobblestone';
-                setPlannedBlock(planMap, changedMap, x + lx, y + ly, z + lz, block);
-            }
-        }
+  const size = 3 + Math.floor(hash2D(x, z, seed) * 3);
+  for (let lx = -size; lx <= size; lx++) {
+    for (let lz = -size; lz <= size; lz++) {
+      const h = 1 + Math.floor(hash2D(x + lx, z + lz, seed + 123) * 4);
+      for (let ly = 0; ly < h; ly++) {
+        const block =
+          hash2D(x + lx, z + lz, ly + seed) > 0.6
+            ? 'mossy_cobblestone'
+            : 'cobblestone';
+        setPlannedBlock(planMap, changedMap, x + lx, y + ly, z + lz, block);
+      }
     }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -186,9 +188,13 @@ const api = {
         let surfaceId =
           terrainHeight <= waterLevel ? 'sand' : biome.surfaceBlock;
         const hasRoad =
-          !inSpawnZone && terrainHeight > waterLevel && isPathAt(workerNoise, wx, wz);
+          !inSpawnZone &&
+          terrainHeight > waterLevel &&
+          isPathAt(workerNoise, wx, wz);
         const hasHighway =
-          !inSpawnZone && terrainHeight > waterLevel && isHighwayAt(workerNoise, wx, wz);
+          !inSpawnZone &&
+          terrainHeight > waterLevel &&
+          isHighwayAt(workerNoise, wx, wz);
         if (hasHighway) {
           surfaceId = 'cobblestone';
         } else if (hasRoad) {
@@ -353,9 +359,16 @@ const api = {
         // World Class: Ruin Spawning
         const ruinRoll = hash2D(wx + 99, wz - 88, currentSeed);
         if (!inSpawnZone && terrainHeight > waterLevel && ruinRoll > 0.9995) {
-            if (terrainHeight >= startY && terrainHeight < endY) {
-                addRuinStructure(planMap, changedMap, wx, terrainHeight + 1, wz, currentSeed);
-            }
+          if (terrainHeight >= startY && terrainHeight < endY) {
+            addRuinStructure(
+              planMap,
+              changedMap,
+              wx,
+              terrainHeight + 1,
+              wz,
+              currentSeed
+            );
+          }
         }
 
         // ── Trees & ground decoration ─────────────────────────────

@@ -8,7 +8,9 @@ import { Egg } from './throwables/Egg.js';
 import { EnderPearl } from './throwables/EnderPearl.js';
 
 const base = import.meta.env.BASE_URL || '/';
-const RESOURCE_PACK_URL = (base.endsWith('/') ? base : base + '/') + 'resource_pack/assets/minecraft/textures/entity/';
+const RESOURCE_PACK_URL =
+  (base.endsWith('/') ? base : base + '/') +
+  'resource_pack/assets/minecraft/textures/entity/';
 
 function getEntityTextureUrl(textureKey) {
   // Direct access to the public resource pack
@@ -431,18 +433,21 @@ export class EntityManager {
     const camera = this.game.camera.instance;
     const frustum = new THREE.Frustum();
     const projScreenMatrix = new THREE.Matrix4();
-    projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    projScreenMatrix.multiplyMatrices(
+      camera.projectionMatrix,
+      camera.matrixWorldInverse
+    );
     frustum.setFromProjectionMatrix(projScreenMatrix);
 
     this.entities.forEach((entity) => {
       const pos = entity.mesh.position;
-      
+
       // 1. Distance Despawn
       const farDistanceSq = pos.distanceToSquared(playerPos);
       if (farDistanceSq > 110 * 110) {
         entity.dead = true;
       }
-      
+
       // 2. Chunk Despawn (Cleanup from unloaded chunks)
       if (!entity.dead && this.game.world) {
         const cx = this.game.world.getChunkCoord(pos.x);
@@ -455,8 +460,8 @@ export class EntityManager {
 
       if (entity.dead) {
         if (entity.mesh) {
-            // Clean cleanup
-            this.game.renderer.scene.remove(entity.mesh);
+          // Clean cleanup
+          this.game.renderer.scene.remove(entity.mesh);
         }
         if (entity.dispose) entity.dispose();
         return;
@@ -467,7 +472,7 @@ export class EntityManager {
       const cullRangeSq = 72 * 72;
       const isVisible = frustum.containsPoint(pos);
       if (farDistanceSq > cullRangeSq || !isVisible) {
-          return; // Skip update for this frame
+        return; // Skip update for this frame
       }
 
       entity.update(delta);

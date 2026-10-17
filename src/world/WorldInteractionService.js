@@ -47,7 +47,10 @@ export class WorldInteractionService {
       if (!this.world.state.openedChestKeys.has(chestKey)) {
         this.world.state.openedChestKeys.add(chestKey);
         // Roll small amount of loot for broken chest
-        const loot = [ { id: 'apple', count: 1 }, { id: 'stick', count: 2 } ]; 
+        const loot = [
+          { id: 'apple', count: 1 },
+          { id: 'stick', count: 2 },
+        ];
         this.world.game?.gameState?.addLootRoll?.(loot);
       }
     }
@@ -164,7 +167,11 @@ export class WorldInteractionService {
       const leftDz = left.z - z;
       const rightDx = right.x - x;
       const rightDz = right.z - z;
-      return leftDx * leftDx + leftDz * leftDz - (rightDx * rightDx + rightDz * rightDz);
+      return (
+        leftDx * leftDx +
+        leftDz * leftDz -
+        (rightDx * rightDx + rightDz * rightDz)
+      );
     });
   }
 

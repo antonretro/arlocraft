@@ -30,7 +30,7 @@ export const dungeon_chamber = {
             let id = 'cobblestone';
             if (r < 0.3) id = 'mossy_cobblestone';
             else if (r < 0.5) id = 'cracked_stone_bricks';
-            
+
             blocks.push({ x: ox + dx, y: oy + dy, z: oz + dz, id });
           }
         }
@@ -44,10 +44,10 @@ export const dungeon_chamber = {
 
     // Chests
     if (hash(ox, oy, oz) > 0.5) {
-       blocks.push({ x: ox + 1, y: oy + 1, z: oz + 1, id: 'chest' });
+      blocks.push({ x: ox + 1, y: oy + 1, z: oz + 1, id: 'chest' });
     }
     if (hash(ox + 10, oy, oz - 10) > 0.5) {
-       blocks.push({ x: ox + W - 2, y: oy + 1, z: oz + D - 2, id: 'chest' });
+      blocks.push({ x: ox + W - 2, y: oy + 1, z: oz + D - 2, id: 'chest' });
     }
 
     return blocks;

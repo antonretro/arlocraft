@@ -161,74 +161,78 @@ export class HUDCore {
     const bx = Math.floor(position.x + 0.5);
     const by = Math.floor(position.y);
     const bz = Math.floor(position.z + 0.5);
-    
+
     // Only update high-frequency coordinates if they changed significantly
     if (this._lastCoords === `${bx},${by},${bz}`) {
-        // Still update the lightweight parts if needed, but skip the heavy text join
+      // Still update the lightweight parts if needed, but skip the heavy text join
     } else {
-        const cx = world?.getChunkCoord?.(position.x) ?? 0;
-        const cz = world?.getChunkCoord?.(position.z) ?? 0;
-        const biome = world?.getBiomeIdAt?.(position.x, position.z) ?? 'plains';
-        const facing = this.getFacingLabel(yaw);
-        const biomeLabel = this.formatBiomeLabel(biome);
-        const worldTime = this.getWorldTimeLabel(this.game?.timeOfDay ?? 0);
+      const cx = world?.getChunkCoord?.(position.x) ?? 0;
+      const cz = world?.getChunkCoord?.(position.z) ?? 0;
+      const biome = world?.getBiomeIdAt?.(position.x, position.z) ?? 'plains';
+      const facing = this.getFacingLabel(yaw);
+      const biomeLabel = this.formatBiomeLabel(biome);
+      const worldTime = this.getWorldTimeLabel(this.game?.timeOfDay ?? 0);
 
-        const newText = [
-            `XYZ: ${bx} / ${by} / ${bz}`,
-            `Facing: ${facing}`,
-            `Chunk: ${cx}, ${cz}`,
-            `Biome: ${biome}`,
-            `Time: ${worldTime}`,
-        ].join('\n');
+      const newText = [
+        `XYZ: ${bx} / ${by} / ${bz}`,
+        `Facing: ${facing}`,
+        `Chunk: ${cx}, ${cz}`,
+        `Biome: ${biome}`,
+        `Time: ${worldTime}`,
+      ].join('\n');
 
-        if (el.textContent !== newText) el.textContent = newText;
-        
-        if (this.refs.timePill && this.refs.timePill.textContent !== worldTime) 
-            this.refs.timePill.textContent = worldTime;
-        
-        if (this.refs.biomePill) {
-            const label = biomeLabel.toUpperCase();
-            if (this.refs.biomePill.textContent !== label) this.refs.biomePill.textContent = label;
-        }
+      if (el.textContent !== newText) el.textContent = newText;
 
-        if (this.refs.minimapContext) {
-            const seed = world?.seedString ?? 'ArloCraft';
-            const context = `Seed ${seed} | ${biomeLabel}`;
-            if (this.refs.minimapContext.textContent !== context) this.refs.minimapContext.textContent = context;
-        }
+      if (this.refs.timePill && this.refs.timePill.textContent !== worldTime)
+        this.refs.timePill.textContent = worldTime;
 
-        this._lastCoords = `${bx},${by},${bz}`;
+      if (this.refs.biomePill) {
+        const label = biomeLabel.toUpperCase();
+        if (this.refs.biomePill.textContent !== label)
+          this.refs.biomePill.textContent = label;
+      }
+
+      if (this.refs.minimapContext) {
+        const seed = world?.seedString ?? 'ArloCraft';
+        const context = `Seed ${seed} | ${biomeLabel}`;
+        if (this.refs.minimapContext.textContent !== context)
+          this.refs.minimapContext.textContent = context;
+      }
+
+      this._lastCoords = `${bx},${by},${bz}`;
     }
 
     const mode = this.gameState?.mode ?? 'SURVIVAL';
-    if (this.refs.modePill && this.refs.modePill.textContent !== mode) 
-        this.refs.modePill.textContent = mode;
+    if (this.refs.modePill && this.refs.modePill.textContent !== mode)
+      this.refs.modePill.textContent = mode;
 
     if (this.refs.statsMini) {
-        // Optimized stats mini update without innerHTML
-        const hp = Math.ceil(this.gameState.hp);
-        const biome = this.formatBiomeLabel(world?.getBiomeIdAt?.(position.x, position.z) ?? 'plains');
-        const worldTime = this.getWorldTimeLabel(this.game?.timeOfDay ?? 0);
-        
-        // We use a simple composite check to avoid any work if nothing changed
-        const statsKey = `${hp}|${mode}|${worldTime}|${biome}`;
-        if (this._lastStatsKey !== statsKey) {
-            this.refs.statsMini.textContent = `HP ${hp}/20 | ${mode} | ${worldTime} | ${biome.toUpperCase()}`;
-            this._lastStatsKey = statsKey;
-        }
+      // Optimized stats mini update without innerHTML
+      const hp = Math.ceil(this.gameState.hp);
+      const biome = this.formatBiomeLabel(
+        world?.getBiomeIdAt?.(position.x, position.z) ?? 'plains'
+      );
+      const worldTime = this.getWorldTimeLabel(this.game?.timeOfDay ?? 0);
+
+      // We use a simple composite check to avoid any work if nothing changed
+      const statsKey = `${hp}|${mode}|${worldTime}|${biome}`;
+      if (this._lastStatsKey !== statsKey) {
+        this.refs.statsMini.textContent = `HP ${hp}/20 | ${mode} | ${worldTime} | ${biome.toUpperCase()}`;
+        this._lastStatsKey = statsKey;
+      }
     }
   }
 
   updateMiningProgress(detail) {
     const prompt = this.refs.actionPrompt;
     if (!prompt) return;
-    
+
     const ratio = Math.max(0, Math.min(1, detail?.ratio ?? 0));
 
     if (ratio <= 0 || detail?.done) {
       if (prompt.style.opacity !== '0') {
-          prompt.style.opacity = '0';
-          prompt.classList.remove('mining-active');
+        prompt.style.opacity = '0';
+        prompt.classList.remove('mining-active');
       }
       return;
     }
@@ -248,18 +252,18 @@ export class HUDCore {
     const maxHp = Math.max(1, this.gameState?.maxHp ?? 20);
     const hp = Math.max(0, Math.min(maxHp, Number(value) || 0));
     const ratio = (hp / maxHp) * 100;
-    
+
     // Use data-attributes or classes to avoid innerHTML
     let fill = container.querySelector('.hp-fill');
     let val = container.querySelector('.bar-value');
-    
+
     if (!fill) {
-        // Initialize structure once if needed (though usually done in HTML)
-        container.innerHTML = `<span class="bar-label">HP</span><div class="hud-meter"><div class="hud-meter-fill hp-fill"></div></div><span class="bar-value"></span>`;
-        fill = container.querySelector('.hp-fill');
-        val = container.querySelector('.bar-value');
+      // Initialize structure once if needed (though usually done in HTML)
+      container.innerHTML = `<span class="bar-label">HP</span><div class="hud-meter"><div class="hud-meter-fill hp-fill"></div></div><span class="bar-value"></span>`;
+      fill = container.querySelector('.hp-fill');
+      val = container.querySelector('.bar-value');
     }
-    
+
     fill.style.width = `${ratio.toFixed(1)}%`;
     fill.classList.toggle('hp-critical', hp <= 4);
     if (val) val.textContent = `${Math.round(hp)}/${maxHp}`;
@@ -272,16 +276,16 @@ export class HUDCore {
     const maxFood = 20;
     const hunger = Math.max(0, Math.min(maxFood, Number(value) || 0));
     const ratio = (hunger / maxFood) * 100;
-    
+
     let fill = container.querySelector('.food-fill');
     let val = container.querySelector('.bar-value');
-    
+
     if (!fill) {
-        container.innerHTML = `<span class="bar-label">FOOD</span><div class="hud-meter"><div class="hud-meter-fill food-fill"></div></div><span class="bar-value"></span>`;
-        fill = container.querySelector('.food-fill');
-        val = container.querySelector('.bar-value');
+      container.innerHTML = `<span class="bar-label">FOOD</span><div class="hud-meter"><div class="hud-meter-fill food-fill"></div></div><span class="bar-value"></span>`;
+      fill = container.querySelector('.food-fill');
+      val = container.querySelector('.bar-value');
     }
-    
+
     fill.style.width = `${ratio.toFixed(1)}%`;
     if (val) val.textContent = `${Math.round(hunger)}/${maxFood}`;
   }

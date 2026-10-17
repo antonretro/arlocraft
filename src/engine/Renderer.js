@@ -246,7 +246,10 @@ export class Renderer {
   setupPostProcessing() {
     this._initPromise.then(() => {
       this.composer = new EffectComposer(this.instance);
-      this.renderPass = new RenderPass(this.scene, this._lastCamera || new THREE.PerspectiveCamera());
+      this.renderPass = new RenderPass(
+        this.scene,
+        this._lastCamera || new THREE.PerspectiveCamera()
+      );
       this.composer.addPass(this.renderPass);
 
       this.bloomPass = new UnrealBloomPass(
@@ -337,9 +340,17 @@ export class Renderer {
     this.cloudPlane2.position.y = 260;
     this.scene.add(this.cloudPlane2);
 
-    this.cloudLayer1 = { mesh: this.cloudPlane1, mat: cloudMat1, speed: 0.0018 };
-    this.cloudLayer2 = { mesh: this.cloudPlane2, mat: cloudMat2, speed: 0.0006 };
-    
+    this.cloudLayer1 = {
+      mesh: this.cloudPlane1,
+      mat: cloudMat1,
+      speed: 0.0018,
+    };
+    this.cloudLayer2 = {
+      mesh: this.cloudPlane2,
+      mat: cloudMat2,
+      speed: 0.0006,
+    };
+
     this.cloudPlane = this.cloudPlane1;
     this.cloudMat = cloudMat1;
   }
@@ -386,7 +397,7 @@ export class Renderer {
     if (Math.abs(this.daylight - daylight) > 0.001) {
       this.instance.shadowMap.needsUpdate = true;
     }
-    
+
     this.daylight = daylight;
     const clamped = Math.max(0, Math.min(1, daylight));
 
@@ -429,7 +440,7 @@ export class Renderer {
       if (uniforms.top) uniforms.top.value.copy(top);
       if (uniforms.bottom) uniforms.bottom.value.copy(bottom);
       if (uniforms.sunPos) uniforms.sunPos.value.copy(this.sun.position);
-      
+
       const horizonGlowColor =
         state === 'DUSK'
           ? new THREE.Color(0xff4400)
@@ -441,9 +452,11 @@ export class Renderer {
           ? 0.95
           : state === 'DAY'
             ? 0.22
-            : 0.08; 
+            : 0.08;
       if (uniforms.horizon) {
-        uniforms.horizon.value.copy(horizonGlowColor.lerp(new THREE.Color(0x9fb8cc), rainFactor * 0.5));
+        uniforms.horizon.value.copy(
+          horizonGlowColor.lerp(new THREE.Color(0x9fb8cc), rainFactor * 0.5)
+        );
       }
       if (uniforms.horizonStrength) {
         uniforms.horizonStrength.value = horizonStr * (1 - rainFactor * 0.45);
@@ -454,7 +467,10 @@ export class Renderer {
     const fogCol = bottom.clone().lerp(new THREE.Color(0xffffff), 0.05);
     this.scene.fog.color.copy(fogCol);
     this.scene.fog.density =
-      computeFogDensity(Math.max(0.04, daylight - rainFactor * 0.16), this.submerged) *
+      computeFogDensity(
+        Math.max(0.04, daylight - rainFactor * 0.16),
+        this.submerged
+      ) *
       (1 + rainFactor * 0.35 + stormFactor * 0.2) *
       (this.fogDensityScale || 1.0);
 
@@ -467,7 +483,8 @@ export class Renderer {
     this.hemiLight.groundColor.set(0x6d6253);
 
     if (this.ambientFill) {
-      this.ambientFill.intensity = (0.35 + clamped * 0.2) * (1 - rainFactor * 0.12);
+      this.ambientFill.intensity =
+        (0.35 + clamped * 0.2) * (1 - rainFactor * 0.12);
       this.ambientFill.color.copy(sunCol).lerp(new THREE.Color(0xffffff), 0.35);
     }
 
@@ -480,8 +497,12 @@ export class Renderer {
     }
 
     if (this.stars) {
-      const starOp = Math.max(0, (0.35 - daylight) * 2.5) * (1 - rainFactor * 0.75);
-      if (this.stars.material.uniforms && this.stars.material.uniforms.opacity) {
+      const starOp =
+        Math.max(0, (0.35 - daylight) * 2.5) * (1 - rainFactor * 0.75);
+      if (
+        this.stars.material.uniforms &&
+        this.stars.material.uniforms.opacity
+      ) {
         this.stars.material.uniforms.opacity.value = starOp;
       } else {
         this.stars.material.opacity = starOp;
@@ -489,7 +510,8 @@ export class Renderer {
       this.stars.visible = starOp > 0.01;
     }
     if (this.moonMesh && this.moonGlow) {
-      const moonOp = Math.max(0, (0.32 - daylight) * 1.8) * (1 - rainFactor * 0.4);
+      const moonOp =
+        Math.max(0, (0.32 - daylight) * 1.8) * (1 - rainFactor * 0.4);
       this.moonMesh.material.opacity = moonOp;
       this.moonGlow.material.opacity = moonOp * 0.4;
       this.moonMesh.visible = moonOp > 0.01;
@@ -514,8 +536,10 @@ export class Renderer {
     const skyBottom = dayBottom.clone().lerp(nightBottom, 1 - this.daylight);
 
     if (this.skyDome?.material?.uniforms) {
-      if (this.skyDome.material.uniforms.top) this.skyDome.material.uniforms.top.value.copy(skyTop);
-      if (this.skyDome.material.uniforms.bottom) this.skyDome.material.uniforms.bottom.value.copy(skyBottom);
+      if (this.skyDome.material.uniforms.top)
+        this.skyDome.material.uniforms.top.value.copy(skyTop);
+      if (this.skyDome.material.uniforms.bottom)
+        this.skyDome.material.uniforms.bottom.value.copy(skyBottom);
     }
 
     this.scene.fog.color.copy(skyBottom);
@@ -525,7 +549,10 @@ export class Renderer {
 
     if (this.stars) {
       const starOp = Math.max(0, (0.45 - this.daylight) * 1.5);
-      if (this.stars.material.uniforms && this.stars.material.uniforms.opacity) {
+      if (
+        this.stars.material.uniforms &&
+        this.stars.material.uniforms.opacity
+      ) {
         this.stars.material.uniforms.opacity.value = starOp;
       } else {
         this.stars.material.opacity = starOp;
@@ -602,24 +629,32 @@ export class Renderer {
       if (this.stars?.material?.uniforms?.uTime) {
         this.stars.material.uniforms.uTime.value = timeSec;
       }
-    } catch (e) {}
+    } catch {
+      // Sky uniforms may not exist before setupSky() runs.
+    }
 
     if (this.cloudLayer1?.mat?.uniforms?.uOffset) {
-      this.cloudLayer1.mat.uniforms.uOffset.value.x += delta * (this.cloudLayer1.speed || 0.001);
-      this.cloudLayer1.mat.uniforms.cloudOpacity.value =
-        Math.min(1, this.baseCloudOpacity + this.weatherIntensity * 0.2);
-      
+      this.cloudLayer1.mat.uniforms.uOffset.value.x +=
+        delta * (this.cloudLayer1.speed || 0.001);
+      this.cloudLayer1.mat.uniforms.cloudOpacity.value = Math.min(
+        1,
+        this.baseCloudOpacity + this.weatherIntensity * 0.2
+      );
+
       if (this.cloudLayer1.mesh) {
         this.cloudLayer1.mesh.position.x = camera.position.x;
         this.cloudLayer1.mesh.position.z = camera.position.z;
       }
     }
-    
+
     if (this.cloudLayer2?.mat?.uniforms?.uOffset) {
-      this.cloudLayer2.mat.uniforms.uOffset.value.x += delta * (this.cloudLayer2.speed || 0.0005);
-      this.cloudLayer2.mat.uniforms.cloudOpacity.value =
-        Math.min(0.8, this.baseCloudOpacity * 0.54 + this.weatherIntensity * 0.18);
-      
+      this.cloudLayer2.mat.uniforms.uOffset.value.x +=
+        delta * (this.cloudLayer2.speed || 0.0005);
+      this.cloudLayer2.mat.uniforms.cloudOpacity.value = Math.min(
+        0.8,
+        this.baseCloudOpacity * 0.54 + this.weatherIntensity * 0.18
+      );
+
       if (this.cloudLayer2.mesh) {
         this.cloudLayer2.mesh.position.x = camera.position.x;
         this.cloudLayer2.mesh.position.z = camera.position.z;
@@ -680,11 +715,11 @@ export class Renderer {
       ? tier
       : 'balanced';
     this.postProcessingEnabled = this.qualityTier === 'high';
-    
+
     if (this.bloomPass) {
       this.bloomPass.enabled = this.postProcessingEnabled;
     }
-    
+
     if (this.cloudPlane) {
       this.cloudPlane.visible = this.qualityTier !== 'low';
     }
@@ -725,10 +760,12 @@ export class Renderer {
         this.cloudMat.uniforms.cloudOpacity.value = settings.cloudOpacity;
       }
       if (this.cloudLayer1?.mat?.uniforms?.cloudOpacity) {
-        this.cloudLayer1.mat.uniforms.cloudOpacity.value = settings.cloudOpacity;
+        this.cloudLayer1.mat.uniforms.cloudOpacity.value =
+          settings.cloudOpacity;
       }
       if (this.cloudLayer2?.mat?.uniforms?.cloudOpacity) {
-        this.cloudLayer2.mat.uniforms.cloudOpacity.value = settings.cloudOpacity;
+        this.cloudLayer2.mat.uniforms.cloudOpacity.value =
+          settings.cloudOpacity;
       }
     }
 
@@ -752,14 +789,14 @@ export class Renderer {
 
   dispose() {
     window.removeEventListener('resize', this.onResizeHandler);
-    
+
     // Recursive disposal of scene
     this.scene.traverse((object) => {
       if (object.isMesh || object.isPoints || object.isLine) {
         if (object.geometry) object.geometry.dispose();
         if (object.material) {
           if (Array.isArray(object.material)) {
-            object.material.forEach(m => m.dispose());
+            object.material.forEach((m) => m.dispose());
           } else {
             object.material.dispose();
           }
@@ -768,7 +805,7 @@ export class Renderer {
     });
 
     if (this.composer) {
-      this.composer.passes.forEach(pass => {
+      this.composer.passes.forEach((pass) => {
         if (pass.dispose) pass.dispose();
       });
     }
@@ -776,7 +813,9 @@ export class Renderer {
     if (this.instance) {
       this.instance.dispose();
       if (this.instance.domElement && this.instance.domElement.parentNode) {
-        this.instance.domElement.parentNode.removeChild(this.instance.domElement);
+        this.instance.domElement.parentNode.removeChild(
+          this.instance.domElement
+        );
       }
     }
   }

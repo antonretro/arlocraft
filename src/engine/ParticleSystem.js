@@ -64,28 +64,28 @@ export class ParticleSystem {
     const config = this.types[typeName] || this.types.EXPLOSION;
 
     for (let i = 0; i < count; i++) {
-        let particle;
-        
-        // Adaptive Throttling: If we're at max particles, steal the oldest one
-        if (this.particles.length >= this.maxParticles) {
-            particle = this.particles.shift(); // Remove from front (oldest)
-            particle.hide();
-        } else {
-            particle = this.getFromPool();
-        }
+      let particle;
 
-        const vel = new THREE.Vector3(
-            (Math.random() - 0.5) * spread * 10,
-            (Math.random() - 0.2) * spread * 10,
-            (Math.random() - 0.5) * spread * 10
-        );
+      // Adaptive Throttling: If we're at max particles, steal the oldest one
+      if (this.particles.length >= this.maxParticles) {
+        particle = this.particles.shift(); // Remove from front (oldest)
+        particle.hide();
+      } else {
+        particle = this.getFromPool();
+      }
 
-        const particleConfig = colorOverride
-            ? { ...config, color: colorOverride }
-            : config;
-            
-        particle.init(pos, vel, particleConfig);
-        this.particles.push(particle);
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * spread * 10,
+        (Math.random() - 0.2) * spread * 10,
+        (Math.random() - 0.5) * spread * 10
+      );
+
+      const particleConfig = colorOverride
+        ? { ...config, color: colorOverride }
+        : config;
+
+      particle.init(pos, vel, particleConfig);
+      this.particles.push(particle);
     }
   }
 

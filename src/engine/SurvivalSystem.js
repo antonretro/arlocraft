@@ -52,7 +52,7 @@ export class SurvivalSystem {
     if (this.gameState.mode !== 'SURVIVAL') return;
 
     this.potionSystem.update(delta);
-    
+
     this.timers.hunger += delta;
     if (this.timers.hunger >= 10) {
       this.timers.hunger = 0;

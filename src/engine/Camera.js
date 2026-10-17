@@ -31,20 +31,38 @@ export class Camera {
     this.shakeFrequency = frequency;
   }
 
-  update(delta, position, rotation, bobCycle, moveSpeed, isSprinting, settingsFov = 75, eyeHeight = this.eyeHeight) {
+  update(
+    delta,
+    position,
+    rotation,
+    bobCycle,
+    moveSpeed,
+    isSprinting,
+    settingsFov = 75,
+    eyeHeight = this.eyeHeight
+  ) {
     // 1. FOV Lerping (Sprinting zoom)
     const targetFov = isSprinting ? settingsFov + 13 : settingsFov;
     if (Math.abs(this.instance.fov - targetFov) > 0.1) {
-      this.instance.fov = THREE.MathUtils.lerp(this.instance.fov, targetFov, delta * 8);
+      this.instance.fov = THREE.MathUtils.lerp(
+        this.instance.fov,
+        targetFov,
+        delta * 8
+      );
       this.instance.updateProjectionMatrix();
     }
 
     // 2. Screen Shake
     if (this.screenShake > 0) {
       const time = performance.now() * 0.001;
-      this.shakeOffset.x = Math.sin(time * this.shakeFrequency) * this.screenShake;
-      this.shakeOffset.y = Math.cos(time * this.shakeFrequency * 1.1) * this.screenShake;
-      this.screenShake = Math.max(0, this.screenShake - delta * this.shakeDecay);
+      this.shakeOffset.x =
+        Math.sin(time * this.shakeFrequency) * this.screenShake;
+      this.shakeOffset.y =
+        Math.cos(time * this.shakeFrequency * 1.1) * this.screenShake;
+      this.screenShake = Math.max(
+        0,
+        this.screenShake - delta * this.shakeDecay
+      );
     } else {
       this.shakeOffset.set(0, 0, 0);
     }
@@ -75,14 +93,24 @@ export class Camera {
     // Basic orbit camera logic
     const offset = new THREE.Vector3(0, 0, distance);
     offset.applyEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
-    
-    this.instance.position.copy(playerPos).add(new THREE.Vector3(0, this.eyeHeight, 0)).add(offset);
-    this.instance.lookAt(playerPos.x, playerPos.y + this.eyeHeight, playerPos.z);
-    
+
+    this.instance.position
+      .copy(playerPos)
+      .add(new THREE.Vector3(0, this.eyeHeight, 0))
+      .add(offset);
+    this.instance.lookAt(
+      playerPos.x,
+      playerPos.y + this.eyeHeight,
+      playerPos.z
+    );
+
     // Apply shake here too if needed
     if (this.screenShake > 0) {
-        this.instance.position.add(this.shakeOffset);
-        this.screenShake = Math.max(0, this.screenShake - delta * this.shakeDecay);
+      this.instance.position.add(this.shakeOffset);
+      this.screenShake = Math.max(
+        0,
+        this.screenShake - delta * this.shakeDecay
+      );
     }
   }
 
@@ -94,7 +122,7 @@ export class Camera {
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) {
         if (Array.isArray(obj.material)) {
-          obj.material.forEach(m => m.dispose());
+          obj.material.forEach((m) => m.dispose());
         } else {
           obj.material.dispose();
         }

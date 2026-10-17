@@ -282,7 +282,13 @@ export class RedstoneSystem {
         this.world.state.blockData.get(key + ':powered') || false;
       if (power > 0 && !wasPowered) {
         this.world.state.blockData.set(key + ':powered', true);
-        this.world.game.blockScripts?.onRedstoneUpdate('command_block', x, y, z, power);
+        this.world.game.blockScripts?.onRedstoneUpdate(
+          'command_block',
+          x,
+          y,
+          z,
+          power
+        );
       } else if (power === 0) {
         this.world.state.blockData.set(key + ':powered', false);
       }

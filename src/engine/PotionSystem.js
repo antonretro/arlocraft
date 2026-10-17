@@ -9,43 +9,43 @@ export const POTION_EFFECTS = {
     name: 'Speed',
     icon: '⚡',
     description: 'Increases movement speed.',
-    color: '#55ffff'
+    color: '#55ffff',
   },
   haste: {
     id: 'haste',
     name: 'Haste',
     icon: '⛏️',
     description: 'Increases mining speed.',
-    color: '#ffdd55'
+    color: '#ffdd55',
   },
   strength: {
     id: 'strength',
     name: 'Strength',
     icon: '⚔️',
     description: 'Increases attack damage.',
-    color: '#ff4444'
+    color: '#ff4444',
   },
   jump_boost: {
     id: 'jump_boost',
     name: 'Jump Boost',
     icon: '🦘',
     description: 'Increases jump height.',
-    color: '#88ff88'
+    color: '#88ff88',
   },
   regeneration: {
     id: 'regeneration',
     name: 'Regeneration',
     icon: '❤️',
     description: 'Restores health over time.',
-    color: '#ff88aa'
+    color: '#ff88aa',
   },
   night_vision: {
     id: 'night_vision',
     name: 'Night Vision',
     icon: '👁️',
     description: 'See clearly in the dark.',
-    color: '#3333ff'
-  }
+    color: '#3333ff',
+  },
 };
 
 export class PotionSystem {
@@ -54,7 +54,7 @@ export class PotionSystem {
   }
 
   addEffect(id, duration, level = 1) {
-    const existing = this.gameState.activeEffects.find(e => e.id === id);
+    const existing = this.gameState.activeEffects.find((e) => e.id === id);
     if (existing) {
       existing.duration = Math.max(existing.duration, duration);
       existing.level = Math.max(existing.level, level);
@@ -71,15 +71,19 @@ export class PotionSystem {
     for (let i = this.gameState.activeEffects.length - 1; i >= 0; i--) {
       const effect = this.gameState.activeEffects[i];
       effect.duration -= delta;
-      
+
       if (effect.duration <= 0) {
         this.gameState.activeEffects.splice(i, 1);
         changed = true;
       }
-      
+
       // Handle Tick-based effects (Regeneration)
-      if (effect.id === 'regeneration' && Math.floor(effect.duration * 2) !== Math.floor((effect.duration + delta) * 2)) {
-         this.gameState.heal(effect.level);
+      if (
+        effect.id === 'regeneration' &&
+        Math.floor(effect.duration * 2) !==
+          Math.floor((effect.duration + delta) * 2)
+      ) {
+        this.gameState.heal(effect.level);
       }
     }
 
@@ -89,11 +93,11 @@ export class PotionSystem {
   }
 
   hasEffect(id) {
-    return this.gameState.activeEffects.some(e => e.id === id);
+    return this.gameState.activeEffects.some((e) => e.id === id);
   }
 
   getEffectLevel(id) {
-    const effect = this.gameState.activeEffects.find(e => e.id === id);
+    const effect = this.gameState.activeEffects.find((e) => e.id === id);
     return effect ? effect.level : 0;
   }
 }

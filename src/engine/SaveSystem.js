@@ -47,7 +47,7 @@ export class SaveSystem {
   getSnapshot() {
     const g = this.game;
     const pos = g.getPlayerPosition();
-    
+
     return {
       version: 1,
       savedAt: new Date().toISOString(),
@@ -76,7 +76,8 @@ export class SaveSystem {
    * Applies a state snapshot to the active game instance.
    */
   applySnapshot(data) {
-    if (!data?.world) throw new Error('Invalid save data: Missing world payload');
+    if (!data?.world)
+      throw new Error('Invalid save data: Missing world payload');
     const g = this.game;
 
     // 1. World & Entities
@@ -88,22 +89,29 @@ export class SaveSystem {
 
     // 2. State & Inventory
     if (Array.isArray(data.inventory)) {
-      g.gameState.inventory = data.inventory.slice(0, 36).map(migrateInventoryItem);
-      while (g.gameState.inventory.length < 36) g.gameState.inventory.push(null);
+      g.gameState.inventory = data.inventory
+        .slice(0, 36)
+        .map(migrateInventoryItem);
+      while (g.gameState.inventory.length < 36)
+        g.gameState.inventory.push(null);
     }
     g.gameState.offhand = migrateInventoryItem(data?.offhand ?? null);
-    
+
     if (Array.isArray(data.craftingGrid)) {
-      g.gameState.craftingGrid = data.craftingGrid.slice(0, 9).map(migrateInventoryItem);
-      while (g.gameState.craftingGrid.length < 9) g.gameState.craftingGrid.push(null);
+      g.gameState.craftingGrid = data.craftingGrid
+        .slice(0, 9)
+        .map(migrateInventoryItem);
+      while (g.gameState.craftingGrid.length < 9)
+        g.gameState.craftingGrid.push(null);
     }
 
     // 3. Player Stats & Identity
     if (data.player) {
       if (data.player.mode) g.gameState.setMode(data.player.mode);
       if (Number.isFinite(data.player.hp)) g.gameState.hp = data.player.hp;
-      if (Number.isFinite(data.player.hunger)) g.gameState.hunger = data.player.hunger;
-      
+      if (Number.isFinite(data.player.hunger))
+        g.gameState.hunger = data.player.hunger;
+
       if (data.player.look) {
         g.viewYaw = Number(data.player.look.yaw) || 0;
         g.viewPitch = Number(data.player.look.pitch) || 0;
@@ -117,9 +125,13 @@ export class SaveSystem {
     if (data.stats) {
       if (Number.isFinite(data.stats.level)) g.stats.level = data.stats.level;
       if (Number.isFinite(data.stats.xp)) g.stats.xp = data.stats.xp;
-      if (Number.isFinite(data.stats.xpToNextLevel)) g.stats.xpToNextLevel = data.stats.xpToNextLevel;
+      if (Number.isFinite(data.stats.xpToNextLevel))
+        g.stats.xpToNextLevel = data.stats.xpToNextLevel;
       if (data.stats.attributes) {
-        g.stats.attributes = { ...g.stats.attributes, ...data.stats.attributes };
+        g.stats.attributes = {
+          ...g.stats.attributes,
+          ...data.stats.attributes,
+        };
       }
     }
 
@@ -127,7 +139,7 @@ export class SaveSystem {
     const px = data.player?.position?.x ?? 0;
     const py = data.player?.position?.y ?? 70;
     const pz = data.player?.position?.z ?? 0;
-    
+
     if (g.physics.isReady) {
       const safe = g.physics.resolveSafeSpawn(px, py, pz, 32, {
         preferGround: true,
@@ -150,8 +162,12 @@ export class SaveSystem {
 
     // Trigger UI refreshes
     window.dispatchEvent(new CustomEvent('inventory-changed'));
-    window.dispatchEvent(new CustomEvent('hp-changed', { detail: g.gameState.hp }));
-    window.dispatchEvent(new CustomEvent('hunger-changed', { detail: g.gameState.hunger }));
+    window.dispatchEvent(
+      new CustomEvent('hp-changed', { detail: g.gameState.hp })
+    );
+    window.dispatchEvent(
+      new CustomEvent('hunger-changed', { detail: g.gameState.hunger })
+    );
   }
 
   saveToSlot(slotId) {

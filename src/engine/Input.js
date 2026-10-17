@@ -157,7 +157,8 @@ export class Input {
         'F5',
         'Escape',
       ]);
-      const isInput = event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA';
+      const isInput =
+        event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA';
       if (preventCodes.has(event.code) && !isInput) event.preventDefault();
 
       if (event.code === 'Escape') {
@@ -221,13 +222,17 @@ export class Input {
 
       if (event.code === 'KeyT' && !this.game.chat?.visible) {
         event.preventDefault();
-        window.dispatchEvent(new CustomEvent('chat-open', { detail: { prefill: '' } }));
+        window.dispatchEvent(
+          new CustomEvent('chat-open', { detail: { prefill: '' } })
+        );
         return;
       }
 
       if (event.code === 'Slash' && !this.game.chat?.visible) {
         event.preventDefault();
-        window.dispatchEvent(new CustomEvent('chat-open', { detail: { prefill: '/' } }));
+        window.dispatchEvent(
+          new CustomEvent('chat-open', { detail: { prefill: '/' } })
+        );
         return;
       }
     };
@@ -299,8 +304,14 @@ export class Input {
 
     this.handlers.onContextMenu = (event) => event.preventDefault();
 
-    window.addEventListener('inventory-toggle', this.handlers.onInventoryToggle);
-    document.addEventListener('pointerlockchange', this.handlers.onPointerLockChange);
+    window.addEventListener(
+      'inventory-toggle',
+      this.handlers.onInventoryToggle
+    );
+    document.addEventListener(
+      'pointerlockchange',
+      this.handlers.onPointerLockChange
+    );
     window.addEventListener('keydown', this.handlers.onKeyDown);
     window.addEventListener('keyup', this.handlers.onKeyUp);
     document.addEventListener('mousemove', this.handlers.onMouseMove);
@@ -312,8 +323,14 @@ export class Input {
   }
 
   dispose() {
-    window.removeEventListener('inventory-toggle', this.handlers.onInventoryToggle);
-    document.removeEventListener('pointerlockchange', this.handlers.onPointerLockChange);
+    window.removeEventListener(
+      'inventory-toggle',
+      this.handlers.onInventoryToggle
+    );
+    document.removeEventListener(
+      'pointerlockchange',
+      this.handlers.onPointerLockChange
+    );
     window.removeEventListener('keydown', this.handlers.onKeyDown);
     window.removeEventListener('keyup', this.handlers.onKeyUp);
     document.removeEventListener('mousemove', this.handlers.onMouseMove);

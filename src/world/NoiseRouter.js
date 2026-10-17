@@ -114,7 +114,8 @@ export class NoiseRouter {
 
     if (temperature < 0.14) return 'tundra';
 
-    if (humidity > 0.82 && temperature > 0.4 && temperature < 0.7) return 'lush_grove';
+    if (humidity > 0.82 && temperature > 0.4 && temperature < 0.7)
+      return 'lush_grove';
 
     if (temperature > 0.72 && humidity < 0.33) {
       if (elevation > 0.66) return 'badlands';

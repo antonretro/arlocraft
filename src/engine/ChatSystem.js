@@ -16,7 +16,7 @@ export class ChatSystem {
       sender,
       text,
       type, // user | system | warning | error
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
     this.messages.push(message);
@@ -25,8 +25,10 @@ export class ChatSystem {
     }
 
     // Trigger UI update
-    window.dispatchEvent(new CustomEvent('chat-updated', { detail: this.messages }));
-    
+    window.dispatchEvent(
+      new CustomEvent('chat-updated', { detail: this.messages })
+    );
+
     // Auto-scroll logic is handled by React component
     return message;
   }
@@ -36,8 +38,8 @@ export class ChatSystem {
 
     // Command Parsing
     if (text.startsWith('/')) {
-        this.game.commands?.execute(text.substring(1));
-        return;
+      this.game.commands?.execute(text.substring(1));
+      return;
     }
 
     // Local echo
@@ -48,7 +50,7 @@ export class ChatSystem {
     if (this.game.multiplayer) {
       this.game.multiplayer.broadcast({
         type: 'chat',
-        data: { text, sender: username }
+        data: { text, sender: username },
       });
     }
   }

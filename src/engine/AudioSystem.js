@@ -63,12 +63,12 @@ export class AudioSystem {
     this.compressor = compressor;
     this.noiseBuffer = this.createNoiseBuffer();
     this.applyMixNow();
-    
+
     // 3D Audio: Initialise listener at origin
     if (this.context.listener) {
-      this.updateListener(new THREE.Vector3(0,0,0), new THREE.Quaternion());
+      this.updateListener(new THREE.Vector3(0, 0, 0), new THREE.Quaternion());
     }
-    
+
     return ctx;
   }
 
@@ -94,27 +94,34 @@ export class AudioSystem {
     } else {
       // Legacy Fallback
       ctx.listener.setPosition(position.x, position.y, position.z);
-      ctx.listener.setOrientation(forward.x, forward.y, forward.z, up.x, up.y, up.z);
+      ctx.listener.setOrientation(
+        forward.x,
+        forward.y,
+        forward.z,
+        up.x,
+        up.y,
+        up.z
+      );
     }
   }
 
   createPanner(position) {
     const ctx = this.ensureContext();
     if (!ctx || !position) return null;
-    
+
     const panner = ctx.createPanner();
     panner.panningModel = 'HRTF';
     panner.distanceModel = 'exponential';
     panner.refDistance = 1;
     panner.maxDistance = 10000;
     panner.rolloffFactor = 1.5;
-    
+
     if (panner.positionX) {
-        panner.positionX.value = position.x;
-        panner.positionY.value = position.y;
-        panner.positionZ.value = position.z;
+      panner.positionX.value = position.x;
+      panner.positionY.value = position.y;
+      panner.positionZ.value = position.z;
     } else {
-        panner.setPosition(position.x, position.y, position.z);
+      panner.setPosition(position.x, position.y, position.z);
     }
     return panner;
   }
@@ -225,8 +232,8 @@ export class AudioSystem {
     let lastNode = env;
     const panner = position ? this.createPanner(position) : null;
     if (panner) {
-        env.connect(panner);
-        lastNode = panner;
+      env.connect(panner);
+      lastNode = panner;
     }
 
     const t0 = ctx.currentTime + start;
@@ -284,8 +291,8 @@ export class AudioSystem {
     let lastNode = env;
     const panner = position ? this.createPanner(position) : null;
     if (panner) {
-        env.connect(panner);
-        lastNode = panner;
+      env.connect(panner);
+      lastNode = panner;
     }
 
     src.connect(filter);
@@ -321,7 +328,8 @@ export class AudioSystem {
       case 'block-mined': {
         const id = String(detail?.id || '');
         const pos = detail?.position;
-        const stoneLike = id.includes('stone') || id.includes('ore') || id.includes('brick');
+        const stoneLike =
+          id.includes('stone') || id.includes('ore') || id.includes('brick');
         const base = stoneLike ? 160 : 220;
         this.playNoise({
           duration: 0.045,
