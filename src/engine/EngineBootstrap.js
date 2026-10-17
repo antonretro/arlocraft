@@ -21,6 +21,7 @@ import { ActionSystem } from './ActionSystem.js';
 import { NotificationSystem } from './NotificationSystem.js';
 import { SurvivalSystem } from './SurvivalSystem.js';
 import { HUDCore } from '../ui/HUDCore.js';
+import { iconService } from '../ui/IconService.js';
 import { HelpPanel } from '../ui/HelpPanel.js';
 import { MiniMap } from '../ui/MiniMap.js';
 import { ResourcePackManager } from '../world/ResourcePackManager.js';
@@ -75,6 +76,8 @@ export class EngineBootstrap {
     game.camera = new Camera(game.renderer.scene);
     game.player = new Player(game);
     game.world = new World(game.renderer.scene, game);
+    // Inventory block icons sample the same textures the world renders with.
+    iconService.attachBlockRegistry(game.world.blockRegistry);
     game.entities = new EntityManager(game);
 
     game.physics = new Physics(game.camera, game.world);

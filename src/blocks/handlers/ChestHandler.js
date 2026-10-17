@@ -1,4 +1,5 @@
 import { registerBlockHandler } from '../../engine/BlockHandlerRegistry.js';
+import { iconService } from '../../ui/IconService.js';
 
 // ── Chest Handler ──────────────────────────────────────────────────────────
 // Opens a 9x3 chest inventory + player inventory.
@@ -117,23 +118,8 @@ function makeSlot(source, idx, item) {
 }
 
 function makeItemEl(item) {
-  const el = document.createElement('div');
-  el.className = 'item-icon';
-  const icon = _game?.hud?.getIconPath?.(item.id) ?? '';
-  if (icon) {
-    el.style.backgroundImage = `url('${icon}')`;
-    el.style.backgroundSize = 'contain';
-    el.style.backgroundRepeat = 'no-repeat';
-    el.style.backgroundPosition = 'center';
-  } else {
-    el.textContent = String(item.id).slice(0, 2).toUpperCase();
-  }
-  if ((item.count ?? 1) > 1) {
-    const cnt = document.createElement('div');
-    cnt.className = 'item-count';
-    cnt.textContent = String(item.count);
-    el.appendChild(cnt);
-  }
+  // Shared icon pipeline: isometric cubes for blocks, flat sprites for items.
+  const el = iconService.createItemElement(item);
   el.title = item.id;
   return el;
 }

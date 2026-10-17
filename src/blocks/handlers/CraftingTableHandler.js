@@ -1,4 +1,5 @@
 import { registerBlockHandler } from '../../engine/BlockHandlerRegistry.js';
+import { iconService } from '../../ui/IconService.js';
 import { CraftingSystem } from '../../engine/CraftingSystem.js';
 
 // ── Crafting Table Handler ─────────────────────────────────────────────────
@@ -123,27 +124,10 @@ function makeSlot(source, idx, item) {
 }
 
 function makeItemEl(item) {
-  const el = document.createElement('div');
-  el.className = 'item-icon';
-  el.style.backgroundImage = `url('${resolveIcon(item.id)}')`;
-  el.style.backgroundSize = 'contain';
-  el.style.backgroundRepeat = 'no-repeat';
-  el.style.backgroundPosition = 'center';
-  el.textContent = '';
-  if ((item.count ?? 1) > 1) {
-    const cnt = document.createElement('div');
-    cnt.className = 'item-count';
-    cnt.textContent = String(item.count);
-    el.appendChild(cnt);
-  }
+  // Shared icon pipeline: isometric cubes for blocks, flat sprites for items.
+  const el = iconService.createItemElement(item);
   el.title = item.id;
   return el;
-}
-
-function resolveIcon(id) {
-  // Delegate to the HUD's icon system via a best-effort lookup
-  if (_game?.hud?.getIconPath) return _game.hud.getIconPath(id) ?? '';
-  return '';
 }
 
 function getContainer(source) {
