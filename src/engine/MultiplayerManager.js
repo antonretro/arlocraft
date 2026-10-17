@@ -1,6 +1,18 @@
 import { Peer } from 'peerjs';
 
 /**
+ * By default PeerJS uses its free public server to introduce players.
+ * Add ?peer=host:port to the page URL to use your own peerjs server.
+ */
+function peerServerOptions() {
+  const value = new URLSearchParams(window.location.search).get('peer');
+  const match = value?.match(/^([a-z0-9.-]+):(\d{1,5})$/i);
+  if (!match) return {};
+  const local = match[1] === 'localhost' || match[1] === '127.0.0.1';
+  return { host: match[1], port: Number(match[2]), path: '/', secure: !local };
+}
+
+/**
  * MultiplayerManager
  * Handles P2P connectivity via PeerJS (WebRTC)
  */
@@ -98,6 +110,7 @@ export class MultiplayerManager {
       .join('')}-${chars.slice(8).join('')}`;
 
     this.peer = new Peer(randomId, {
+      ...peerServerOptions(),
       debug: 1,
       config: {
         iceServers: [
