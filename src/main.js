@@ -5,6 +5,7 @@ import {
   disposeBoundsTree,
 } from 'three-mesh-bvh';
 import { Game } from './engine/Game.js';
+import { ModLoader } from './mods/ModLoader.js';
 import { validateBlocks } from './utils/BlockValidator.js';
 import { BUILD_LABEL, VERSION_LABEL } from './data/buildInfo.js';
 
@@ -28,9 +29,13 @@ console.log(
   'color: #94a3b8; font-size: 10px;'
 );
 
-const game = new Game();
-
-// Global for debugging if needed
-window.gameInstance = game;
+// Mods add blocks and textures, so they must load before the game starts.
+ModLoader.loadInstalled()
+  .catch((error) => console.error('[ArloCraft] Mods failed to load:', error))
+  .finally(() => {
+    const game = new Game();
+    // Global for debugging if needed
+    window.gameInstance = game;
+  });
 
 console.log('ArloCraft Engine Initialized. Waiting for user interaction...');

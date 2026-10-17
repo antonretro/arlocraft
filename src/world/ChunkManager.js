@@ -48,7 +48,12 @@ export class ChunkManager {
     this.generationEpoch = 0;
     this.tintCache = new Map(); // "cx|cz" -> Uint32Array(256)
 
-    this.textures = new BlockTextureArray({ size: 16, capacity: 2048 });
+    // Layer size follows the texture pack (16px default, HD packs up to 64).
+    const packSize = world.blockRegistry?.resourceManager?.textureSize ?? 16;
+    this.textures = new BlockTextureArray({
+      size: packSize,
+      capacity: packSize > 32 ? 1024 : 2048,
+    });
     this.renderTable = new BlockRenderTable(world, this.textures);
     this.materials = createChunkMaterials(this.textures.texture);
     this.stats = { generated: 0, meshed: 0, lastInstallMs: 0 };

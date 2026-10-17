@@ -56,6 +56,12 @@ export class CommandBlockRunner {
     return this.runScript(key, { x, y, z }, power, source, onLog);
   }
 
+  /** Runs a script centred on a position (mod chat commands). */
+  runAt(position, code, onLog = null) {
+    const key = `at:${position.x}|${position.y}|${position.z}:${Date.now()}`;
+    return this.runScript(key, position, 15, code, onLog);
+  }
+
   runScript(key, block, power, code, onLog) {
     let worker;
     try {

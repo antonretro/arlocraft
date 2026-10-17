@@ -19,6 +19,7 @@ import {
   Gamepad
 } from 'lucide-react';
 import { BUILD_LABEL } from '../../data/buildInfo.js';
+import { PacksPanel } from './PacksPanel.jsx';
 
 export const MainMenu = ({ setScreen }) => {
   const game = getGame();
@@ -155,21 +156,12 @@ export const MainMenu = ({ setScreen }) => {
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <IconButton onClick={() => setSubScreen('skins')} icon={<Palette/>} label="Skins" color="green" />
                 <IconButton
-                  onClick={() => window.alert('Resource Packs coming soon in Voyage v1.2')}
+                  onClick={() => setSubScreen('packs')}
                   icon={<Library/>}
-                  label="Packs"
+                  label="Packs & Mods"
                   color="orange"
-                  badge="Voyage v1.2"
-                  caption="Resource Packs coming soon"
+                  caption="Texture packs and mods"
                 />
-              </div>
-              <div className="rounded-2xl border border-orange-400/20 bg-orange-500/10 px-4 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-orange-200/80">
-                  Voyage v1.2 Preview
-                </div>
-                <div className="mt-1 text-sm text-white/70">
-                  Resource Packs coming soon in Voyage v1.2.
-                </div>
               </div>
               <MenuButton 
                 onClick={() => setSubScreen('settings')}
@@ -177,6 +169,19 @@ export const MainMenu = ({ setScreen }) => {
                 label="Options" 
                 desc="Gameplay & Graphics"
               />
+            </motion.div>
+          )}
+
+          {subScreen === 'packs' && (
+            <motion.div
+              key="packs"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
+              className="h-full"
+            >
+              <PacksPanel onBack={() => setSubScreen('main')} />
             </motion.div>
           )}
 

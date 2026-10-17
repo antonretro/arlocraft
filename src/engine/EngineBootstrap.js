@@ -12,6 +12,7 @@ import { DayNightSystem } from './DayNightSystem.js';
 import { HorizonService } from '../world/visuals/HorizonService.js';
 import { ParticleSystem } from './ParticleSystem.js';
 import { CommandBlockRunner } from '../scripting/CommandBlockRunner.js';
+import { ModLoader } from '../mods/ModLoader.js';
 import { BlockScriptManager } from './BlockScriptManager.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
 import { ChatSystem } from './ChatSystem.js';
@@ -95,6 +96,7 @@ export class EngineBootstrap {
     game.multiplayer = new MultiplayerManager(game);
     game.particles = new ParticleSystem(game);
     game.commandManager = new CommandManager(game);
+    ModLoader.registerCommands(game.commandManager, game);
     game.commandBlocks = new CommandBlockRunner(game);
     game.survival = new SurvivalSystem(game.gameState, game.hud);
     game.dayNight = new DayNightSystem(game.renderer, game.world, {});
