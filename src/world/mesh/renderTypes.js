@@ -27,7 +27,9 @@ function isPlantRenderType(blockData) {
     renderType === 'paired_plant' ||
     blockData?.deco === true ||
     // Small mushrooms are plants; mushroom blocks and stems are full cubes.
-    (id.includes('mushroom') && !id.includes('_block') && !id.includes('stem')) ||
+    (id.includes('mushroom') &&
+      !id.includes('_block') &&
+      !id.includes('stem')) ||
     id.includes('flower')
   );
 }

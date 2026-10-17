@@ -14,22 +14,22 @@ export const orchard_grove = {
       [0, 0],
     ];
     for (const [tx, tz] of trunks) {
-      for (let dy = 1; dy <= 3; dy++) {
-        blocks.push({ x: x + tx, y: y + dy, z: z + tz, id: 'wood_cherry' });
+      for (let dy = 0; dy <= 2; dy++) {
+        blocks.push({ x: x + tx, y: y + dy, z: z + tz, id: 'oak_log' });
       }
       for (let lx = -1; lx <= 1; lx++) {
         for (let lz = -1; lz <= 1; lz++) {
           blocks.push({
             x: x + tx + lx,
-            y: y + 4,
+            y: y + 3,
             z: z + tz + lz,
-            id: 'leaves_cherry',
+            id: 'oak_leaves',
           });
         }
       }
     }
     for (let px = -5; px <= 5; px++) {
-      blocks.push({ x: x + px, y, z, id: 'path_block' });
+      blocks.push({ x: x + px, y: y - 1, z, id: 'path_block' });
     }
     return blocks;
   },
