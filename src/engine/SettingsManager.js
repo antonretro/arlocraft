@@ -10,7 +10,7 @@ export class SettingsManager {
       autoJump: true,
       autoQuality: true,
       fpsCap: 120,
-      renderDistance: 3,
+      renderDistance: 8,
       selectedWorldSlot: 'slot-1',
       shadowsEnabled: false,
       fogDensityScale: 1.0,
@@ -78,7 +78,7 @@ export class SettingsManager {
           ? Number(parsed.fpsCap)
           : defaults.fpsCap,
         renderDistance: Number.isFinite(parsed.renderDistance)
-          ? Math.max(1, Math.min(6, Math.round(parsed.renderDistance)))
+          ? Math.max(2, Math.min(16, Math.round(parsed.renderDistance)))
           : defaults.renderDistance,
         selectedWorldSlot:
           typeof parsed.selectedWorldSlot === 'string'

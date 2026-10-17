@@ -720,7 +720,7 @@ export class GameUI {
       renderDistanceInput.addEventListener('input', () => {
         const value = Math.max(
           2,
-          Math.min(6, Math.round(Number(renderDistanceInput.value)))
+          Math.min(16, Math.round(Number(renderDistanceInput.value)))
         );
         this.game.settings.renderDistance = value;
         const effective = this.game.getEffectiveRenderDistanceForTier(

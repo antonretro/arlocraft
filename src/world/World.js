@@ -18,6 +18,8 @@ import { GravitySystem } from './GravitySystem.js';
 import { RedstoneSystem } from './RedstoneSystem.js';
 import { getBlockHandler } from '../engine/BlockHandlerRegistry.js';
 import { rollLoot } from '../data/LootTables.js';
+import { VoxelStore } from '../voxel/VoxelStore.js';
+import { ChangeLog } from '../voxel/ChangeLog.js';
 
 export class World {
   constructor(scene, game) {
@@ -28,6 +30,10 @@ export class World {
     this.config = new WorldConfig();
     this.state = new WorldState();
     this.coords = new WorldCoordinates(this.config);
+    // Block storage: per-chunk arrays behind a Map-compatible blockMap view.
+    this.voxels = new VoxelStore(this.state, this.coords);
+    this.state.blockMap = this.voxels.blockMap;
+    this.state.changedBlocks = new ChangeLog(this.coords);
     this.blocks = new BlockRulesService(this);
     this.terrain = new WorldTerrainService(this);
     this.visuals = new WorldVisuals(scene);
@@ -57,9 +63,6 @@ export class World {
     this.seaLevel = this.config.terrain.seaLevel;
     this.corruptionEnabled = false;
     this.deepMinY = this.config.terrain.minY;
-
-    // Raycasting scratch vector
-    this.tmpRayDir = new THREE.Vector3();
 
     // Raycasting scratch vector
     this.tmpRayDir = new THREE.Vector3();
@@ -172,16 +175,11 @@ export class World {
   }
 
   getBlockAt(x, y, z) {
-    return (
-      this.state.blockMap.get(
-        this.coords.getKey(Math.floor(x), Math.floor(y), Math.floor(z))
-      ) ?? null
-    );
+    return this.voxels.get(x, y, z);
   }
 
   getRawBlockAt(x, y, z) {
-    const id = this.getBlockAt(x, y, z);
-    return this.state.getInternalId(id);
+    return this.voxels.getNumeric(Math.floor(x), Math.floor(y), Math.floor(z));
   }
 
   getGroundYBelow(x, y, z) {
@@ -401,7 +399,6 @@ export class World {
     this.state.blockData.clear();
     this.state.chestInventories?.clear();
     this.state.changedBlocks.clear();
-    this.state.blockOwners.clear();
     this.state.landmarks.clear();
     this.state.openedChestKeys.clear();
     this.state.restoredLandmarks.clear();
@@ -1292,7 +1289,6 @@ export class World {
     if (this.chunkManager) this.chunkManager.clearAll();
     this.state.blockMap.clear();
     this.state.changedBlocks.clear();
-    this.state.blockOwners.clear();
     this.state.landmarks.clear();
     this.state.openedChestKeys.clear();
     this.state.restoredLandmarks.clear();

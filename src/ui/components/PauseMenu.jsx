@@ -35,14 +35,14 @@ export const PauseMenu = ({ setIsPaused }) => {
 
   const applyPerformancePreset = () => {
     // MAX STABILITY PRESET
-    updateSetting('renderDistance', 2);
+    updateSetting('renderDistance', 5);
     updateSetting('resolutionScale', 0.65);
     updateSetting('autoQuality', true);
     updateSetting('stabilityMode', true);
     updateSetting('chunkRebuildBudget', 1);
     updateSetting('lowSpecPresetApplied', true);
 
-    game.world.setRenderDistance(2);
+    game.world.setRenderDistance(5);
     game.renderer.setResolutionScale(0.65);
   };
   

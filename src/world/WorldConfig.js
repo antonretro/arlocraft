@@ -1,13 +1,10 @@
+import { CHUNK_SIZE } from '../voxel/VoxelStore.js';
+
 export class WorldConfig {
   constructor() {
-    this.chunkSize = 12;
+    this.chunkSize = CHUNK_SIZE;
     this.qualityTier = 'balanced'; // Default tier
-    this.renderDistance = {
-      min: 1,
-      max: 6,
-      default: 2,
-      vertical: 2, // Number of cubes up/down to load
-    };
+    this.renderDistance = 8; // chunk columns; set from settings at startup
     this.terrain = {
       minY: -64,
       maxY: 65,

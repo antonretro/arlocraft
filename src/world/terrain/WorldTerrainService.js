@@ -4,7 +4,6 @@ import { NoiseRouter } from '../NoiseRouter.js';
 import { generateSettlementName } from '../naming/SettlementNameGenerator.js';
 import {
   getContinentMask,
-  getRawTerrainHeight,
   getColumnHeight as shapeColumnHeight,
   isPathAt,
   isHighwayAt,
@@ -76,7 +75,10 @@ export class WorldTerrainService {
     const cached = this.terrainHeightCache.get(key);
     if (cached !== undefined) return cached;
 
-    const clamped = getRawTerrainHeight(
+    // Must match the chunk generator exactly (including the flattened
+    // spawn area), or physics, spawning and structures disagree with the
+    // blocks that are actually there.
+    const clamped = shapeColumnHeight(
       this.router,
       this.noise,
       gx,
@@ -89,7 +91,7 @@ export class WorldTerrainService {
   }
 
   getColumnHeight(x, z) {
-    return shapeColumnHeight(this.router, this.noise, x, z, this.seed);
+    return this.getTerrainHeight(x, z);
   }
 
   isCorruptedAt(x, z) {

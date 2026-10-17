@@ -662,9 +662,9 @@ export class Game {
   getEffectiveRenderDistanceForTier(tier = this.qualityTier) {
     const requested = Math.max(
       2,
-      Math.min(6, Number(this.settings?.renderDistance) || 3)
+      Math.min(16, Number(this.settings?.renderDistance) || 8)
     );
-    const cap = tier === 'low' ? 2 : tier === 'high' ? 6 : 4;
+    const cap = tier === 'low' ? 6 : tier === 'high' ? 16 : 10;
     return Math.max(2, Math.min(cap, requested));
   }
 

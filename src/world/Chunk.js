@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { STRUCTURES } from './structures/StructureRegistry.js';
 import { rebuildChunkInstancedMeshes } from './mesh/ChunkMeshBuilder.js';
+import { generateChunkData } from '../voxel/gen/generateChunk.js';
 
 const CORRUPTION_STRUCTURE_KEYS = new Set([
   'virus_nexus',
@@ -202,7 +203,15 @@ export class Chunk {
     this.cy = cy;
     this.cz = cz;
     this.key = world.getChunkKey(cx, cy, cz);
+    // Keys of blocks drawn by the instanced renderer (stairs, doors, ...).
+    // Everything else is in the worker-built voxel meshes.
     this.blockKeys = new Set();
+    this.voxelMeshes = { solid: null, cross: null, liquid: null };
+    this.state = 'queued'; // queued -> generating -> ready
+    this.meshVersion = 0;
+    this.meshedVersion = -1;
+    this.meshing = false;
+    this._dirty = false;
     this.visible = true;
     this.group = new THREE.Group();
     this.group.position.set(
@@ -216,8 +225,7 @@ export class Chunk {
     this.group.frustumCulled = true;
     this.world.scene.add(this.group);
 
-    this.meshes = new Map(); // id -> Mesh or InstancedMesh
-    this.dirty = false;
+    this.meshes = new Map(); // id -> Mesh or InstancedMesh (special blocks)
     this.lastRebuildTime = 0;
     this.destroyed = false;
     this.generating = false;
@@ -244,64 +252,42 @@ export class Chunk {
   noteTouchedGenerationChunk(x, y, z) {
     const target = this.getChunkTargetForWorldPos(x, y, z);
     this.touchedGenerationChunks.set(target.key, target);
-
-    const loaded = this.world.chunkManager.getChunk(
-      target.cx,
-      target.cy,
-      target.cz
-    );
-    if (loaded && !loaded.destroyed) {
-      loaded.dirty = true;
-      this.world.chunkManager.priorityDirtyChunkKeys.add(target.key);
-    } else if (
-      Math.abs(target.cx - this.cx) <= 1 &&
-      Math.abs(target.cy - this.cy) <= 1 &&
-      Math.abs(target.cz - this.cz) <= 1
-    ) {
-      this.world.chunkManager.queueChunkLoad(target.cx, target.cy, target.cz);
-    }
-
     return target;
   }
 
-  finalizeGenerationPass() {
-    for (const target of this.touchedGenerationChunks.values()) {
-      const chunk = this.world.chunkManager.getChunk(
-        target.cx,
-        target.cy,
-        target.cz
-      );
-      if (!chunk || chunk.destroyed) continue;
-      chunk.dirty = true;
-      this.world.chunkManager.priorityDirtyChunkKeys.add(target.key);
-    }
+  get dirty() {
+    return this._dirty;
   }
 
-  applyGeneratedBlock(x, y, z, id, options = {}) {
-    const key = this.world.getKey(x, y, z);
-    const hasOverride = this.world.state.changedBlocks.has(key);
-    const override = hasOverride
-      ? this.world.state.changedBlocks.get(key)
-      : undefined;
-    if (hasOverride && override === null) return;
+  set dirty(value) {
+    this._dirty = Boolean(value);
+    if (this._dirty) this.world.chunkManager?.markDirty(this);
+  }
 
-    const finalId = hasOverride ? override : id;
-    if (options.persistChange && !hasOverride) {
-      this.world.state.changedBlocks.set(
-        key,
-        finalId === 'air' ? null : finalId
-      );
-    }
-    const owner = this.noteTouchedGenerationChunk(x, y, z);
-    this.world.addBlock(
+  finalizeGenerationPass() {
+    this.touchedGenerationChunks.clear();
+  }
+
+  /**
+   * World-generation write (structures, decoration). Recorded in the voxel
+   * store so it is replayed whenever the target chunk loads; player edits
+   * always win. `replace` false only fills air.
+   */
+  applyGeneratedBlock(x, y, z, id, options = {}) {
+    x = Math.round(x);
+    y = Math.round(y);
+    z = Math.round(z);
+    const key = this.world.getKey(x, y, z);
+    if (this.world.state.changedBlocks.has(key)) return;
+    const finalId = id === 'air' ? null : id;
+    const changed = this.world.voxels.setGenerated(
       x,
       y,
       z,
       finalId,
-      owner.key,
-      Boolean(options.replace),
-      options
+      !options.replace
     );
+    if (changed) this.world.chunkManager.onBlockChanged(x, y, z);
   }
 
   addGeneratedPlant(x, y, z, id) {
@@ -326,13 +312,7 @@ export class Chunk {
   }
 
   addGeneratedStructureBlock(x, y, z, id) {
-    this.applyGeneratedBlock(x, y, z, id, {
-      allowCorruption: true,
-      persistChange: true,
-      replace: true,
-      skipParticles: id === 'air',
-      silent: true,
-    });
+    this.applyGeneratedBlock(x, y, z, id, { replace: true });
   }
 
   selectUndergroundBlock(wx, y, wz, biome) {
@@ -1036,61 +1016,85 @@ export class Chunk {
     this.addGeneratedBlock(x, topY + 2, z, config.leaves);
   }
 
+  /** Replays this chunk's player edits on top of freshly installed terrain. */
   applyPlayerOverrides() {
-    for (const [key, id] of this.world.state.changedBlocks.entries()) {
+    const voxels = this.world.voxels;
+    for (const [key, id] of this.world.state.changedBlocks.forChunk(this.key)) {
       const [x, y, z] = this.world.keyToCoords(key);
-      if (
-        this.world.getChunkCoord(x) !== this.cx ||
-        this.world.getChunkCoord(y) !== this.cy ||
-        this.world.getChunkCoord(z) !== this.cz
-      )
-        continue;
-
-      if (id === null) {
-        this.blockKeys.delete(key);
-        continue;
-      }
-      this.blockKeys.add(key);
+      voxels.set(x, y, z, id);
     }
+  }
+
+  /** Rebuilds the set of special (instanced) block keys from storage. */
+  resyncBlockKeysFromWorld() {
+    this.blockKeys.clear();
+    const arr = this.world.voxels.getChunkArray(this.cx, this.cy, this.cz);
+    if (!arr) return 0;
+    const table = this.world.chunkManager.renderTable;
+    const cs = this.world.chunkSize;
+    const bx = this.cx * cs;
+    const by = this.cy * cs;
+    const bz = this.cz * cs;
+    for (let i = 0; i < arr.length; i++) {
+      const num = arr[i];
+      if (num === 0 || !table.isSpecial(num)) continue;
+      this.blockKeys.add(
+        this.world.getKey(bx + (i & 15), by + (i >> 8), bz + ((i >> 4) & 15))
+      );
+    }
+    return this.blockKeys.size;
+  }
+
+  /**
+   * Installs terrain from the generator: maps the chunk-local palette to
+   * global ids, replays recorded generation writes and player edits, then
+   * places this chunk's structures and spills tree canopies into
+   * neighbouring chunks.
+   */
+  installTerrain({ blocks, palette, outside }) {
+    const voxels = this.world.voxels;
+    const lookup = new Uint16Array(palette.length);
+    for (let i = 1; i < palette.length; i++) {
+      lookup[i] = voxels.toNumeric(palette[i]);
+    }
+    const arr = new Uint16Array(blocks.length);
+    for (let i = 0; i < blocks.length; i++) arr[i] = lookup[blocks[i]];
+    voxels.setChunkArray(this.cx, this.cy, this.cz, arr);
+    this.applyPlayerOverrides();
+
+    this.beginGenerationPass();
+    for (let i = 0; i + 3 < outside.length; i += 4) {
+      this.applyGeneratedBlock(
+        outside[i],
+        outside[i + 1],
+        outside[i + 2],
+        palette[outside[i + 3]]
+      );
+    }
+    const cs = this.world.chunkSize;
+    const centerX = this.cx * cs + Math.floor(cs / 2);
+    const centerZ = this.cz * cs + Math.floor(cs / 2);
+    try {
+      this.placeChunkLandmarksAndStructures(centerX, centerZ);
+    } catch (error) {
+      console.warn('[ArloCraft] Structure placement failed:', this.key, error);
+    }
+    this.finalizeGenerationPass();
+
+    this.state = 'ready';
+    this.resyncBlockKeysFromWorld();
     this.dirty = true;
   }
 
-  resyncBlockKeysFromWorld() {
-    if (this.destroyed || this.blockKeys.size > 0) return 0;
-    const startX = this.cx * this.world.chunkSize;
-    const startZ = this.cz * this.world.chunkSize;
-    const cs = this.world.chunkSize;
-    const minY = this.cy * cs;
-    const maxY = (this.cy + 1) * cs - 1;
-    let recovered = 0;
-
-    for (let lx = 0; lx < cs; lx++) {
-      for (let lz = 0; lz < cs; lz++) {
-        const wx = startX + lx;
-        const wz = startZ + lz;
-        for (let y = minY; y <= maxY; y++) {
-          const key = this.world.getKey(wx, y, wz);
-          if (!this.world.state.blockMap.has(key)) continue;
-          this.blockKeys.add(key);
-          this.world.state.blockOwners.set(key, this.key);
-          recovered++;
-        }
-      }
-    }
-
-    if (recovered > 0) this.dirty = true;
-    return recovered;
-  }
-
+  /** Rebuilds the instanced meshes for special blocks (stairs, doors...). */
   update() {
-    if (!this.dirty || this.destroyed) return;
+    if (this.destroyed) return;
     this.rebuildMeshes();
-    this.dirty = false;
   }
 
   rebuildMeshes() {
     if (this.destroyed) return;
-
+    if (this.blockKeys.size === 0 && this.meshes.size === 0) return;
     try {
       rebuildChunkInstancedMeshes(this);
     } catch (e) {
@@ -1098,76 +1102,67 @@ export class Chunk {
     }
   }
 
-  async generate() {
-    if (this.generating || this.destroyed) return;
-    this.generating = true;
-    try {
-      this.beginGenerationPass();
-      if (this.world.chunkGenerator && this.world.chunkGenerator.available) {
-        try {
-          const results = await this.world.chunkGenerator.generateChunk(
-            this.cx,
-            this.cy,
-            this.cz
-          );
-          if (this.destroyed) return;
-          if (results && results.data) {
-            const { data, palette } = results;
-            for (let i = 0; i < data.length; i += 4) {
-              const x = data[i];
-              const y = data[i + 1];
-              const z = data[i + 2];
-              const paletteIndex = data[i + 3];
-              const id = palette[paletteIndex];
-
-              const key = this.world.getKey(x, y, z);
-              if (this.world.state.changedBlocks.get(key) === null) continue;
-              const override = this.world.state.changedBlocks.get(key);
-              const finalId = override ?? id;
-              const owner = this.noteTouchedGenerationChunk(x, y, z);
-              this.world.addBlock(x, y, z, finalId, owner.key);
-            }
-
-            const startX = this.cx * this.world.chunkSize;
-            const startZ = this.cz * this.world.chunkSize;
-            const centerX = startX + Math.floor(this.world.chunkSize * 0.5);
-            const centerZ = startZ + Math.floor(this.world.chunkSize * 0.5);
-
-            this.placeChunkLandmarksAndStructures(centerX, centerZ);
-            this.applyPlayerOverrides();
-            this.finalizeGenerationPass();
-            return;
-          }
-        } catch (error) {
-          console.warn(
-            '[ArloCraft] Chunk Worker failed, falling back to sync',
-            error
-          );
-        }
+  /** Swaps in the worker-built voxel meshes. */
+  applyVoxelMeshes(groups, materials) {
+    for (const name of ['solid', 'cross', 'liquid']) {
+      const old = this.voxelMeshes[name];
+      if (old) {
+        this.group.remove(old);
+        old.geometry.dispose();
+        this.voxelMeshes[name] = null;
       }
-
-      this.generateSync();
-    } finally {
-      this.generating = false;
+      const data = groups?.[name];
+      if (!data) continue;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(data.position, 3)
+      );
+      geometry.setAttribute(
+        'normal',
+        new THREE.BufferAttribute(data.normal, 3)
+      );
+      geometry.setAttribute('uv', new THREE.BufferAttribute(data.uv, 2));
+      geometry.setAttribute('layer', new THREE.BufferAttribute(data.layer, 1));
+      geometry.setAttribute('color', new THREE.BufferAttribute(data.color, 3));
+      geometry.setAttribute('emit', new THREE.BufferAttribute(data.emit, 1));
+      geometry.setIndex(new THREE.BufferAttribute(data.index, 1));
+      const cs = this.world.chunkSize;
+      geometry.boundingBox = new THREE.Box3(
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(cs, cs, cs)
+      );
+      geometry.boundingSphere = new THREE.Sphere(
+        new THREE.Vector3(cs / 2, cs / 2, cs / 2),
+        (cs * Math.sqrt(3)) / 2
+      );
+      const mesh = new THREE.Mesh(geometry, materials[name]);
+      mesh.matrixAutoUpdate = false;
+      mesh.castShadow = name === 'solid';
+      mesh.receiveShadow = true;
+      mesh.renderOrder = name === 'liquid' ? 2 : 0;
+      this.voxelMeshes[name] = mesh;
+      this.group.add(mesh);
     }
   }
 
+  // Generation is driven by ChunkManager (worker pool -> installTerrain).
+  generate() {
+    this.world.chunkManager?.queueChunkLoad(this.cx, this.cy, this.cz);
+  }
+
   generateSync() {
-    if (this.destroyed) return;
-    this.beginGenerationPass();
-    const startX = this.cx * this.world.chunkSize;
-    const startZ = this.cz * this.world.chunkSize;
-    const centerX = startX + Math.floor(this.world.chunkSize * 0.5);
-    const centerZ = startZ + Math.floor(this.world.chunkSize * 0.5);
-    for (let lx = 0; lx < this.world.chunkSize; lx++) {
-      for (let lz = 0; lz < this.world.chunkSize; lz++) {
-        this.generateTerrainColumn(startX + lx, startZ + lz);
-      }
-    }
-    this.placeChunkLandmarksAndStructures(centerX, centerZ);
-    this.applyPlayerOverrides();
-    this.finalizeGenerationPass();
-    this.dirty = true;
+    if (this.destroyed || this.state === 'ready') return;
+    this.installTerrain(
+      generateChunkData({
+        cx: this.cx,
+        cy: this.cy,
+        cz: this.cz,
+        seedString: this.world.seedString,
+        corruptionEnabled: Boolean(this.world.corruptionEnabled),
+        cavesEnabled: this.world.game?.features?.caves !== false,
+      })
+    );
   }
 
   registerRoadLandmark(startX, startZ) {
@@ -1352,7 +1347,12 @@ export class Chunk {
       if (typeof mesh.dispose === 'function') mesh.dispose();
     }
     this.meshes.clear();
+    for (const name of ['solid', 'cross', 'liquid']) {
+      this.voxelMeshes[name]?.geometry.dispose();
+      this.voxelMeshes[name] = null;
+    }
     if (this.blockKeys) this.blockKeys.clear();
     if (this.group?.parent) this.group.parent.remove(this.group);
+    this.world.voxels.dropChunk(this.cx, this.cy, this.cz);
   }
 }

@@ -12,7 +12,7 @@ export class WorldMutationService {
     y,
     z,
     id,
-    ownerKey = null,
+    _ownerKey = null, // unused: a block belongs to the chunk it is in
     replace = false,
     options = {},
     data = null
@@ -36,48 +36,25 @@ export class WorldMutationService {
 
     const key = this.world.coords.getKey(gx, gy, gz);
 
-    const cx = this.world.coords.getChunkCoord(gx);
-    const cy = this.world.coords.getChunkCoord(gy);
-    const cz = this.world.coords.getChunkCoord(gz);
-    const owner = ownerKey ?? this.world.coords.getChunkKey(cx, cy, cz);
-
-    const existing = this.world.state.blockMap.get(key);
-    if (existing && !replace) {
-      const ownerChunk = this.world.chunkManager.getChunk(cx, cy, cz);
-      if (ownerChunk && !ownerChunk.blockKeys.has(key)) {
-        ownerChunk.blockKeys.add(key);
-        ownerChunk.dirty = true;
-        this.world.chunkManager.priorityDirtyChunkKeys.add(ownerChunk.key);
-      }
-      if (this.world.state.blockOwners.get(key) !== owner) {
-        this.world.state.blockOwners.set(key, owner);
-      }
-      return existing;
-    }
+    const existing = this.world.voxels.get(gx, gy, gz);
+    if (existing && !replace) return existing;
 
     if (existing && replace)
-      this.removeBlockByKey(key, { ...options, skipChangeTracking: true });
+      this.removeBlockByKey(key, {
+        ...options,
+        skipChangeTracking: true,
+        skipParticles: true,
+        silent: true,
+      });
 
-    this.world.state.blockMap.set(key, id);
-    this.world.state.blockOwners.set(key, owner);
+    this.world.voxels.set(gx, gy, gz, id);
     if (data) this.world.state.blockData.set(key, data);
     // Runtime edits (not terrain generation) must be saved with the world.
     if (options?.persistChange) this.world.state.changedBlocks.set(key, id);
 
     if (id === 'virus') this.world.state.virusBlockCount++;
 
-    const ownerChunk = this.world.chunkManager.getChunk(cx, cy, cz);
-    if (ownerChunk) {
-      ownerChunk.blockKeys.add(key);
-      if (!options?.skipChunkDirtying) {
-        ownerChunk.dirty = true;
-        this.world.chunkManager.priorityDirtyChunkKeys.add(ownerChunk.key);
-      }
-    }
-
-    if (!options?.skipNeighborDirtying) {
-      this.world.chunkManager.updateNeighborsDirty(gx, gy, gz);
-    }
+    this.world.chunkManager.onBlockChanged(gx, gy, gz);
 
     if (id === 'virus' || id === 'arlo') {
       const radius = this.world.config.virus?.influenceRadiusBlocks ?? 3;
@@ -126,27 +103,14 @@ export class WorldMutationService {
       this.world.state.changedBlocks.set(key, null);
     }
 
-    const owner = this.world.state.blockOwners.get(key);
-    this.world.state.blockMap.delete(key);
-    this.world.state.blockOwners.delete(key);
+    const [x, y, z] = this.world.coords.keyToCoords(key);
+    this.world.voxels.set(x, y, z, null);
     this.world.state.blockData.delete(key);
 
     if (id === 'virus' && this.world.state.virusBlockCount > 0)
       this.world.state.virusBlockCount--;
 
-    const [x, y, z] = this.world.coords.keyToCoords(key);
-    const ownerChunk = this.world.chunkManager.getChunk(
-      this.world.coords.getChunkCoord(x),
-      this.world.coords.getChunkCoord(y),
-      this.world.coords.getChunkCoord(z)
-    );
-    if (ownerChunk) {
-      ownerChunk.blockKeys.delete(key);
-      ownerChunk.dirty = true;
-      this.world.chunkManager.priorityDirtyChunkKeys.add(ownerChunk.key);
-    }
-
-    this.world.chunkManager.updateNeighborsDirty(x, y, z);
+    this.world.chunkManager.onBlockChanged(x, y, z);
 
     // Spawn breaking particles (Skip for liquids and air/void)
     const isLiquid =

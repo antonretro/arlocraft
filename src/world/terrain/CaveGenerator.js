@@ -44,25 +44,59 @@ function sqr(v) {
 // Region sampling
 // Large, low-frequency fields control where cave styles cluster.
 // ---------------------------------------------------------------------------
+// Generators walk each column from bottom to top, so the 2D fields below
+// are memoised for the most recent column instead of being resampled for
+// every block.
+const column = {
+  noise: null,
+  wx: NaN,
+  wz: NaN,
+  region: 0,
+  humidity: 0,
+  temperature: 0,
+  entranceH: NaN,
+  entrance: false,
+};
+
+function columnFor(noise, wx, wz) {
+  if (column.noise !== noise || column.wx !== wx || column.wz !== wz) {
+    column.noise = noise;
+    column.wx = wx;
+    column.wz = wz;
+    column.region = noise.simplex2D(wx * 0.0032 + 1200.5, wz * 0.0032 - 810.25);
+    column.humidity = noise.simplex2D(wx * 0.0041 - 913.7, wz * 0.0041 + 447.2);
+    column.temperature = noise.simplex2D(
+      wx * 0.0038 + 622.1,
+      wz * 0.0038 - 1551.4
+    );
+    column.entranceH = NaN;
+  }
+  return column;
+}
+
 function sampleCaveRegion(noise, wx, wz) {
-  return noise.simplex2D(wx * 0.0032 + 1200.5, wz * 0.0032 - 810.25);
+  return columnFor(noise, wx, wz).region;
 }
 
 function sampleHumidityRegion(noise, wx, wz) {
-  return noise.simplex2D(wx * 0.0041 - 913.7, wz * 0.0041 + 447.2);
+  return columnFor(noise, wx, wz).humidity;
 }
 
 function sampleTemperatureRegion(noise, wx, wz) {
-  return noise.simplex2D(wx * 0.0038 + 622.1, wz * 0.0038 - 1551.4);
+  return columnFor(noise, wx, wz).temperature;
 }
 
 function sampleSurfaceEntranceAllowance(noise, wx, wz, terrainH) {
+  const c = columnFor(noise, wx, wz);
+  if (c.entranceH === terrainH) return c.entrance;
   const sx = noise.simplex2D((wx + 1) * 0.02, wz * 0.02);
   const sz = noise.simplex2D(wx * 0.02, (wz + 1) * 0.02);
   const slope = abs(sx - terrainH * 0.01) + abs(sz - terrainH * 0.01);
 
   const cliffMask = noise.simplex2D(wx * 0.01 + 301, wz * 0.01 - 771);
-  return slope > 0.3 || cliffMask > 0.48;
+  c.entranceH = terrainH;
+  c.entrance = slope > 0.3 || cliffMask > 0.48;
+  return c.entrance;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +288,15 @@ export function isCave(noise, wx, wy, wz, terrainH, cavesEnabled) {
 // Use this instead of calling isCave() + getCaveBiome() separately if you want
 // fewer repeated noise samples.
 // ---------------------------------------------------------------------------
+// Shared result for solid cells (callers only read it).
+const NO_CAVE = Object.freeze({
+  carve: false,
+  biome: CaveBiome.DEFAULT,
+  fluid: null,
+  family: null,
+  depthFactor: 0,
+});
+
 export function getCaveCell(
   noise,
   wx,
@@ -264,34 +307,16 @@ export function getCaveCell(
   seed = 0
 ) {
   if (!cavesEnabled) {
-    return {
-      carve: false,
-      biome: CaveBiome.DEFAULT,
-      fluid: null,
-      family: null,
-      depthFactor: 0,
-    };
+    return NO_CAVE;
   }
 
   if (wy <= DEEP_MIN_Y + 2) {
-    return {
-      carve: false,
-      biome: CaveBiome.DEFAULT,
-      fluid: null,
-      family: null,
-      depthFactor: 0,
-    };
+    return NO_CAVE;
   }
 
   const depthBelowSurface = terrainH - wy;
   if (depthBelowSurface <= 0) {
-    return {
-      carve: false,
-      biome: CaveBiome.DEFAULT,
-      fluid: null,
-      family: null,
-      depthFactor: 0,
-    };
+    return NO_CAVE;
   }
 
   const allowEntrance = sampleSurfaceEntranceAllowance(noise, wx, wz, terrainH);
@@ -299,13 +324,7 @@ export function getCaveCell(
     ? CLIFF_SURFACE_SEAL_DEPTH
     : SURFACE_SEAL_DEPTH;
   if (wy >= terrainH - sealDepth) {
-    return {
-      carve: false,
-      biome: CaveBiome.DEFAULT,
-      fluid: null,
-      family: null,
-      depthFactor: 0,
-    };
+    return NO_CAVE;
   }
 
   const depthFactor = saturate(depthBelowSurface / 90);
@@ -394,8 +413,15 @@ export function getCaveMaterialProfile(
   cavesEnabled,
   seed = 0
 ) {
-  const cell = getCaveCell(noise, wx, wy, wz, terrainH, cavesEnabled, seed);
-  if (!cell.carve) return null;
+  return getCaveProfileForCell(
+    getCaveCell(noise, wx, wy, wz, terrainH, cavesEnabled, seed),
+    wy
+  );
+}
+
+/** Decoration profile for an already-sampled cave cell (null if solid). */
+export function getCaveProfileForCell(cell, wy) {
+  if (!cell?.carve) return null;
 
   switch (cell.biome) {
     case CaveBiome.LUSH:

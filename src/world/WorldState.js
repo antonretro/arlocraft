@@ -3,8 +3,8 @@ import { normalizeBlockVariantId } from '../data/blockIds.js';
 
 export class WorldState {
   constructor() {
+    // Replaced by World with the VoxelStore view and a ChangeLog.
     this.blockMap = new Map();
-    this.blockOwners = new Map();
     this.blockData = new Map(); // Metadata for blocks (e.g. sign text, command block commands)
     this.chestInventories = new Map(); // blockKey -> 27-slot chest contents
     this.changedBlocks = new Map();
