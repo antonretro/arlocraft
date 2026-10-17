@@ -68,6 +68,7 @@ export class SaveSystem {
       },
       inventory: g.gameState.inventory,
       offhand: g.gameState.offhand,
+      armor: g.gameState.armor,
       craftingGrid: g.gameState.craftingGrid,
     };
   }
@@ -80,7 +81,9 @@ export class SaveSystem {
       throw new Error('Invalid save data: Missing world payload');
     const g = this.game;
 
-    // 1. World & Entities
+    // 1. World & Entities (clear whatever world was loaded before)
+    g.world.clearWorld();
+    g.particles?.clear();
     g.world.loadFromData(data.world);
     g.resetEntities();
 
@@ -96,6 +99,9 @@ export class SaveSystem {
         g.gameState.inventory.push(null);
     }
     g.gameState.offhand = migrateInventoryItem(data?.offhand ?? null);
+    g.gameState.armor = Array.from({ length: 4 }, (_, i) =>
+      migrateInventoryItem(data.armor?.[i] ?? null)
+    );
 
     if (Array.isArray(data.craftingGrid)) {
       g.gameState.craftingGrid = data.craftingGrid
@@ -173,7 +179,13 @@ export class SaveSystem {
   saveToSlot(slotId) {
     const data = this.getSnapshot();
     const packed = this.encode(data);
-    localStorage.setItem(this.getSlotKey(slotId), JSON.stringify(packed));
+    try {
+      localStorage.setItem(this.getSlotKey(slotId), JSON.stringify(packed));
+    } catch (err) {
+      // Usually QuotaExceededError: the existing save in this slot is untouched.
+      console.error('[ArloCraft] Save failed:', err);
+      return false;
+    }
     return true;
   }
 

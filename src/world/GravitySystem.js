@@ -101,7 +101,10 @@ export class GravitySystem {
     if (targetY <= -120) return;
 
     // Place at target (Instant column fall)
-    this.world.addBlock(x, targetY, z, id, 'gravity', true, { silent: false });
+    this.world.addBlock(x, targetY, z, id, 'gravity', true, {
+      silent: false,
+      persistChange: true,
+    });
 
     // Queue checks for neighbors around both old and new positions
     this.queueNeighbors(x, y, z);

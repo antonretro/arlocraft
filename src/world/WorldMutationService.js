@@ -61,6 +61,8 @@ export class WorldMutationService {
     this.world.state.blockMap.set(key, id);
     this.world.state.blockOwners.set(key, owner);
     if (data) this.world.state.blockData.set(key, data);
+    // Runtime edits (not terrain generation) must be saved with the world.
+    if (options?.persistChange) this.world.state.changedBlocks.set(key, id);
 
     if (id === 'virus') this.world.state.virusBlockCount++;
 

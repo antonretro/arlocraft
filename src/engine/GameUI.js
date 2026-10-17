@@ -430,10 +430,7 @@ export class GameUI {
       btnPlayWorld.addEventListener('click', () => {
         const loaded = this.game.loadWorldLocal(this.game.selectedWorldSlot);
         if (loaded) {
-          this.game.startGame({
-            skipSeedApply: true,
-            preserveCurrentMode: true,
-          });
+          this.game.startGame({ fromSave: true });
         } else {
           this.setStatus(
             `No save in ${this.game.selectedWorldSlot.toUpperCase()}.`,

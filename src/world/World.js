@@ -365,7 +365,10 @@ export class World {
     return this.mutations.removeBlockByKey(key, options);
   }
   setBlockAt(x, y, z, id, options) {
-    return this.mutations.setBlock(x, y, z, id, null, options);
+    return this.mutations.setBlock(x, y, z, id, null, {
+      persistChange: true,
+      ...options,
+    });
   }
   removeBlockAt(x, y, z, options) {
     const key = this.getKey(Math.floor(x), Math.floor(y), Math.floor(z));
@@ -396,6 +399,7 @@ export class World {
     this.objects = [];
     this.state.blockMap.clear();
     this.state.blockData.clear();
+    this.state.chestInventories?.clear();
     this.state.changedBlocks.clear();
     this.state.blockOwners.clear();
     this.state.landmarks.clear();

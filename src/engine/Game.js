@@ -115,9 +115,16 @@ export class Game {
   }
 
   saveWorldLocal(slotId = this.selectedWorldSlot) {
-    this.saveSystem.saveToSlot(slotId);
+    if (!this.saveSystem.saveToSlot(slotId)) {
+      this.ui.setStatus(
+        `Could not save ${slotId.toUpperCase()}: browser storage is full.`,
+        true
+      );
+      return false;
+    }
     this.ui.renderWorldList();
     this.ui.setStatus(`World saved to ${slotId.toUpperCase()}.`);
+    return true;
   }
 
   loadWorldLocal(slotId = this.selectedWorldSlot, options = {}) {
@@ -145,8 +152,20 @@ export class Game {
     }
   }
 
-  startGame({ skipSeedApply = false, preserveCurrentMode = false } = {}) {
+  /**
+   * Enters gameplay. A fresh world is reset first; pass fromSave after
+   * loadWorldLocal() so the loaded world, inventory and position are kept.
+   */
+  startGame({
+    skipSeedApply = false,
+    preserveCurrentMode = false,
+    fromSave = false,
+  } = {}) {
     this.renderer.setVisible(true);
+    if (fromSave) {
+      skipSeedApply = true;
+      preserveCurrentMode = true;
+    }
     if (!skipSeedApply) {
       const seedInput = document.getElementById('seed-input');
       if (seedInput?.value.trim()) this.world.setSeed(seedInput.value.trim());
@@ -157,17 +176,20 @@ export class Game {
       this.gameState.setMode(this.selectedStartMode);
     }
 
-    this.world.clearWorld();
-    this.resetEntities();
-    this.particles?.clear();
-    this.gameState.hp = 20;
-    this.gameState.hunger = 20;
-    this.gameState.inventory = Array(36).fill(null);
-    this.gameState.offhand = null;
-    this.gameState.craftingGrid = Array(9).fill(null);
+    if (!fromSave) {
+      this.world.clearWorld();
+      this.resetEntities();
+      this.particles?.clear();
+      this.gameState.hp = 20;
+      this.gameState.hunger = 20;
+      this.gameState.inventory = Array(36).fill(null);
+      this.gameState.offhand = null;
+      this.gameState.armor = Array(4).fill(null);
+      this.gameState.craftingGrid = Array(9).fill(null);
 
-    if (this.physics.isReady) {
-      this.physics.resetPlayer(0, 160, 0);
+      if (this.physics.isReady) {
+        this.physics.resetPlayer(0, 160, 0);
+      }
     }
 
     this.hasStarted = true;
@@ -185,7 +207,9 @@ export class Game {
     }
 
     window.dispatchEvent(new CustomEvent('inventory-changed'));
-    window.dispatchEvent(new CustomEvent('offhand-changed', { detail: null }));
+    window.dispatchEvent(
+      new CustomEvent('offhand-changed', { detail: this.gameState.offhand })
+    );
     window.dispatchEvent(
       new CustomEvent('hp-changed', { detail: this.gameState.hp })
     );

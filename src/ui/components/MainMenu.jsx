@@ -204,7 +204,7 @@ export const MainMenu = ({ setScreen }) => {
                           game.selectedWorldSlot = slotId;
                           if (summary) {
                             game.loadWorldLocal(slotId);
-                            game.startGame({ skipSeedApply: true, preserveCurrentMode: true });
+                            game.startGame({ fromSave: true });
                           } else {
                             setShowCreateModal(true);
                           }

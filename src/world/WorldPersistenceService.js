@@ -13,6 +13,11 @@ export class WorldPersistenceService {
       restoredLandmarks: Array.from(
         this.world.state.restoredLandmarks.values()
       ),
+      // Sign text, command-block commands, repeater/lever settings.
+      blockData: Array.from(this.world.state.blockData.entries()),
+      chestInventories: Array.from(
+        this.world.state.chestInventories?.entries() ?? []
+      ),
     };
   }
 
@@ -28,7 +33,6 @@ export class WorldPersistenceService {
         const id = this.migrateBlockId(rawId);
         this.world.state.changedBlocks.set(key, id);
 
-        const [x, y, z] = this.world.coords.keyToCoords(key);
         if (id === null || id === 'air') {
           this.world.state.blockMap.delete(key);
         } else {
@@ -45,6 +49,14 @@ export class WorldPersistenceService {
 
     if (Array.isArray(data.restoredLandmarks)) {
       this.world.state.restoredLandmarks = new Set(data.restoredLandmarks);
+    }
+
+    if (Array.isArray(data.blockData)) {
+      this.world.state.blockData = new Map(data.blockData);
+    }
+
+    if (Array.isArray(data.chestInventories)) {
+      this.world.state.chestInventories = new Map(data.chestInventories);
     }
 
     // Logic to refresh chunks after load

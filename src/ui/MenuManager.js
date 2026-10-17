@@ -75,10 +75,7 @@ export class MenuManager {
       const loaded = this.game.loadWorldLocal(this.game.selectedWorldSlot, {
         silent: true,
       });
-      this.game.startGame({
-        skipSeedApply: loaded,
-        preserveCurrentMode: loaded,
-      });
+      this.game.startGame({ fromSave: loaded });
     });
 
     // World Select → Create
