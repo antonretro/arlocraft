@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { iconService } from '../IconService';
 import { normalizeBlockVariantId } from '../../data/blockIds';
 
@@ -14,8 +14,22 @@ const FIXED_COLOR_FOLIAGE_IDS = new Set([
  */
 export const ItemIcon = React.memo(({ item, className = "" }) => {
   if (!item) return null;
+  return <ItemIconInner item={item} className={className} />;
+});
 
+const ItemIconInner = ({ item, className }) => {
   const normalizedId = useMemo(() => normalizeBlockVariantId(item.id), [item.id]);
+
+  // Isometric cube icon for full/partial blocks; generated lazily and cached.
+  const isoShape = useMemo(() => iconService.getBlockIconShape(normalizedId), [normalizedId]);
+  const getIsoSnapshot = useCallback(
+    () => (isoShape ? iconService.getCachedBlockIcon(normalizedId) ?? null : null),
+    [isoShape, normalizedId]
+  );
+  const isoIcon = useSyncExternalStore(iconService.subscribeBlockIcons, getIsoSnapshot);
+  useEffect(() => {
+    if (isoShape && !isoIcon) iconService.requestBlockIcon(normalizedId);
+  }, [isoShape, isoIcon, normalizedId]);
   
   const { block, textureKey, isDeco, isBlockItem, shouldTintGrassFace, shouldTintFoliageIcon, shouldUseGrassSpriteTint } = useMemo(() => {
     const b = iconService.blockById.get(normalizedId);
@@ -72,8 +86,21 @@ export const ItemIcon = React.memo(({ item, className = "" }) => {
     );
   };
 
-  // BLOCK ITEM: Render crisp block sprite instead of a distorted CSS pseudo-3D cube.
-  if (isBlockItem) {
+  if (isoIcon) {
+    return (
+      <div
+        className={`item-icon block-iso-icon ${className} relative`}
+        style={{ backgroundImage: `url('${isoIcon}')` }}
+      >
+        {renderDurability()}
+        {item.count > 1 && <span className="item-count">{item.count}</span>}
+      </div>
+    );
+  }
+
+  // BLOCK ITEM: flat block face while the isometric icon is generated (or for
+  // blocks without one). Flat-sprite blocks (rails, ladders…) use the 2D path.
+  if (isBlockItem && !iconService.isFlatSpriteBlock(normalizedId)) {
     const blockTexture = iconService.getPreferredBlockIconTexture(normalizedId);
     if (blockTexture) {
       const tintClass = shouldTintGrassFace
@@ -82,24 +109,15 @@ export const ItemIcon = React.memo(({ item, className = "" }) => {
           ? 'tint-grass'
           : '';
 
-      const isStair = normalizedId.includes('_stairs');
-      const isSlab = normalizedId.includes('_slab');
       const isMultiFrame = normalizedId === 'lantern' || normalizedId === 'command_block' || normalizedId.includes('door') || normalizedId.includes('active') || normalizedId.includes('lamp');
 
       return (
         <div
           className={`item-icon block-sprite-icon ${tintClass} ${className} relative overflow-hidden`}
-          style={{ 
+          style={{
             backgroundImage: `url('${blockTexture}')`,
             backgroundSize: isMultiFrame ? '100% auto' : 'contain',
             backgroundPosition: isMultiFrame ? 'top' : 'center',
-            clipPath: isStair ? 'polygon(0 0, 50% 0, 50% 50%, 100% 50%, 100% 100%, 0 100%)' : 'none',
-            height: isSlab ? '50%' : '100%',
-            bottom: 0,
-            position: isSlab ? 'absolute' : 'relative',
-            left: isSlab ? '0' : 'auto',
-            right: isSlab ? '0' : 'auto',
-            margin: isSlab ? 'auto' : '0'
           }}
         >
           {renderDurability()}
@@ -124,4 +142,4 @@ export const ItemIcon = React.memo(({ item, className = "" }) => {
       {item.count > 1 && <span className="item-count">{item.count}</span>}
     </div>
   );
-});
+};

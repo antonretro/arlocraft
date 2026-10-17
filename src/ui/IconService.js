@@ -1,6 +1,12 @@
 import { BLOCKS } from '../data/blocks.js';
 import { TOOLS } from '../data/tools.js';
 import { normalizeBlockVariantId } from '../data/blockIds.js';
+import {
+  BLOCK_ICON_SHAPES,
+  readTexturePixels,
+  renderBlockIcon,
+  tintToMultiplier,
+} from './BlockIconRenderer.js';
 
 const itemTextureModules = import.meta.glob(
   '../../public/resource_pack/assets/minecraft/textures/item/*.png',
@@ -18,11 +24,59 @@ const FIXED_COLOR_FOLIAGE_IDS = new Set([
   'flowering_azalea_leaves',
 ]);
 
+// Render types / ids that Minecraft shows as a flat sprite in the inventory
+// even though they are placeable blocks.
+const FLAT_ICON_RENDER_TYPES = new Set([
+  'pane',
+  'flat',
+  'item',
+  'sign',
+  'plant',
+  'paired_plant',
+]);
+const FLAT_ICON_ID_PATTERN =
+  /(^|_)(door|pane|bars|rail|torch|ladder|sign|sapling|stand|stalk|chain|lever|button|bell|vine|vines|cobweb|lily_pad|candle|roots|sprouts|seagrass|lantern)($|_)/;
+// Ids without a block config that are still plain cubes (raw texture names
+// such as diamond_ore used by loot tables or commands).
+const UNREGISTERED_CUBE_ID_PATTERN =
+  /(_ore|_block|_planks|_log|_wood|_bricks|_tiles|_concrete|_wool|_terracotta|stone|deepslate|_glass)$/;
+const CUBE_LANTERN_IDS = new Set(['jack_o_lantern', 'sea_lantern']);
+const FLAT_ICON_IDS = new Set([
+  'melon_stem',
+  'pumpkin_stem',
+  'sugar_cane',
+  'cake',
+  'flower_pot',
+  'brewing_stand',
+  'conduit',
+]);
+
+const GRASS_ICON_TINT = 0x7fb238;
+const LEAVES_ICON_TINT = 0x59ae30;
+const LEAVES_TINT_BY_ID = {
+  birch_leaves: 0x80a755,
+  spruce_leaves: 0x619961,
+};
+const WATER_ICON_TINT = 0x3f76e4;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export class IconService {
   constructor() {
-    this.blockById = new Map(BLOCKS.map((block) => [block.id, block]));
-    this.toolById = new Map(TOOLS.map((tool) => [tool.id, tool]));
+    // blockById / toolById are built lazily (see getters below): block
+    // handler modules import this service while data/blocks.js is still
+    // evaluating, so BLOCKS may not exist yet at construction time.
+    this._blockById = null;
+    this._toolById = null;
     this.generatedIconCache = new Map();
+    // Isometric block icons: normalizedId -> data URL (or null = keep flat).
+    this.blockIconCache = new Map();
+    this.blockIconPending = new Map();
+    this.blockIconListeners = new Set();
+    this.blockRegistry = null;
+    this._pixelCache = new Map();
+    this._renderQueue = [];
+    this.subscribeBlockIcons = this.subscribeBlockIcons.bind(this);
     this._abbrevMap = null;
 
     this.itemTextures = {};
@@ -172,6 +226,20 @@ export class IconService {
     this.blockTextures['mushroom_red'] = this.blockTextures['red_mushroom'];
   }
 
+  get blockById() {
+    if (!this._blockById) {
+      this._blockById = new Map(BLOCKS.map((block) => [block.id, block]));
+    }
+    return this._blockById;
+  }
+
+  get toolById() {
+    if (!this._toolById) {
+      this._toolById = new Map(TOOLS.map((tool) => [tool.id, tool]));
+    }
+    return this._toolById;
+  }
+
   /**
    * Normalizes IDs that are flipped (e.g. concrete_white -> white_concrete)
    */
@@ -288,16 +356,32 @@ export class IconService {
       normalizedId.startsWith('leaves_') ||
       normalizedId.includes('_stairs') ||
       normalizedId.includes('_slab');
-    const isStair = normalizedId.includes('_stairs');
-    const isSlab = normalizedId.includes('_slab');
-    const isMultiFrame =
-      normalizedId === 'lantern' ||
-      normalizedId === 'command_block' ||
-      normalizedId.includes('door') ||
-      normalizedId.includes('active') ||
-      normalizedId.includes('lamp');
 
-    if (isBlockItem) {
+    const isoShape = this.getBlockIconShape(normalizedId);
+    const isoIcon = isoShape ? this.getCachedBlockIcon(normalizedId) : null;
+
+    if (isoIcon) {
+      element.classList.add('block-iso-icon');
+      element.style.backgroundImage = `url('${isoIcon}')`;
+    } else if (isoShape) {
+      // Show the flat face until the isometric icon is ready, then swap.
+      const texture = this.getPreferredBlockIconTexture(normalizedId);
+      if (texture) {
+        element.classList.add('block-sprite-icon');
+        element.style.backgroundImage = `url('${texture}')`;
+        if (shouldTintFoliageIcon) element.classList.add('tint-grass');
+      }
+      this.requestBlockIcon(normalizedId).then((url) => {
+        if (!url) return;
+        element.classList.remove(
+          'block-sprite-icon',
+          'tint-grass',
+          GRASS_PREVIEW_TINT_CLASS
+        );
+        element.classList.add('block-iso-icon');
+        element.style.backgroundImage = `url('${url}')`;
+      });
+    } else if (isBlockItem && !this.isFlatSpriteBlock(normalizedId)) {
       const texture = this.getPreferredBlockIconTexture(normalizedId);
       if (texture) {
         element.classList.add('block-sprite-icon');
@@ -335,6 +419,339 @@ export class IconService {
     }
 
     return element;
+  }
+
+  // ── Isometric block icons ────────────────────────────────────────────────
+
+  /**
+   * Lets icons read textures straight from the in-world block materials so
+   * inventory cubes always match what is placed in the world.
+   */
+  attachBlockRegistry(registry) {
+    this.blockRegistry = registry || null;
+  }
+
+  subscribeBlockIcons(listener) {
+    this.blockIconListeners.add(listener);
+    return () => this.blockIconListeners.delete(listener);
+  }
+
+  _emitBlockIcons() {
+    for (const listener of this.blockIconListeners) {
+      try {
+        listener();
+      } catch (error) {
+        console.warn('[IconService] icon listener failed', error);
+      }
+    }
+  }
+
+  /**
+   * Runs icon rasterisation in small time-boxed slices so a catalogue full of
+   * new icons never stalls a frame; listeners are notified once per slice.
+   */
+  _scheduleRender(job) {
+    return new Promise((resolve) => {
+      this._renderQueue.push({ job, resolve });
+      if (this._renderQueue.length === 1) this._kickRenderQueue();
+    });
+  }
+
+  _kickRenderQueue() {
+    if (!this._renderChannel) {
+      this._renderChannel = new MessageChannel();
+      this._renderChannel.port1.onmessage = () => this._drainRenderQueue();
+    }
+    this._renderChannel.port2.postMessage(0);
+  }
+
+  _drainRenderQueue() {
+    const start = performance.now();
+    let produced = false;
+    while (this._renderQueue.length && performance.now() - start < 6) {
+      const { job, resolve } = this._renderQueue.shift();
+      let url = null;
+      try {
+        url = job();
+      } catch (error) {
+        console.warn('[IconService] block icon render failed', error);
+      }
+      produced = produced || Boolean(url);
+      resolve(url);
+    }
+    if (this._renderQueue.length) {
+      // Yield to the frame loop between slices.
+      setTimeout(() => this._kickRenderQueue(), 0);
+    }
+    if (produced) queueMicrotask(() => this._emitBlockIcons());
+  }
+
+  /**
+   * Which isometric shape a block id is drawn with, or null when the item
+   * should keep a flat sprite (items, plants, torches, doors, panes, rails…).
+   */
+  getBlockIconShape(itemId) {
+    const id = normalizeBlockVariantId(itemId);
+    if (!id) return null;
+    const block = this.blockById.get(id);
+    const isStairs = id.includes('_stairs') || block?.renderType === 'stairs';
+    const isSlab =
+      id.includes('_slab') || block?.renderType === 'slab' || block?.slab;
+    const isLegacyBlock =
+      id === 'wood' ||
+      id === 'leaves' ||
+      id.startsWith('wood_') ||
+      id.startsWith('leaves_');
+    const isUnregisteredCube = !block && UNREGISTERED_CUBE_ID_PATTERN.test(id);
+    if (!block && !isLegacyBlock && !isStairs && !isSlab && !isUnregisteredCube)
+      return null;
+    if (block?.deco || block?.flat) return null;
+    if (block && FLAT_ICON_RENDER_TYPES.has(block.renderType)) return null;
+    if (FLAT_ICON_IDS.has(id)) return null;
+    if (!CUBE_LANTERN_IDS.has(id) && FLAT_ICON_ID_PATTERN.test(id)) {
+      if (!id.endsWith('_trapdoor')) return null;
+    }
+    if (!this._hasBlockFaceTexture(id)) return null;
+    if (isStairs) return 'stairs';
+    if (isSlab) return 'slab';
+    if (id.endsWith('_trapdoor')) return 'trapdoor';
+    if (id === 'path_block' || id === 'dirt_path' || id === 'farmland') {
+      return 'short';
+    }
+    if (id === 'cactus') return 'cactus';
+    return 'cube';
+  }
+
+  /**
+   * True for placeable blocks Minecraft shows as a flat sprite (rails…) that
+   * have their own sprite texture.
+   */
+  isFlatSpriteBlock(itemId) {
+    const id = normalizeBlockVariantId(itemId);
+    const block = this.blockById.get(id);
+    if (!block || block.deco) return false;
+    const sprite = this.getIconPath(id);
+    return (
+      !this.getBlockIconShape(id) &&
+      this._hasBlockFaceTexture(id) &&
+      // Without a dedicated sprite keep the old flat block-face fallback.
+      !String(sprite).startsWith('data:image/svg+xml') &&
+      Boolean(
+        block.flat ||
+        FLAT_ICON_RENDER_TYPES.has(block.renderType) ||
+        FLAT_ICON_IDS.has(id) ||
+        (!CUBE_LANTERN_IDS.has(id) && FLAT_ICON_ID_PATTERN.test(id))
+      )
+    );
+  }
+
+  _hasBlockFaceTexture(id) {
+    const set = this.getBlockTextureSet(id);
+    return Boolean(set && (set.all || set.top || set.side || set.front));
+  }
+
+  /** Cached isometric icon data URL, or undefined when not generated yet. */
+  getCachedBlockIcon(itemId) {
+    const id = normalizeBlockVariantId(itemId);
+    return this.blockIconCache.get(id) || undefined;
+  }
+
+  /**
+   * Generates (once) the isometric icon for a block. Resolves to a PNG data
+   * URL, or null when the block has no usable textures. Never blocks the UI:
+   * work starts after the face textures have loaded.
+   */
+  requestBlockIcon(itemId) {
+    const id = normalizeBlockVariantId(itemId);
+    if (this.blockIconCache.has(id)) {
+      return Promise.resolve(this.blockIconCache.get(id));
+    }
+    if (this.blockIconPending.has(id)) return this.blockIconPending.get(id);
+    const shape = this.getBlockIconShape(id);
+    if (!shape) {
+      this.blockIconCache.set(id, null);
+      return Promise.resolve(null);
+    }
+    const promise = this._generateBlockIcon(id, shape)
+      .catch((error) => {
+        console.warn(`[IconService] block icon failed for ${id}`, error);
+        return null;
+      })
+      .then((url) => {
+        this.blockIconPending.delete(id);
+        this.blockIconCache.set(id, url || null);
+        return url || null;
+      });
+    this.blockIconPending.set(id, promise);
+    return promise;
+  }
+
+  async _generateBlockIcon(id, shape) {
+    const faces =
+      (await this._resolveRegistryFaces(id)) ||
+      (await this._resolvePackFaces(id));
+    if (!faces) return null;
+    return this._scheduleRender(() =>
+      renderBlockIcon(faces, BLOCK_ICON_SHAPES[shape])
+    );
+  }
+
+  _iconTintFor(id, textureKey = '') {
+    const key = `${id} ${textureKey}`;
+    if (key.includes('leaves')) {
+      return (
+        LEAVES_TINT_BY_ID[textureKey] ??
+        LEAVES_TINT_BY_ID[id] ??
+        LEAVES_ICON_TINT
+      );
+    }
+    if (id === 'water' || textureKey.startsWith('water'))
+      return WATER_ICON_TINT;
+    return GRASS_ICON_TINT;
+  }
+
+  _waitForRegistry(timeoutMs = 20000) {
+    const ready = () =>
+      this.blockRegistry?.blockTextures instanceof Map &&
+      this.blockRegistry.blockTextures.size > 0;
+    if (ready()) return Promise.resolve(true);
+    if (!this._registryReady) {
+      this._registryReady = (async () => {
+        const start = performance.now();
+        while (this.blockRegistry && !ready()) {
+          if (performance.now() - start > timeoutMs) break;
+          await wait(100);
+        }
+        this._registryReady = null;
+        return ready();
+      })();
+    }
+    return this._registryReady;
+  }
+
+  /** Source URL of a registry texture (reverse lookup of its load cache). */
+  _registryTextureUrl(texture) {
+    const cache = this.blockRegistry?.textureCache;
+    if (!(cache instanceof Map)) return null;
+    if (!this._registryUrlByTexture || this._registryUrlSize !== cache.size) {
+      this._registryUrlByTexture = new Map();
+      for (const [key, tex] of cache) {
+        this._registryUrlByTexture.set(tex, String(key).split('#')[0]);
+      }
+      this._registryUrlSize = cache.size;
+    }
+    return this._registryUrlByTexture.get(texture) || null;
+  }
+
+  /** The texture's image, loading it ourselves (same URL) if not ready yet. */
+  async _textureImage(texture) {
+    const img = texture?.image;
+    const isLoaded =
+      img &&
+      !(typeof img.complete === 'boolean' && !img.complete) &&
+      (Number(img.naturalWidth || img.width) || 0) > 0;
+    if (isLoaded) return img;
+    const url = this._registryTextureUrl(texture);
+    return url ? this._loadImage(url) : null;
+  }
+
+  _pixelsFor(source, tint) {
+    let pixels = this._pixelCache.get(source);
+    if (pixels === undefined) {
+      pixels = readTexturePixels(source);
+      this._pixelCache.set(source, pixels);
+    }
+    if (!pixels) return null;
+    return tint ? { ...pixels, tint: tintToMultiplier(tint) } : pixels;
+  }
+
+  /** Faces from the live BlockRegistry materials (+x, -x, +y, -y, +z, -z). */
+  async _resolveRegistryFaces(id) {
+    if (!this.blockRegistry || !(await this._waitForRegistry())) return null;
+    const registry = this.blockRegistry;
+    let material = null;
+    try {
+      material = registry.getMaterial(id);
+    } catch {
+      return null;
+    }
+    const mats = Array.isArray(material)
+      ? material
+      : new Array(6).fill(material);
+    const tintKey = this.getBlockTextureKey(id);
+    const pick = async (mat) => {
+      const map = mat?.map;
+      if (!map || map === registry.missingTexture) return null;
+      const image = await this._textureImage(map);
+      if (!image) return null;
+      const tint = mat.userData?.tintable
+        ? this._iconTintFor(id, tintKey)
+        : null;
+      return this._pixelsFor(image, tint);
+    };
+    const [right, top, front] = await Promise.all([
+      pick(mats[0]),
+      pick(mats[2]),
+      pick(mats[4]),
+    ]);
+    if (!top && !front && !right) return null;
+    return {
+      top: top || front || right,
+      front: front || right || top,
+      right: right || front || top,
+    };
+  }
+
+  _loadImage(url) {
+    if (!this._imageCache) this._imageCache = new Map();
+    if (this._imageCache.has(url)) return this._imageCache.get(url);
+    const promise = new Promise((resolve) => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+    this._imageCache.set(url, promise);
+    return promise;
+  }
+
+  /** Faces from the resource-pack lookup used by the flat icons. */
+  async _resolvePackFaces(id) {
+    const set = this.getBlockTextureSet(id);
+    if (!set) return null;
+    const textureKey = this.getBlockTextureKey(id);
+    const lowKey = `${id} ${textureKey}`;
+    const fixedColour =
+      FIXED_COLOR_FOLIAGE_IDS.has(id) ||
+      FIXED_COLOR_FOLIAGE_IDS.has(textureKey);
+    const tintAll =
+      !fixedColour && (lowKey.includes('leaves') || id === 'water');
+    const tintTop = tintAll || id === 'grass_block' || id === 'grass';
+
+    const topUrl = set.top || set.all || set.side || set.front;
+    const sideUrl = set.side || set.all || set.front || set.top;
+    const frontUrl = set.front || sideUrl;
+    const load = async (url, tinted) => {
+      if (!url) return null;
+      const image = await this._loadImage(url);
+      if (!image) return null;
+      return this._pixelsFor(
+        image,
+        tinted ? this._iconTintFor(id, textureKey) : null
+      );
+    };
+    const [top, front, right] = await Promise.all([
+      load(topUrl, tintTop),
+      load(frontUrl, tintAll),
+      load(sideUrl, tintAll),
+    ]);
+    if (!top && !front && !right) return null;
+    return {
+      top: top || front || right,
+      front: front || right || top,
+      right: right || front || top,
+    };
   }
 
   getBlockTextureSet(id) {
@@ -435,6 +852,13 @@ export class IconService {
     if (!itemId) return this.getGeneratedIconPath('item');
 
     const normalizedId = normalizeBlockVariantId(itemId);
+    const isoIcon = this.getCachedBlockIcon(normalizedId);
+    if (isoIcon) return isoIcon;
+    if (this.getBlockIconShape(normalizedId)) {
+      this.requestBlockIcon(normalizedId);
+      const flatBlockTexture = this.getPreferredBlockIconTexture(normalizedId);
+      if (flatBlockTexture) return flatBlockTexture;
+    }
     const block = this.blockById.get(normalizedId);
     if (block?.deco) {
       const textureKey = this.getDisplayTextureKey(normalizedId);

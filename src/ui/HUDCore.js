@@ -1,9 +1,16 @@
+import { iconService } from './IconService.js';
+
 export class HUDCore {
   constructor(gameState, game = null) {
     this.gameState = gameState;
     this.game = game;
     this.faceResetTimer = null;
     this.refs = {};
+  }
+
+  /** Icon URL for an item/block id (isometric cube once generated). */
+  getIconPath(id) {
+    return iconService.getIconPath(id);
   }
 
   cacheRefs() {
